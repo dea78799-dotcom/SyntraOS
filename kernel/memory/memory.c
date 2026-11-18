@@ -7,7 +7,9 @@
 #define MEMORY_BITMAP_SIZE \
     ((SYNTRA_MAX_MEMORY_BLOCKS + 7U) / 8U)
 
+_Alignas(SYNTRA_MEMORY_ALIGNMENT)
 static uint8_t memory_pool[SYNTRA_MEMORY_POOL_SIZE];
+
 static uint8_t memory_bitmap[MEMORY_BITMAP_SIZE];
 
 static syntra_memory_allocation_t allocations[
@@ -46,7 +48,13 @@ static unsigned int snapshot_sequence;
 static unsigned int integrity_errors;
 static unsigned int validation_errors;
 
+static syntra_memory_diagnostic_type_t last_diagnostic_type;
+
 static int initialized;
+
+/* ---------------------------------------------------------
+   BASIC HELPERS
+   --------------------------------------------------------- */
 
 static unsigned int min_unsigned(
     unsigned int a,
@@ -62,6 +70,16 @@ static unsigned int max_unsigned(
 )
 {
     return a > b ? a : b;
+}
+
+static unsigned int get_usage_percent(void)
+{
+    if (SYNTRA_MAX_MEMORY_BLOCKS == 0U) {
+        return 0U;
+    }
+
+    return (used_blocks * 100U) /
+           SYNTRA_MAX_MEMORY_BLOCKS;
 }
 
 static void copy_name(
@@ -86,15 +104,9 @@ static void copy_name(
     destination[i] = '\0';
 }
 
-static unsigned int get_usage_percent(void)
-{
-    if (SYNTRA_MAX_MEMORY_BLOCKS == 0U) {
-        return 0U;
-    }
-
-    return (used_blocks * 100U) /
-           SYNTRA_MAX_MEMORY_BLOCKS;
-}
+/* ---------------------------------------------------------
+   BITMAP MANAGEMENT
+   --------------------------------------------------------- */
 
 static int block_is_used(unsigned int block)
 {
@@ -108,8 +120,10 @@ static int block_is_used(unsigned int block)
     byte_index = block / 8U;
     bit_index = block % 8U;
 
-    return (memory_bitmap[byte_index] &
-            (uint8_t)(1U << bit_index)) != 0U;
+    return (
+        memory_bitmap[byte_index] &
+        (uint8_t)(1U << bit_index)
+    ) != 0U;
 }
 
 static void mark_block_used(unsigned int block)
@@ -129,6 +143,10 @@ static void mark_block_free(unsigned int block)
     memory_bitmap[byte_index] &=
         (uint8_t)~(1U << bit_index);
 }
+
+/* ---------------------------------------------------------
+   HISTORY
+   --------------------------------------------------------- */
 
 static void add_history(
     syntra_memory_event_type_t type,
@@ -153,6 +171,10 @@ static void add_history(
         history_count++;
     }
 }
+
+/* ---------------------------------------------------------
+   ALLOCATION SEARCH
+   --------------------------------------------------------- */
 
 static int find_free_region(
     unsigned int requested_blocks,
@@ -232,6 +254,43 @@ static int find_allocation_by_address(
     return 0;
 }
 
+/*
+ * Public allocation indexes are active-allocation indexes.
+ * Internal slots are mapped separately.
+ */
+
+static int find_active_slot(
+    unsigned int allocation_index,
+    unsigned int *slot
+)
+{
+    unsigned int i;
+    unsigned int current = 0U;
+
+    if (slot == NULL) {
+        return 0;
+    }
+
+    for (i = 0U; i < SYNTRA_MAX_MEMORY_BLOCKS; ++i) {
+        if (!allocations[i].active) {
+            continue;
+        }
+
+        if (current == allocation_index) {
+            *slot = i;
+            return 1;
+        }
+
+        current++;
+    }
+
+    return 0;
+}
+
+/* ---------------------------------------------------------
+   FREE SPACE STATISTICS
+   --------------------------------------------------------- */
+
 static unsigned int count_free_regions(void)
 {
     unsigned int i;
@@ -273,6 +332,10 @@ static unsigned int largest_free_region(void)
     return largest;
 }
 
+/* ---------------------------------------------------------
+   INITIALIZATION
+   --------------------------------------------------------- */
+
 syntra_status_t memory_init(void)
 {
     unsigned int i;
@@ -296,6 +359,18 @@ syntra_status_t memory_init(void)
         tags[i].active = 0;
     }
 
+    for (i = 0U; i < SYNTRA_MEMORY_HISTORY_SIZE; ++i) {
+        history[i].type = SYNTRA_MEMORY_EVENT_ALLOCATE;
+        history[i].start_block = 0U;
+        history[i].block_count = 0U;
+        history[i].sequence = 0U;
+        history[i].valid = 0;
+    }
+
+    for (i = 0U; i < SYNTRA_MEMORY_MAX_SNAPSHOTS; ++i) {
+        snapshots[i].valid = 0;
+    }
+
     allocation_count = 0U;
     active_allocations = 0U;
     release_count = 0U;
@@ -316,17 +391,16 @@ syntra_status_t memory_init(void)
     integrity_errors = 0U;
     validation_errors = 0U;
 
-    initialized = 1;
+    last_diagnostic_type = SYNTRA_MEMORY_DIAGNOSTIC_NONE;
 
-    add_history(
-        SYNTRA_MEMORY_EVENT_ALLOCATE,
-        0U,
-        0U,
-        1
-    );
+    initialized = 1;
 
     return SYNTRA_STATUS_OK;
 }
+
+/* ---------------------------------------------------------
+   MEMORY ALLOCATION
+   --------------------------------------------------------- */
 
 void *memory_allocate(unsigned int blocks)
 {
@@ -334,9 +408,14 @@ void *memory_allocate(unsigned int blocks)
     unsigned int slot;
     unsigned int i;
 
-    if (!initialized || blocks == 0U ||
+    if (!initialized ||
+        blocks == 0U ||
         blocks > SYNTRA_MAX_MEMORY_BLOCKS) {
+
         failed_allocations++;
+
+        last_diagnostic_type =
+            SYNTRA_MEMORY_DIAGNOSTIC_INVALID_ALLOCATION;
 
         add_history(
             SYNTRA_MEMORY_EVENT_FAILED,
@@ -350,7 +429,11 @@ void *memory_allocate(unsigned int blocks)
 
     if (!find_free_slot(&slot) ||
         !find_free_region(blocks, &start_block)) {
+
         failed_allocations++;
+
+        last_diagnostic_type =
+            SYNTRA_MEMORY_DIAGNOSTIC_INVALID_ALLOCATION;
 
         add_history(
             SYNTRA_MEMORY_EVENT_FAILED,
@@ -390,6 +473,9 @@ void *memory_allocate(unsigned int blocks)
         used_blocks
     );
 
+    last_diagnostic_type =
+        SYNTRA_MEMORY_DIAGNOSTIC_NONE;
+
     add_history(
         SYNTRA_MEMORY_EVENT_ALLOCATE,
         start_block,
@@ -399,6 +485,10 @@ void *memory_allocate(unsigned int blocks)
 
     return allocations[slot].address;
 }
+
+/* ---------------------------------------------------------
+   MEMORY RELEASE
+   --------------------------------------------------------- */
 
 syntra_status_t memory_release(
     void *address,
@@ -410,6 +500,9 @@ syntra_status_t memory_release(
     unsigned int i;
 
     if (!initialized || address == NULL || blocks == 0U) {
+        last_diagnostic_type =
+            SYNTRA_MEMORY_DIAGNOSTIC_INVALID_RELEASE;
+
         add_history(
             SYNTRA_MEMORY_EVENT_FAILED,
             0U,
@@ -421,6 +514,9 @@ syntra_status_t memory_release(
     }
 
     if (!find_allocation_by_address(address, &index)) {
+        last_diagnostic_type =
+            SYNTRA_MEMORY_DIAGNOSTIC_INVALID_RELEASE;
+
         add_history(
             SYNTRA_MEMORY_EVENT_FAILED,
             0U,
@@ -432,6 +528,9 @@ syntra_status_t memory_release(
     }
 
     if (allocations[index].block_count != blocks) {
+        last_diagnostic_type =
+            SYNTRA_MEMORY_DIAGNOSTIC_INVALID_RELEASE;
+
         add_history(
             SYNTRA_MEMORY_EVENT_FAILED,
             allocations[index].start_block,
@@ -444,10 +543,15 @@ syntra_status_t memory_release(
 
     start_block = allocations[index].start_block;
 
-    if (used_blocks < blocks ||
-        active_allocations == 0U ||
-        start_block > SYNTRA_MAX_MEMORY_BLOCKS - blocks) {
+    if (blocks > SYNTRA_MAX_MEMORY_BLOCKS ||
+        start_block > SYNTRA_MAX_MEMORY_BLOCKS - blocks ||
+        used_blocks < blocks ||
+        active_allocations == 0U) {
+
         integrity_errors++;
+
+        last_diagnostic_type =
+            SYNTRA_MEMORY_DIAGNOSTIC_INTEGRITY_FAILURE;
 
         add_history(
             SYNTRA_MEMORY_EVENT_FAILED,
@@ -462,6 +566,9 @@ syntra_status_t memory_release(
     for (i = 0U; i < blocks; ++i) {
         if (!block_is_used(start_block + i)) {
             integrity_errors++;
+
+            last_diagnostic_type =
+                SYNTRA_MEMORY_DIAGNOSTIC_INTEGRITY_FAILURE;
 
             add_history(
                 SYNTRA_MEMORY_EVENT_FAILED,
@@ -492,6 +599,9 @@ syntra_status_t memory_release(
     tags[index].name[0] = '\0';
     tags[index].active = 0;
 
+    last_diagnostic_type =
+        SYNTRA_MEMORY_DIAGNOSTIC_NONE;
+
     add_history(
         SYNTRA_MEMORY_EVENT_RELEASE,
         start_block,
@@ -502,6 +612,10 @@ syntra_status_t memory_release(
     return SYNTRA_STATUS_OK;
 }
 
+/* ---------------------------------------------------------
+   MEMORY INFORMATION
+   --------------------------------------------------------- */
+
 void memory_get_info(syntra_memory_info_t *info)
 {
     unsigned int free_blocks;
@@ -510,11 +624,11 @@ void memory_get_info(syntra_memory_info_t *info)
         return;
     }
 
+    free_blocks =
+        SYNTRA_MAX_MEMORY_BLOCKS - used_blocks;
+
     info->total_blocks = SYNTRA_MAX_MEMORY_BLOCKS;
     info->used_blocks = used_blocks;
-
-    free_blocks = SYNTRA_MAX_MEMORY_BLOCKS - used_blocks;
-
     info->free_blocks = free_blocks;
 
     info->allocation_count = allocation_count;
@@ -552,27 +666,19 @@ const syntra_memory_allocation_t *memory_get_allocation(
     unsigned int index
 )
 {
-    unsigned int i;
-    unsigned int current = 0U;
+    unsigned int slot;
 
-    if (!initialized) {
+    if (!initialized ||
+        !find_active_slot(index, &slot)) {
         return NULL;
     }
 
-    for (i = 0U; i < SYNTRA_MAX_MEMORY_BLOCKS; ++i) {
-        if (!allocations[i].active) {
-            continue;
-        }
-
-        if (current == index) {
-            return &allocations[i];
-        }
-
-        current++;
-    }
-
-    return NULL;
+    return &allocations[slot];
 }
+
+/* ---------------------------------------------------------
+   INTEGRITY CHECK
+   --------------------------------------------------------- */
 
 syntra_status_t memory_check_integrity(void)
 {
@@ -593,6 +699,8 @@ syntra_status_t memory_check_integrity(void)
     }
 
     for (i = 0U; i < SYNTRA_MAX_MEMORY_BLOCKS; ++i) {
+        unsigned int expected_offset;
+
         if (!allocations[i].active) {
             continue;
         }
@@ -600,9 +708,22 @@ syntra_status_t memory_check_integrity(void)
         active_count++;
 
         if (allocations[i].block_count == 0U ||
+            allocations[i].block_count > SYNTRA_MAX_MEMORY_BLOCKS ||
             allocations[i].start_block >
                 SYNTRA_MAX_MEMORY_BLOCKS -
                 allocations[i].block_count) {
+
+            integrity_errors++;
+            return SYNTRA_STATUS_ERROR;
+        }
+
+        expected_offset =
+            allocations[i].start_block *
+            SYNTRA_MEMORY_BLOCK_SIZE;
+
+        if (allocations[i].address !=
+            (void *)&memory_pool[expected_offset]) {
+
             integrity_errors++;
             return SYNTRA_STATUS_ERROR;
         }
@@ -612,6 +733,7 @@ syntra_status_t memory_check_integrity(void)
         for (j = 0U; j < allocations[i].block_count; ++j) {
             if (!block_is_used(
                     allocations[i].start_block + j)) {
+
                 integrity_errors++;
                 return SYNTRA_STATUS_ERROR;
             }
@@ -621,6 +743,7 @@ syntra_status_t memory_check_integrity(void)
     if (bitmap_used != used_blocks ||
         allocation_used != used_blocks ||
         active_count != active_allocations) {
+
         integrity_errors++;
         return SYNTRA_STATUS_ERROR;
     }
@@ -670,6 +793,10 @@ syntra_status_t memory_validate(void)
     return result;
 }
 
+/* ---------------------------------------------------------
+   HISTORY API
+   --------------------------------------------------------- */
+
 unsigned int memory_get_history_count(void)
 {
     return history_count;
@@ -697,6 +824,10 @@ const syntra_memory_history_t *memory_get_history(
     return &history[actual];
 }
 
+/* ---------------------------------------------------------
+   SNAPSHOT API
+   --------------------------------------------------------- */
+
 syntra_status_t memory_create_snapshot(void)
 {
     unsigned int index;
@@ -706,11 +837,14 @@ syntra_status_t memory_create_snapshot(void)
         return SYNTRA_STATUS_ERROR;
     }
 
-    index = snapshot_sequence % SYNTRA_MEMORY_MAX_SNAPSHOTS;
+    index =
+        snapshot_sequence % SYNTRA_MEMORY_MAX_SNAPSHOTS;
+
     snapshot = &snapshots[index];
 
     snapshot->total_blocks = SYNTRA_MAX_MEMORY_BLOCKS;
     snapshot->used_blocks = used_blocks;
+
     snapshot->free_blocks =
         SYNTRA_MAX_MEMORY_BLOCKS - used_blocks;
 
@@ -722,7 +856,9 @@ syntra_status_t memory_create_snapshot(void)
     snapshot->usage_percent = get_usage_percent();
     snapshot->peak_used_blocks = peak_used_blocks;
 
-    snapshot->snapshot_sequence = snapshot_sequence + 1U;
+    snapshot->snapshot_sequence =
+        snapshot_sequence + 1U;
+
     snapshot->valid = 1;
 
     snapshot_sequence++;
@@ -761,6 +897,10 @@ const syntra_memory_snapshot_t *memory_get_snapshot(
     return &snapshots[actual];
 }
 
+/* ---------------------------------------------------------
+   REPORT API
+   --------------------------------------------------------- */
+
 syntra_status_t memory_generate_report(
     syntra_memory_report_t *report
 )
@@ -775,6 +915,7 @@ syntra_status_t memory_generate_report(
     report->total_failures = failed_allocations;
 
     report->current_used_blocks = used_blocks;
+
     report->current_free_blocks =
         SYNTRA_MAX_MEMORY_BLOCKS - used_blocks;
 
@@ -789,31 +930,32 @@ syntra_status_t memory_generate_report(
     return SYNTRA_STATUS_OK;
 }
 
+/* ---------------------------------------------------------
+   ALLOCATION TAG API
+   --------------------------------------------------------- */
+
 syntra_status_t memory_set_tag(
     unsigned int allocation_index,
     const char *name
 )
 {
-    const syntra_memory_allocation_t *allocation;
+    unsigned int slot;
 
-    if (!initialized || name == NULL) {
+    if (!initialized ||
+        name == NULL ||
+        !find_active_slot(allocation_index, &slot)) {
+
         return SYNTRA_STATUS_ERROR;
     }
 
-    allocation = memory_get_allocation(allocation_index);
-
-    if (allocation == NULL) {
-        return SYNTRA_STATUS_ERROR;
-    }
-
-    tags[allocation_index].allocation_index = allocation_index;
+    tags[slot].allocation_index = allocation_index;
 
     copy_name(
-        tags[allocation_index].name,
+        tags[slot].name,
         name
     );
 
-    tags[allocation_index].active = 1;
+    tags[slot].active = 1;
 
     return SYNTRA_STATUS_OK;
 }
@@ -822,15 +964,21 @@ const syntra_memory_tag_t *memory_get_tag(
     unsigned int allocation_index
 )
 {
+    unsigned int slot;
+
     if (!initialized ||
-        allocation_index >= SYNTRA_MAX_MEMORY_BLOCKS ||
-        !tags[allocation_index].active ||
-        !allocations[allocation_index].active) {
+        !find_active_slot(allocation_index, &slot) ||
+        !tags[slot].active) {
+
         return NULL;
     }
 
-    return &tags[allocation_index];
+    return &tags[slot];
 }
+
+/* ---------------------------------------------------------
+   DIAGNOSTICS API
+   --------------------------------------------------------- */
 
 syntra_status_t memory_run_diagnostics(
     syntra_memory_diagnostics_t *diagnostics
@@ -842,11 +990,17 @@ syntra_status_t memory_run_diagnostics(
         return SYNTRA_STATUS_ERROR;
     }
 
-    diagnostics->type = SYNTRA_MEMORY_DIAGNOSTIC_NONE;
-    diagnostics->error_count = integrity_errors + validation_errors;
+    diagnostics->type =
+        SYNTRA_MEMORY_DIAGNOSTIC_NONE;
+
+    diagnostics->error_count =
+        integrity_errors + validation_errors;
+
     diagnostics->used_blocks = used_blocks;
+
     diagnostics->free_blocks =
         SYNTRA_MAX_MEMORY_BLOCKS - used_blocks;
+
     diagnostics->has_warning = 0;
     diagnostics->valid = 0;
 
@@ -871,8 +1025,17 @@ syntra_status_t memory_run_diagnostics(
         return SYNTRA_STATUS_ERROR;
     }
 
+    if (last_diagnostic_type ==
+            SYNTRA_MEMORY_DIAGNOSTIC_INVALID_ALLOCATION ||
+        last_diagnostic_type ==
+            SYNTRA_MEMORY_DIAGNOSTIC_INVALID_RELEASE) {
+
+        diagnostics->type = last_diagnostic_type;
+    }
+
     if (diagnostics->free_blocks <
         SYNTRA_MAX_MEMORY_BLOCKS / 10U) {
+
         diagnostics->type =
             SYNTRA_MEMORY_DIAGNOSTIC_CAPACITY_WARNING;
 
@@ -883,6 +1046,10 @@ syntra_status_t memory_run_diagnostics(
 
     return SYNTRA_STATUS_OK;
 }
+
+/* ---------------------------------------------------------
+   MEMORY POOL STATISTICS
+   --------------------------------------------------------- */
 
 syntra_status_t memory_get_pool_stats(
     syntra_memory_pool_stats_t *stats
@@ -915,6 +1082,10 @@ syntra_status_t memory_get_pool_stats(
 
     return SYNTRA_STATUS_OK;
 }
+
+/* ---------------------------------------------------------
+   ALLOCATION TRACKING
+   --------------------------------------------------------- */
 
 syntra_status_t memory_get_tracking(
     syntra_memory_tracking_t *tracking
@@ -949,18 +1120,28 @@ syntra_status_t memory_get_tracking(
     return SYNTRA_STATUS_OK;
 }
 
+/* ---------------------------------------------------------
+   PERFORMANCE METRICS
+   --------------------------------------------------------- */
+
 syntra_status_t memory_get_metrics(
     syntra_memory_metrics_t *metrics
 )
 {
     unsigned int total_operations;
+    unsigned int allocation_attempts;
 
     if (metrics == NULL || !initialized) {
         return SYNTRA_STATUS_ERROR;
     }
 
     total_operations =
-        allocation_count + release_count + failed_allocations;
+        allocation_count +
+        release_count +
+        failed_allocations;
+
+    allocation_attempts =
+        allocation_count + failed_allocations;
 
     metrics->total_operations = total_operations;
 
@@ -971,12 +1152,12 @@ syntra_status_t memory_get_metrics(
     metrics->peak_used_blocks = peak_used_blocks;
     metrics->current_used_blocks = used_blocks;
 
-    if (allocation_count + failed_allocations == 0U) {
+    if (allocation_attempts == 0U) {
         metrics->allocation_success_rate = 0U;
     } else {
         metrics->allocation_success_rate =
             (allocation_count * 100U) /
-            (allocation_count + failed_allocations);
+            allocation_attempts;
     }
 
     metrics->usage_percent = get_usage_percent();
