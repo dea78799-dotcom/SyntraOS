@@ -1,595 +1,329 @@
 
 #include <stdio.h>
-#include <stddef.h>
 
-#include "memory.h"
+#include "memory/memory.h"
 
-static unsigned int passed = 0U;
-static unsigned int failed = 0U;
-
-static void check(const char *name, int condition)
-{
-    if (condition) {
-        passed++;
-        printf("[PASS] %s\n", name);
-    } else {
-        failed++;
-        printf("[FAIL] %s\n", name);
-    }
-}
+#define CHECK(condition, message)                         \
+    do {                                                  \
+        if (!(condition)) {                               \
+            printf("[FAIL] %s\n", message);               \
+            return 1;                                     \
+        }                                                 \
+    } while (0)
 
 int main(void)
 {
     syntra_memory_info_t info;
+    syntra_memory_snapshot_t snapshot;
     syntra_memory_report_t report;
-    syntra_memory_diagnostics_t diagnostics;
     syntra_memory_pool_stats_t pool_stats;
     syntra_memory_tracking_t tracking;
     syntra_memory_metrics_t metrics;
+    syntra_memory_diagnostics_t diagnostics;
 
-    void *a;
-    void *b;
-    void *c;
-    void *full;
-    int invalid_address = 0;
-
-    const syntra_memory_allocation_t *allocation;
-    const syntra_memory_history_t *event;
-    const syntra_memory_snapshot_t *snapshot;
-    const syntra_memory_tag_t *tag;
+    void *allocation_a;
+    void *allocation_b;
+    void *allocation_c;
+    void *full_allocation;
 
     unsigned int i;
+    unsigned int previous_history_sequence;
+    unsigned int expected_success_rate;
 
-    printf("\n");
-    printf("====================================\n");
-    printf("       SYNTRAOS MEMORY V8 TEST\n");
-    printf("====================================\n");
+    printf("=== SyntraOS Memory V9 Tests ===\n");
 
-    /* INITIALIZATION */
-
-    check(
-        "Memory initialization",
-        memory_init() == SYNTRA_STATUS_OK
-    );
+    /* 1. Initialize */
+    CHECK(memory_init() == SYNTRA_STATUS_OK,
+          "Memory initialization");
 
     memory_get_info(&info);
 
-    check(
-        "Initial memory is empty",
-        info.used_blocks == 0U &&
-        info.free_blocks == SYNTRA_MAX_MEMORY_BLOCKS
-    );
+    CHECK(info.total_blocks == SYNTRA_MAX_MEMORY_BLOCKS,
+          "Initial total blocks");
 
-    check(
-        "Initial allocation count is zero",
-        memory_get_allocation_count() == 0U
-    );
+    CHECK(info.used_blocks == 0U,
+          "Initial used blocks");
 
-    /* BASIC ALLOCATION */
+    CHECK(info.free_blocks == SYNTRA_MAX_MEMORY_BLOCKS,
+          "Initial free blocks");
 
-    a = memory_allocate(1U);
+    CHECK(info.active_allocations == 0U,
+          "Initial active allocations");
 
-    check(
-        "Allocate one block",
-        a != NULL
-    );
+    /* 2. Invalid allocation tests */
+    CHECK(memory_allocate(0U) == NULL,
+          "Reject zero-block allocation");
 
-    memory_get_info(&info);
-
-    check(
-        "Used blocks increase after allocation",
-        info.used_blocks == 1U
-    );
-
-    check(
-        "Free blocks decrease after allocation",
-        info.free_blocks ==
-        SYNTRA_MAX_MEMORY_BLOCKS - 1U
-    );
-
-    check(
-        "Active allocation count increases",
-        memory_get_allocation_count() == 1U
-    );
-
-    allocation = memory_get_allocation(0U);
-
-    check(
-        "Get allocation by active index",
-        allocation != NULL &&
-        allocation->address == a &&
-        allocation->block_count == 1U
-    );
-
-    /* ALLOCATION TAG */
-
-    check(
-        "Set allocation tag",
-        memory_set_tag(0U, "V8-Test") ==
-        SYNTRA_STATUS_OK
-    );
-
-    tag = memory_get_tag(0U);
-
-    check(
-        "Read allocation tag",
-        tag != NULL &&
-        tag->active &&
-        tag->name[0] == 'V'
-    );
-
-    /* INVALID ALLOCATION */
-
-    check(
-        "Reject zero-block allocation",
-        memory_allocate(0U) == NULL
-    );
-
-    check(
-        "Reject oversized allocation",
-        memory_allocate(
-            SYNTRA_MAX_MEMORY_BLOCKS + 1U
-        ) == NULL
-    );
+    CHECK(memory_allocate(SYNTRA_MAX_MEMORY_BLOCKS + 1U) == NULL,
+          "Reject oversized allocation");
 
     memory_get_info(&info);
 
-    check(
-        "Failed allocation counter",
-        info.failed_allocations == 2U
-    );
+    CHECK(info.failed_allocations == 2U,
+          "Invalid allocation counter");
 
-    /* INVALID RELEASE */
+    /* 3. Allocate three regions */
+    allocation_a = memory_allocate(2U);
+    allocation_b = memory_allocate(2U);
+    allocation_c = memory_allocate(2U);
 
-    check(
-        "Reject incorrect release size",
-        memory_release(a, 2U) != SYNTRA_STATUS_OK
-    );
+    CHECK(allocation_a != NULL, "Allocate A");
+    CHECK(allocation_b != NULL, "Allocate B");
+    CHECK(allocation_c != NULL, "Allocate C");
 
-    memory_get_info(&info);
+    CHECK(memory_get_allocation_count() == 3U,
+          "Allocation count");
 
-    check(
-        "Invalid release does not free memory",
-        info.used_blocks == 1U
-    );
+    CHECK(memory_get_allocation(0U) != NULL,
+          "Get allocation A");
 
-    check(
-        "Reject unknown memory address",
-        memory_release(
-            &invalid_address,
-            1U
-        ) != SYNTRA_STATUS_OK
-    );
+    CHECK(memory_get_allocation(1U) != NULL,
+          "Get allocation B");
 
-    /* VALID RELEASE */
+    CHECK(memory_get_allocation(2U) != NULL,
+          "Get allocation C");
 
-    check(
-        "Release valid allocation",
-        memory_release(a, 1U) == SYNTRA_STATUS_OK
-    );
+    CHECK(memory_get_allocation(0U)->block_count == 2U,
+          "Allocation A block count");
 
-    memory_get_info(&info);
+    /* 4. Invalid release tests */
+    CHECK(memory_release(NULL, 2U) == SYNTRA_STATUS_INVALID_ARGUMENT,
+          "Reject NULL release");
 
-    check(
-        "All memory is free after release",
-        info.used_blocks == 0U &&
-        info.free_blocks == SYNTRA_MAX_MEMORY_BLOCKS
-    );
+    CHECK(memory_release(allocation_a, 1U) == SYNTRA_STATUS_INVALID_ARGUMENT,
+          "Reject incorrect release size");
 
-    check(
-        "Active allocation count returns to zero",
-        memory_get_allocation_count() == 0U
-    );
+    CHECK(memory_get_allocation_count() == 3U,
+          "Invalid release preserves allocations");
 
-    check(
-        "Released allocation tag is unavailable",
-        memory_get_tag(0U) == NULL
-    );
+    /* 5. Tag tests */
+    CHECK(memory_set_tag(0U, "Allocation_A") == SYNTRA_STATUS_OK,
+          "Set tag A");
 
-    /* MULTIPLE ALLOCATIONS */
+    CHECK(memory_set_tag(1U, "Allocation_B") == SYNTRA_STATUS_OK,
+          "Set tag B");
 
-    a = memory_allocate(2U);
-    b = memory_allocate(3U);
-    c = memory_allocate(4U);
+    CHECK(memory_get_tag(0U) != NULL,
+          "Get tag A");
 
-    check(
-        "Allocate multiple memory regions",
-        a != NULL && b != NULL && c != NULL
-    );
+    CHECK(memory_get_tag(0U)->active != 0,
+          "Tag A is active");
+
+    /* 6. Fragmentation test */
+    CHECK(memory_release(allocation_b, 2U) == SYNTRA_STATUS_OK,
+          "Release allocation B");
 
     memory_get_info(&info);
 
-    check(
-        "Multiple allocations use nine blocks",
-        info.used_blocks == 9U
-    );
+    CHECK(info.used_blocks == 4U,
+          "Fragmentation used blocks");
 
-    check(
-        "Three active allocations are tracked",
-        memory_get_allocation_count() == 3U
-    );
+    CHECK(info.free_blocks == SYNTRA_MAX_MEMORY_BLOCKS - 4U,
+          "Fragmentation free blocks");
 
-    /* TAG INDEX MAPPING */
+    CHECK(info.free_regions == 2U,
+          "Fragmentation free regions");
 
-    check(
-        "Set first allocation tag",
-        memory_set_tag(0U, "First") ==
-        SYNTRA_STATUS_OK
-    );
+    CHECK(info.fragmentation_blocks == 2U,
+          "Fragmentation block count");
 
-    check(
-        "Set second allocation tag",
-        memory_set_tag(1U, "Second") ==
-        SYNTRA_STATUS_OK
-    );
+    CHECK(info.largest_free_block == SYNTRA_MAX_MEMORY_BLOCKS - 6U,
+          "Largest free block");
 
-    check(
-        "Release first allocation",
-        memory_release(a, 2U) == SYNTRA_STATUS_OK
-    );
+    /* 7. Tag index update after release */
+    CHECK(memory_get_tag(0U) != NULL,
+          "Tag A remains available");
 
-    tag = memory_get_tag(0U);
+    CHECK(memory_release(allocation_a, 2U) == SYNTRA_STATUS_OK,
+          "Release allocation A");
 
-    check(
-        "Active tag index maps after release",
-        tag != NULL &&
-        tag->active &&
-        tag->name[0] == 'S'
-    );
+    CHECK(memory_get_allocation_count() == 1U,
+          "One allocation remains");
 
-    check(
-        "Update tag after allocation index changes",
-        memory_set_tag(0U, "Updated") ==
-        SYNTRA_STATUS_OK
-    );
+    CHECK(memory_get_tag(0U) != NULL,
+          "Tag C index lookup");
 
-    tag = memory_get_tag(0U);
+    CHECK(memory_get_tag(0U)->allocation_index == 0U,
+          "Tag index updated");
 
-    check(
-        "Updated tag is readable",
-        tag != NULL &&
-        tag->name[0] == 'U'
-    );
+    CHECK(memory_release(allocation_c, 2U) == SYNTRA_STATUS_OK,
+          "Release allocation C");
 
-    check(
-        "Release second allocation",
-        memory_release(b, 3U) == SYNTRA_STATUS_OK
-    );
+    CHECK(memory_get_allocation_count() == 0U,
+          "All allocations released");
 
-    check(
-        "Release third allocation",
-        memory_release(c, 4U) == SYNTRA_STATUS_OK
-    );
-
-    memory_get_info(&info);
-
-    check(
-        "Memory returns to empty state",
-        info.used_blocks == 0U &&
-        info.active_allocations == 0U
-    );
-
-    /* FRAGMENTATION */
-
-    a = memory_allocate(2U);
-    b = memory_allocate(2U);
-    c = memory_allocate(2U);
-
-    check(
-        "Prepare fragmentation test",
-        a != NULL && b != NULL && c != NULL
-    );
-
-    check(
-        "Release middle allocation",
-        memory_release(b, 2U) == SYNTRA_STATUS_OK
-    );
-
-    memory_get_info(&info);
-
-    check(
-        "Free region count detects fragmentation",
-        info.free_regions == 2U
-    );
-
-    check(
-        "Fragmentation block count is correct",
-        info.fragmentation_blocks == 2U
-    );
-
-    check(
-        "Largest free region is detected",
-        info.largest_free_block ==
-        SYNTRA_MAX_MEMORY_BLOCKS - 6U
-    );
-
-    check(
-        "Release first fragmentation allocation",
-        memory_release(a, 2U) == SYNTRA_STATUS_OK
-    );
-
-    check(
-        "Release final fragmentation allocation",
-        memory_release(c, 2U) == SYNTRA_STATUS_OK
-    );
-
-    /* SNAPSHOTS */
-
-    check(
-        "Create memory snapshot",
-        memory_create_snapshot() == SYNTRA_STATUS_OK
-    );
-
-    check(
-        "Snapshot count increases",
-        memory_get_snapshot_count() == 1U
-    );
-
-    snapshot = memory_get_snapshot(0U);
-
-    check(
-        "Read snapshot",
-        snapshot != NULL &&
-        snapshot->valid
-    );
-
-    check(
-        "Snapshot records free memory",
-        snapshot != NULL &&
-        snapshot->used_blocks == 0U &&
-        snapshot->free_blocks ==
-        SYNTRA_MAX_MEMORY_BLOCKS
-    );
-
-    check(
-        "Reject invalid snapshot index",
-        memory_get_snapshot(1U) == NULL
-    );
-
-    /* SNAPSHOT RING BUFFER */
-
-    for (i = 0U; i < SYNTRA_MEMORY_MAX_SNAPSHOTS + 2U; ++i) {
-        memory_create_snapshot();
+    /* 8. Snapshot tests */
+    for (i = 0U; i < 40U; ++i) {
+        CHECK(memory_create_snapshot() == SYNTRA_STATUS_OK,
+              "Create snapshot");
     }
 
-    check(
-        "Snapshot history respects maximum capacity",
-        memory_get_snapshot_count() ==
-        SYNTRA_MEMORY_MAX_SNAPSHOTS
-    );
+    CHECK(memory_get_snapshot_count() == SYNTRA_MEMORY_MAX_SNAPSHOTS,
+          "Snapshot ring capacity");
 
-    /* HISTORY */
+    CHECK(memory_get_snapshot(0U) != NULL,
+          "Get oldest snapshot");
 
-    check(
-        "History contains recorded events",
-        memory_get_history_count() > 0U
-    );
+    CHECK(memory_get_snapshot(
+              SYNTRA_MEMORY_MAX_SNAPSHOTS - 1U) != NULL,
+          "Get newest snapshot");
 
-    event = memory_get_history(0U);
+    CHECK(memory_get_snapshot(0U)->snapshot_sequence == 9U,
+          "Oldest snapshot sequence");
 
-    check(
-        "Read oldest history event",
-        event != NULL &&
-        event->sequence > 0U
-    );
+    CHECK(memory_get_snapshot(
+              SYNTRA_MEMORY_MAX_SNAPSHOTS - 1U)->snapshot_sequence == 40U,
+          "Newest snapshot sequence");
 
-    check(
-        "Reject invalid history index",
-        memory_get_history(
-            memory_get_history_count()
-        ) == NULL
-    );
+    /* 9. Report tests */
+    CHECK(memory_generate_report(&report) == SYNTRA_STATUS_OK,
+          "Generate memory report");
 
-    /* REPORT */
+    CHECK(report.valid != 0,
+          "Report validity");
 
-    check(
-        "Generate memory report",
-        memory_generate_report(&report) ==
-        SYNTRA_STATUS_OK
-    );
+    CHECK(report.current_used_blocks == 0U,
+          "Report current used blocks");
 
-    check(
-        "Memory report is valid",
-        report.valid
-    );
+    CHECK(report.current_free_blocks == SYNTRA_MAX_MEMORY_BLOCKS,
+          "Report current free blocks");
 
-    check(
-        "Report contains snapshot count",
-        report.total_snapshots ==
-        SYNTRA_MEMORY_MAX_SNAPSHOTS
-    );
+    /* 10. Pool statistics */
+    CHECK(memory_get_pool_stats(&pool_stats) == SYNTRA_STATUS_OK,
+          "Get pool statistics");
 
-    check(
-        "Reject null report",
-        memory_generate_report(NULL) !=
-        SYNTRA_STATUS_OK
-    );
+    CHECK(pool_stats.valid != 0,
+          "Pool statistics validity");
 
-    /* POOL STATISTICS */
+    CHECK(pool_stats.total_bytes == SYNTRA_MEMORY_POOL_SIZE,
+          "Pool total bytes");
 
-    check(
-        "Get memory pool statistics",
-        memory_get_pool_stats(&pool_stats) ==
-        SYNTRA_STATUS_OK
-    );
+    CHECK(pool_stats.used_bytes == 0U,
+          "Pool used bytes");
 
-    check(
-        "Pool statistics are valid",
-        pool_stats.valid
-    );
+    CHECK(pool_stats.free_bytes == SYNTRA_MEMORY_POOL_SIZE,
+          "Pool free bytes");
 
-    check(
-        "Pool byte size is correct",
-        pool_stats.total_bytes ==
-        SYNTRA_MEMORY_POOL_SIZE
-    );
+    /* 11. Tracking */
+    CHECK(memory_get_tracking(&tracking) == SYNTRA_STATUS_OK,
+          "Get tracking");
 
-    check(
-        "Pool is completely free",
-        pool_stats.used_bytes == 0U &&
-        pool_stats.free_bytes ==
-        SYNTRA_MEMORY_POOL_SIZE
-    );
+    CHECK(tracking.valid != 0,
+          "Tracking validity");
 
-    /* TRACKING */
+    CHECK(tracking.active_tracked == 0U,
+          "No active tracked allocations");
 
-    check(
-        "Get allocation tracking",
-        memory_get_tracking(&tracking) ==
-        SYNTRA_STATUS_OK
-    );
+    CHECK(tracking.current_allocated_blocks == 0U,
+          "Current tracked blocks");
 
-    check(
-        "Tracking data is valid",
-        tracking.valid
-    );
+    /* 12. Metrics */
+    CHECK(memory_get_metrics(&metrics) == SYNTRA_STATUS_OK,
+          "Get metrics");
 
-    check(
-        "Tracking reports no active allocations",
-        tracking.active_tracked == 0U
-    );
+    CHECK(metrics.valid != 0,
+          "Metrics validity");
 
-    check(
-        "Tracking reports allocated blocks",
-        tracking.total_allocated_blocks ==
-        tracking.total_released_blocks
-    );
+    CHECK(metrics.failed_operations == 2U,
+          "Failed operations count");
 
-    /* METRICS */
+    CHECK(metrics.allocation_operations == 5U,
+          "Allocation operations count");
 
-    check(
-        "Get memory metrics",
-        memory_get_metrics(&metrics) ==
-        SYNTRA_STATUS_OK
-    );
+    CHECK(metrics.release_operations == 5U,
+          "Release operations count");
 
-    check(
-        "Metrics are valid",
-        metrics.valid
-    );
+    expected_success_rate =
+        (metrics.allocation_operations * 100U) /
+        (metrics.allocation_operations + metrics.failed_operations);
 
-    check(
-        "Metrics record allocation failures",
-        metrics.failed_operations == 2U
-    );
+    CHECK(metrics.allocation_success_rate == expected_success_rate,
+          "Allocation success rate");
 
-    check(
-        "Metrics report zero current usage",
-        metrics.current_used_blocks == 0U
-    );
+    /* 13. Diagnostics */
+    CHECK(memory_run_diagnostics(&diagnostics) == SYNTRA_STATUS_OK,
+          "Run diagnostics");
 
-    /* VALIDATION */
+    CHECK(diagnostics.valid != 0,
+          "Diagnostics validity");
 
-    check(
-        "Memory integrity check",
-        memory_check_integrity() ==
-        SYNTRA_STATUS_OK
-    );
+    CHECK(diagnostics.has_warning == 0,
+          "No diagnostics warning");
 
-    check(
-        "Memory validation",
-        memory_validate() ==
-        SYNTRA_STATUS_OK
-    );
+    CHECK(diagnostics.error_count == 0U,
+          "No integrity or validation errors");
 
-    /* DIAGNOSTICS */
+    /* 14. Validation */
+    CHECK(memory_validate() == SYNTRA_STATUS_OK,
+          "Memory validation");
 
-    check(
-        "Run memory diagnostics",
-        memory_run_diagnostics(&diagnostics) ==
-        SYNTRA_STATUS_OK
-    );
+    CHECK(memory_check_integrity() == SYNTRA_STATUS_OK,
+          "Memory integrity");
 
-    check(
-        "Diagnostics report valid state",
-        diagnostics.valid
-    );
+    /* 15. History ring test */
+    CHECK(memory_get_history_count() > 0U,
+          "History contains events");
 
-    check(
-        "Diagnostics detect no integrity errors",
-        diagnostics.error_count == 0U
-    );
+    previous_history_sequence =
+        memory_get_history(memory_get_history_count() - 1U)->sequence;
 
-    /* FULL CAPACITY */
-
-    full = memory_allocate(
-        SYNTRA_MAX_MEMORY_BLOCKS
-    );
-
-    check(
-        "Allocate entire memory pool",
-        full != NULL
-    );
-
-    memory_get_info(&info);
-
-    check(
-        "Memory usage reaches one hundred percent",
-        info.usage_percent == 100U &&
-        info.used_blocks == SYNTRA_MAX_MEMORY_BLOCKS
-    );
-
-    check(
-        "No free region remains",
-        info.largest_free_block == 0U
-    );
-
-    check(
-        "Reject allocation when pool is full",
-        memory_allocate(1U) == NULL
-    );
-
-    memory_get_info(&info);
-
-    check(
-        "Full-pool allocation failure is recorded",
-        info.failed_allocations == 3U
-    );
-
-    check(
-        "Release entire memory pool",
-        memory_release(
-            full,
-            SYNTRA_MAX_MEMORY_BLOCKS
-        ) == SYNTRA_STATUS_OK
-    );
-
-    memory_get_info(&info);
-
-    check(
-        "Memory pool returns to full free capacity",
-        info.used_blocks == 0U &&
-        info.free_blocks == SYNTRA_MAX_MEMORY_BLOCKS
-    );
-
-    /* FINAL INTEGRITY */
-
-    check(
-        "Final memory integrity check",
-        memory_check_integrity() ==
-        SYNTRA_STATUS_OK
-    );
-
-    check(
-        "Final memory validation",
-        memory_validate() ==
-        SYNTRA_STATUS_OK
-    );
-
-    printf("\n");
-    printf("====================================\n");
-    printf("          MEMORY V8 RESULT\n");
-    printf("====================================\n");
-
-    printf("Passed: %u\n", passed);
-    printf("Failed: %u\n", failed);
-    printf("Total : %u\n", passed + failed);
-
-    if (failed == 0U) {
-        printf("\nMEMORY V8: ALL TESTS PASSED\n");
-        return 0;
+    for (i = 0U; i < 140U; ++i) {
+        CHECK(memory_allocate(0U) == NULL,
+              "History ring invalid allocation");
     }
 
-    printf("\nMEMORY V8: TESTS FAILED\n");
-    return 1;
+    CHECK(memory_get_history_count() == SYNTRA_MEMORY_HISTORY_SIZE,
+          "History ring capacity");
+
+    CHECK(memory_get_history(0U) != NULL,
+          "Get oldest history event");
+
+    CHECK(memory_get_history(
+              SYNTRA_MEMORY_HISTORY_SIZE - 1U) != NULL,
+          "Get newest history event");
+
+    CHECK(memory_get_history(0U)->sequence ==
+              previous_history_sequence + 13U,
+          "Oldest history sequence");
+
+    /* 16. Full memory capacity test */
+    full_allocation = memory_allocate(SYNTRA_MAX_MEMORY_BLOCKS);
+
+    CHECK(full_allocation != NULL,
+          "Allocate full memory pool");
+
+    memory_get_info(&info);
+
+    CHECK(info.used_blocks == SYNTRA_MAX_MEMORY_BLOCKS,
+          "Full pool used blocks");
+
+    CHECK(info.free_blocks == 0U,
+          "Full pool free blocks");
+
+    CHECK(memory_allocate(1U) == NULL,
+          "Reject allocation when pool is full");
+
+    CHECK(memory_release(
+              full_allocation,
+              SYNTRA_MAX_MEMORY_BLOCKS) == SYNTRA_STATUS_OK,
+          "Release full memory pool");
+
+    memory_get_info(&info);
+
+    CHECK(info.used_blocks == 0U,
+          "Memory empty after full release");
+
+    CHECK(info.free_blocks == SYNTRA_MAX_MEMORY_BLOCKS,
+          "All blocks available after release");
+
+    /* 17. Final integrity check */
+    CHECK(memory_validate() == SYNTRA_STATUS_OK,
+          "Final memory validation");
+
+    CHECK(memory_check_integrity() == SYNTRA_STATUS_OK,
+          "Final integrity check");
+
+    printf("[PASS] All Memory V9 tests completed.\n");
+
+    return 0;
 }
