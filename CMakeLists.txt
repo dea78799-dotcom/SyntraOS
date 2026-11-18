@@ -123,4 +123,16 @@ if(BUILD_TESTING)
 
     add_test(NAME KernelIntegrationTest COMMAND kernel_test)
 
+    # KERNEL CORE TEST
+
+    add_executable(core_test
+        tests/core/core_test.c
+    )
+
+    target_link_libraries(core_test
+        PRIVATE syntra_kernel
+    )
+
+    add_test(NAME KernelCoreTest COMMAND core_test)
+
 endif()
