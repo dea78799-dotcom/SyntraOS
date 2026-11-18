@@ -108,4 +108,19 @@ if(BUILD_TESTING)
         COMMAND process_test
     )
 
+    # IPC TEST
+
+    add_executable(ipc_test
+        tests/ipc/ipc_test.c
+    )
+
+    target_link_libraries(ipc_test
+        PRIVATE syntra_kernel
+    )
+
+    add_test(
+        NAME IPCTest
+        COMMAND ipc_test
+    )
+
 endif()
