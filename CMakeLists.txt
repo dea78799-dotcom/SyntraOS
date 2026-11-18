@@ -37,6 +37,7 @@ add_library(syntra_kernel STATIC
 
     kernel/hal/hal.c
     kernel/hal/hal_device.c
+    kernel/hal/hal_registry.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -232,3 +233,12 @@ add_executable(hal_device_test
 
 target_link_libraries(hal_device_test PRIVATE syntra_kernel)
 add_test(NAME HALDeviceInterfaceV1Test COMMAND hal_device_test)
+
+# HAL Registry V1 Test
+
+add_executable(hal_registry_test
+    tests/hal/hal_registry_test.c
+)
+
+target_link_libraries(hal_registry_test PRIVATE syntra_kernel)
+add_test(NAME HALRegistryV1Test COMMAND hal_registry_test)
