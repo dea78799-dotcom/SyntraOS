@@ -23,6 +23,10 @@ syntra_status_t config_manager_update(
     const syntra_system_config_t *config
 );
 
+syntra_status_t config_manager_get_config(
+    syntra_system_config_t *config
+);
+
 syntra_status_t config_manager_get_info(
     syntra_config_manager_t *manager
 );
