@@ -60,6 +60,11 @@ syntra_status_t scheduler_add_thread(
 
 syntra_thread_t *scheduler_get_next_ready(void)
 {
+    if (!scheduler_initialized)
+    {
+        return 0;
+    }
+
     syntra_thread_t *selected = 0;
 
     for (unsigned int i = 0; i < thread_count; i++)
@@ -77,4 +82,60 @@ syntra_thread_t *scheduler_get_next_ready(void)
     }
 
     return selected;
+}
+
+
+syntra_status_t scheduler_set_thread_state(
+    unsigned int thread_id,
+    thread_state_t new_state
+)
+{
+    if (!scheduler_initialized)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    if (new_state < THREAD_READY ||
+        new_state > THREAD_TERMINATED)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    for (unsigned int i = 0; i < thread_count; i++)
+    {
+        if (threads[i].thread_id == thread_id)
+        {
+            threads[i].state = new_state;
+            return SYNTRA_STATUS_OK;
+        }
+    }
+
+    return SYNTRA_STATUS_INVALID_ARGUMENT;
+}
+
+
+syntra_thread_t *scheduler_get_thread(
+    unsigned int thread_id
+)
+{
+    if (!scheduler_initialized)
+    {
+        return 0;
+    }
+
+    for (unsigned int i = 0; i < thread_count; i++)
+    {
+        if (threads[i].thread_id == thread_id)
+        {
+            return &threads[i];
+        }
+    }
+
+    return 0;
+}
+
+
+unsigned int scheduler_get_thread_count(void)
+{
+    return thread_count;
 }
