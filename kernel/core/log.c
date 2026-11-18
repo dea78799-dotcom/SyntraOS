@@ -5,10 +5,37 @@
 
 /*
  * SyntraOS Kernel Logging
- * Version: 0.2.0
+ * Version: 0.3.0
  */
 
+static syntra_log_entry_t log_entries[SYNTRA_LOG_MAX_ENTRIES];
+
 static syntra_log_info_t log_info = {0};
+
+static unsigned int log_count = 0;
+
+/* =================================
+   COPY MESSAGE
+   ================================= */
+
+static void copy_message(
+    char *destination,
+    const char *source
+)
+{
+    unsigned int i = 0;
+
+    while (
+        i < SYNTRA_LOG_MESSAGE_SIZE - 1 &&
+        source[i] != '\0'
+    )
+    {
+        destination[i] = source[i];
+        i++;
+    }
+
+    destination[i] = '\0';
+}
 
 /* =================================
    WRITE LOG
@@ -47,6 +74,36 @@ void syntra_log_write(
     }
 
     log_info.total_count++;
+
+    /* Remove oldest entry when full */
+
+    if (log_count >= SYNTRA_LOG_MAX_ENTRIES)
+    {
+        for (
+            unsigned int i = 1;
+            i < SYNTRA_LOG_MAX_ENTRIES;
+            i++
+        )
+        {
+            log_entries[i - 1] = log_entries[i];
+        }
+
+        log_count--;
+    }
+
+    /* Store new entry */
+
+    syntra_log_entry_t *entry =
+        &log_entries[log_count];
+
+    entry->level = level;
+
+    copy_message(
+        entry->message,
+        message
+    );
+
+    log_count++;
 }
 
 /* =================================
@@ -66,14 +123,42 @@ void syntra_log_get_info(
 }
 
 /* =================================
-   RESET LOG COUNTERS
+   GET LOG ENTRY
+   ================================= */
+
+const syntra_log_entry_t *syntra_log_get(
+    unsigned int index
+)
+{
+    if (index >= log_count)
+    {
+        return NULL;
+    }
+
+    return &log_entries[index];
+}
+
+/* =================================
+   RESET LOGGING
    ================================= */
 
 void syntra_log_reset(void)
 {
+    for (
+        unsigned int i = 0;
+        i < SYNTRA_LOG_MAX_ENTRIES;
+        i++
+    )
+    {
+        log_entries[i].level = SYNTRA_LOG_INFO;
+        log_entries[i].message[0] = '\0';
+    }
+
     log_info.info_count = 0;
     log_info.warning_count = 0;
     log_info.error_count = 0;
     log_info.debug_count = 0;
     log_info.total_count = 0;
+
+    log_count = 0;
 }
