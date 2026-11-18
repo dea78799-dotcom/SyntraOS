@@ -4,90 +4,79 @@
 
 #include "../../kernel/scheduler/scheduler.h"
 
-static int test_scheduler_init(void)
+static int failures = 0;
+
+static void check(const char *name, int condition)
 {
-    syntra_status_t status = scheduler_init();
-
-    if (status != SYNTRA_STATUS_OK)
+    if (condition)
     {
-        printf("[FAIL] scheduler_init\n");
-        return 1;
+        printf("[PASS] %s\n", name);
     }
-
-    printf("[PASS] scheduler_init\n");
-    return 0;
-}
-
-static int test_add_thread(void)
-{
-    syntra_status_t status =
-        scheduler_add_thread(1, 5);
-
-    if (status != SYNTRA_STATUS_OK)
+    else
     {
-        printf("[FAIL] scheduler_add_thread\n");
-        return 1;
+        printf("[FAIL] %s\n", name);
+        failures++;
     }
-
-    printf("[PASS] scheduler_add_thread\n");
-    return 0;
-}
-
-static int test_get_thread(void)
-{
-    syntra_thread_t *thread =
-        scheduler_get_thread(1);
-
-    if (thread == NULL)
-    {
-        printf("[FAIL] scheduler_get_thread\n");
-        return 1;
-    }
-
-    if (thread->thread_id != 1)
-    {
-        printf("[FAIL] thread_id\n");
-        return 1;
-    }
-
-    printf("[PASS] scheduler_get_thread\n");
-    return 0;
-}
-
-static int test_get_next_ready(void)
-{
-    syntra_thread_t *thread =
-        scheduler_get_next_ready();
-
-    if (thread == NULL)
-    {
-        printf("[FAIL] scheduler_get_next_ready\n");
-        return 1;
-    }
-
-    if (thread->thread_id != 1)
-    {
-        printf("[FAIL] ready_thread_id\n");
-        return 1;
-    }
-
-    printf("[PASS] scheduler_get_next_ready\n");
-    return 0;
 }
 
 int main(void)
 {
-    int failures = 0;
-
     printf("\n");
     printf("=================================\n");
-    printf(" SYNTRAOS SCHEDULER UNIT TEST\n");
+    printf(" SYNTRAOS SCHEDULER TEST V2\n");
     printf("=================================\n");
 
-    failures += test_scheduler_init();
-    failures += test_add_thread();
-    failures += test_get_thread();
-    failures += test_get_next_ready();
+    /* Test 1: Initialize scheduler */
+    check(
+        "scheduler_init",
+        scheduler_init() == SYNTRA_STATUS_OK
+    );
+
+    /* Test 2: Add first thread */
+    check(
+        "Add thread ID 1",
+        scheduler_add_thread(1, 5) == SYNTRA_STATUS_OK
+    );
+
+    /* Test 3: Find existing thread */
+    syntra_thread_t *thread = scheduler_get_thread(1);
+
+    check(
+        "Get thread ID 1",
+        thread != NULL && thread->thread_id == 1
+    );
+
+    /* Test 4: Reject duplicate thread ID */
+    check(
+        "Reject duplicate thread ID",
+        scheduler_add_thread(1, 3) != SYNTRA_STATUS_OK
+    );
+
+    /* Test 5: Add second thread */
+    check(
+        "Add thread ID 2",
+        scheduler_add_thread(2, 10) == SYNTRA_STATUS_OK
+    );
+
+    /* Test 6: Highest priority thread */
+    thread = scheduler_get_next_ready();
+
+    check(
+        "Select highest priority thread",
+        thread != NULL && thread->thread_id == 2
+    );
+
+    /* Test 7: Thread count */
+    check(
+        "Thread count equals 2",
+        scheduler_get_thread_count() == 2
+    );
+
+    /* Test 8: Reject thread ID 0 */
+    check(
+        "Reject thread ID 0",
+        scheduler_add_thread(0, 5) != SYNTRA_STATUS_OK
+    );
 
     printf("\n=================================\n");
     printf(" Total failures: %d\n", failures);
