@@ -63,9 +63,7 @@ if(BUILD_TESTING)
 
     enable_testing()
 
-    # ---------------------------------
     # SCHEDULER TEST
-    # ---------------------------------
 
     add_executable(scheduler_test
         tests/scheduler/scheduler_test.c
@@ -80,9 +78,7 @@ if(BUILD_TESTING)
         COMMAND scheduler_test
     )
 
-    # ---------------------------------
-    # MEMORY MANAGER TEST
-    # ---------------------------------
+    # MEMORY TEST
 
     add_executable(memory_test
         tests/memory/memory_test.c
@@ -95,6 +91,21 @@ if(BUILD_TESTING)
     add_test(
         NAME MemoryTest
         COMMAND memory_test
+    )
+
+    # PROCESS TEST
+
+    add_executable(process_test
+        tests/process/process_test.c
+    )
+
+    target_link_libraries(process_test
+        PRIVATE syntra_kernel
+    )
+
+    add_test(
+        NAME ProcessTest
+        COMMAND process_test
     )
 
 endif()
