@@ -129,11 +129,9 @@ typedef enum
 typedef struct
 {
     syntra_memory_diagnostic_type_t type;
-
     unsigned int error_count;
     unsigned int used_blocks;
     unsigned int free_blocks;
-
     int has_warning;
     int valid;
 
@@ -158,7 +156,7 @@ typedef struct
 
 } syntra_memory_pool_stats_t;
 
-/* V7: Allocation Tracking */
+/* V7.1: Allocation Tracking */
 
 typedef struct
 {
@@ -168,6 +166,8 @@ typedef struct
     unsigned int failed_tracked;
 
     unsigned int total_allocated_blocks;
+    unsigned int total_released_blocks;
+
     unsigned int current_allocated_blocks;
     unsigned int peak_allocated_blocks;
 
@@ -205,9 +205,7 @@ syntra_status_t memory_release(
     unsigned int blocks
 );
 
-void memory_get_info(
-    syntra_memory_info_t *info
-);
+void memory_get_info(syntra_memory_info_t *info);
 
 unsigned int memory_get_allocation_count(void);
 
@@ -266,7 +264,7 @@ syntra_status_t memory_get_pool_stats(
     syntra_memory_pool_stats_t *stats
 );
 
-/* V7: Tracking API */
+/* V7.1: Tracking API */
 
 syntra_status_t memory_get_tracking(
     syntra_memory_tracking_t *tracking
