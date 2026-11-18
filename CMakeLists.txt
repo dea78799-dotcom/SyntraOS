@@ -33,6 +33,7 @@ add_library(syntra_kernel STATIC
 
     kernel/config/config.c
     kernel/config/config_manager.c
+    kernel/config/config_storage.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -215,3 +216,13 @@ add_executable(config_manager_test
 target_link_libraries(config_manager_test PRIVATE syntra_kernel)
 
 add_test(NAME ConfigManagerV2Test COMMAND config_manager_test)
+
+# Config Storage V3 Test
+
+add_executable(config_storage_test
+    tests/config/config_storage_test.c
+)
+
+target_link_libraries(config_storage_test PRIVATE syntra_kernel)
+
+add_test(NAME ConfigStorageV3Test COMMAND config_storage_test)
