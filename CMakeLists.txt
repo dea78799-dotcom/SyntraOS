@@ -6,10 +6,6 @@ project(SyntraOS
     LANGUAGES C
 )
 
-# =================================
-# C LANGUAGE CONFIGURATION
-# =================================
-
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
@@ -39,10 +35,6 @@ target_include_directories(syntra_kernel PUBLIC
     kernel/ipc
 )
 
-# =================================
-# COMPILER WARNINGS
-# =================================
-
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
 
     target_compile_options(syntra_kernel PRIVATE
@@ -54,7 +46,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 # =================================
-# TESTING CONFIGURATION
+# TEST SYSTEM
 # =================================
 
 include(CTest)
@@ -63,7 +55,7 @@ if(BUILD_TESTING)
 
     enable_testing()
 
-    # SCHEDULER TEST
+    # Scheduler Test
 
     add_executable(scheduler_test
         tests/scheduler/scheduler_test.c
@@ -73,9 +65,12 @@ if(BUILD_TESTING)
         PRIVATE syntra_kernel
     )
 
-    add_test(NAME SchedulerTest COMMAND scheduler_test)
+    add_test(
+        NAME SchedulerTest
+        COMMAND scheduler_test
+    )
 
-    # MEMORY TEST
+    # Memory Test
 
     add_executable(memory_test
         tests/memory/memory_test.c
@@ -85,9 +80,12 @@ if(BUILD_TESTING)
         PRIVATE syntra_kernel
     )
 
-    add_test(NAME MemoryTest COMMAND memory_test)
+    add_test(
+        NAME MemoryTest
+        COMMAND memory_test
+    )
 
-    # PROCESS TEST
+    # Process Test
 
     add_executable(process_test
         tests/process/process_test.c
@@ -97,9 +95,12 @@ if(BUILD_TESTING)
         PRIVATE syntra_kernel
     )
 
-    add_test(NAME ProcessTest COMMAND process_test)
+    add_test(
+        NAME ProcessTest
+        COMMAND process_test
+    )
 
-    # IPC TEST
+    # IPC Test
 
     add_executable(ipc_test
         tests/ipc/ipc_test.c
@@ -109,9 +110,12 @@ if(BUILD_TESTING)
         PRIVATE syntra_kernel
     )
 
-    add_test(NAME IPCTest COMMAND ipc_test)
+    add_test(
+        NAME IPCTest
+        COMMAND ipc_test
+    )
 
-    # KERNEL INTEGRATION TEST
+    # Kernel Integration Test
 
     add_executable(kernel_test
         tests/kernel/kernel_test.c
@@ -121,9 +125,12 @@ if(BUILD_TESTING)
         PRIVATE syntra_kernel
     )
 
-    add_test(NAME KernelIntegrationTest COMMAND kernel_test)
+    add_test(
+        NAME KernelIntegrationTest
+        COMMAND kernel_test
+    )
 
-    # KERNEL CORE TEST
+    # Kernel Core Test
 
     add_executable(core_test
         tests/core/core_test.c
@@ -133,6 +140,24 @@ if(BUILD_TESTING)
         PRIVATE syntra_kernel
     )
 
-    add_test(NAME KernelCoreTest COMMAND core_test)
+    add_test(
+        NAME KernelCoreTest
+        COMMAND core_test
+    )
+
+    # Logging V2 Test
+
+    add_executable(log_test
+        tests/core/log_test.c
+    )
+
+    target_link_libraries(log_test
+        PRIVATE syntra_kernel
+    )
+
+    add_test(
+        NAME LoggingV2Test
+        COMMAND log_test
+    )
 
 endif()
