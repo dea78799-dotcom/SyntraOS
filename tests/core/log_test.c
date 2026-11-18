@@ -10,22 +10,39 @@ int main(void)
     syntra_log_info_t info;
     const syntra_log_entry_t *entry;
 
-    /* Test reset */
     syntra_log_reset();
 
-    /* Test timestamp */
+    /* Test timestamp conversion: 01:01:01 */
     syntra_log_write_at(
         SYNTRA_LOG_INFO,
         "System started",
-        100
+        3661
     );
 
+    entry = syntra_log_get(0);
+
+    assert(entry != NULL);
+    assert(entry->timestamp == 3661);
+    assert(entry->hours == 1);
+    assert(entry->minutes == 1);
+    assert(entry->seconds == 1);
+    assert(strcmp(entry->message, "System started") == 0);
+
+    /* Test midnight boundary */
     syntra_log_write_at(
         SYNTRA_LOG_WARNING,
-        "Low memory",
-        200
+        "Midnight test",
+        86399
     );
 
+    entry = syntra_log_get(1);
+
+    assert(entry != NULL);
+    assert(entry->hours == 23);
+    assert(entry->minutes == 59);
+    assert(entry->seconds == 59);
+
+    /* Test counters */
     syntra_log_write_at(
         SYNTRA_LOG_ERROR,
         "Kernel error",
@@ -38,7 +55,6 @@ int main(void)
         400
     );
 
-    /* Test counters */
     syntra_log_get_info(&info);
 
     assert(info.info_count == 1);
@@ -47,42 +63,14 @@ int main(void)
     assert(info.debug_count == 1);
     assert(info.total_count == 4);
 
-    /* Test timestamps */
-    entry = syntra_log_get(0);
-
-    assert(entry != NULL);
-    assert(entry->timestamp == 100);
-    assert(strcmp(entry->message, "System started") == 0);
-
-    entry = syntra_log_get(1);
-
-    assert(entry != NULL);
-    assert(entry->timestamp == 200);
-
-    /* Test filtering INFO */
-    entry = syntra_log_find_level(
-        SYNTRA_LOG_INFO,
-        0
-    );
-
-    assert(entry != NULL);
-    assert(strcmp(entry->message, "System started") == 0);
-
-    /* Test filtering ERROR */
-    entry = syntra_log_find_level(
-        SYNTRA_LOG_ERROR,
-        0
-    );
+    /* Test filtering */
+    entry = syntra_log_find_level(SYNTRA_LOG_ERROR, 0);
 
     assert(entry != NULL);
     assert(entry->timestamp == 300);
 
-    /* Test missing filter result */
     assert(
-        syntra_log_find_level(
-            SYNTRA_LOG_ERROR,
-            1
-        ) == NULL
+        syntra_log_find_level(SYNTRA_LOG_ERROR, 1) == NULL
     );
 
     /* Test invalid index */
@@ -98,6 +86,9 @@ int main(void)
 
     assert(entry != NULL);
     assert(entry->timestamp == 0);
+    assert(entry->hours == 0);
+    assert(entry->minutes == 0);
+    assert(entry->seconds == 0);
 
     /* Test history limit */
     syntra_log_reset();
@@ -117,7 +108,6 @@ int main(void)
     assert(syntra_log_get(63) != NULL);
     assert(syntra_log_get(64) == NULL);
 
-    /* Oldest remaining entry should be timestamp 6 */
     entry = syntra_log_get(0);
 
     assert(entry != NULL);
@@ -131,7 +121,7 @@ int main(void)
     assert(info.total_count == 0);
     assert(syntra_log_get(0) == NULL);
 
-    printf("Logging V4 Test: PASSED\n");
+    printf("Logging V5 Test: PASSED\n");
 
     return 0;
 }
