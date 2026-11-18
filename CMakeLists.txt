@@ -38,6 +38,7 @@ add_library(syntra_kernel STATIC
     kernel/hal/hal.c
     kernel/hal/hal_device.c
     kernel/hal/hal_registry.c
+    kernel/hal/hal_lifecycle.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -242,3 +243,12 @@ add_executable(hal_registry_test
 
 target_link_libraries(hal_registry_test PRIVATE syntra_kernel)
 add_test(NAME HALRegistryV1Test COMMAND hal_registry_test)
+
+# HAL Lifecycle V1 Test
+
+add_executable(hal_lifecycle_test
+    tests/hal/hal_lifecycle_test.c
+)
+
+target_link_libraries(hal_lifecycle_test PRIVATE syntra_kernel)
+add_test(NAME HALLifecycleV1Test COMMAND hal_lifecycle_test)
