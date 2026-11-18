@@ -73,10 +73,7 @@ if(BUILD_TESTING)
         PRIVATE syntra_kernel
     )
 
-    add_test(
-        NAME SchedulerTest
-        COMMAND scheduler_test
-    )
+    add_test(NAME SchedulerTest COMMAND scheduler_test)
 
     # MEMORY TEST
 
@@ -88,10 +85,7 @@ if(BUILD_TESTING)
         PRIVATE syntra_kernel
     )
 
-    add_test(
-        NAME MemoryTest
-        COMMAND memory_test
-    )
+    add_test(NAME MemoryTest COMMAND memory_test)
 
     # PROCESS TEST
 
@@ -103,10 +97,7 @@ if(BUILD_TESTING)
         PRIVATE syntra_kernel
     )
 
-    add_test(
-        NAME ProcessTest
-        COMMAND process_test
-    )
+    add_test(NAME ProcessTest COMMAND process_test)
 
     # IPC TEST
 
@@ -118,9 +109,18 @@ if(BUILD_TESTING)
         PRIVATE syntra_kernel
     )
 
-    add_test(
-        NAME IPCTest
-        COMMAND ipc_test
+    add_test(NAME IPCTest COMMAND ipc_test)
+
+    # KERNEL INTEGRATION TEST
+
+    add_executable(kernel_test
+        tests/kernel/kernel_test.c
     )
+
+    target_link_libraries(kernel_test
+        PRIVATE syntra_kernel
+    )
+
+    add_test(NAME KernelIntegrationTest COMMAND kernel_test)
 
 endif()
