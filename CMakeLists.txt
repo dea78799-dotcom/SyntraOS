@@ -25,11 +25,8 @@ add_library(syntra_kernel STATIC
     kernel/core/panic.c
 
     kernel/scheduler/scheduler.c
-
     kernel/memory/memory.c
-
     kernel/process/process.c
-
     kernel/ipc/ipc.c
 )
 
@@ -66,31 +63,38 @@ if(BUILD_TESTING)
 
     enable_testing()
 
-    # Scheduler Unit Test
+    # ---------------------------------
+    # SCHEDULER TEST
+    # ---------------------------------
 
     add_executable(scheduler_test
-
         tests/scheduler/scheduler_test.c
-
     )
 
     target_link_libraries(scheduler_test
         PRIVATE syntra_kernel
     )
 
-    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-
-        target_compile_options(scheduler_test PRIVATE
-            -Wall
-            -Wextra
-            -Wpedantic
-        )
-
-    endif()
-
     add_test(
         NAME SchedulerTest
         COMMAND scheduler_test
+    )
+
+    # ---------------------------------
+    # MEMORY MANAGER TEST
+    # ---------------------------------
+
+    add_executable(memory_test
+        tests/memory/memory_test.c
+    )
+
+    target_link_libraries(memory_test
+        PRIVATE syntra_kernel
+    )
+
+    add_test(
+        NAME MemoryTest
+        COMMAND memory_test
     )
 
 endif()
