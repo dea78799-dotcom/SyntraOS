@@ -12,7 +12,9 @@ static syntra_status_t copy_config_string(
     const char *source
 )
 {
-    if (destination == NULL || source == NULL)
+    if (destination == NULL ||
+        source == NULL ||
+        destination_size == 0U)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
@@ -81,7 +83,9 @@ syntra_status_t config_reset(void)
 syntra_status_t config_set_name(const char *name)
 {
     if (!system_config.initialized)
+    {
         return SYNTRA_STATUS_ERROR;
+    }
 
     return copy_config_string(
         system_config.os_name,
@@ -93,7 +97,9 @@ syntra_status_t config_set_name(const char *name)
 syntra_status_t config_set_version(const char *version)
 {
     if (!system_config.initialized)
+    {
         return SYNTRA_STATUS_ERROR;
+    }
 
     return copy_config_string(
         system_config.version,
@@ -107,7 +113,9 @@ syntra_status_t config_set_architecture(
 )
 {
     if (!system_config.initialized)
+    {
         return SYNTRA_STATUS_ERROR;
+    }
 
     return copy_config_string(
         system_config.architecture,
@@ -121,10 +129,14 @@ syntra_status_t config_set_memory_size(
 )
 {
     if (!system_config.initialized)
+    {
         return SYNTRA_STATUS_ERROR;
+    }
 
     if (memory_size == 0ULL)
+    {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
 
     system_config.memory_size = memory_size;
 
@@ -136,10 +148,14 @@ syntra_status_t config_set_cpu_count(
 )
 {
     if (!system_config.initialized)
+    {
         return SYNTRA_STATUS_ERROR;
+    }
 
     if (cpu_count == 0U)
+    {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
 
     system_config.cpu_count = cpu_count;
 
@@ -149,10 +165,14 @@ syntra_status_t config_set_cpu_count(
 syntra_status_t config_set_debug_mode(int enabled)
 {
     if (!system_config.initialized)
+    {
         return SYNTRA_STATUS_ERROR;
+    }
 
     if (enabled != 0 && enabled != 1)
+    {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
 
     system_config.debug_mode = enabled;
 
@@ -164,10 +184,14 @@ syntra_status_t config_get_info(
 )
 {
     if (config == NULL)
+    {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
 
     if (!system_config.initialized)
+    {
         return SYNTRA_STATUS_ERROR;
+    }
 
     *config = system_config;
 
@@ -180,23 +204,27 @@ syntra_status_t config_get_info(
 syntra_status_t config_validate(void)
 {
     if (!system_config.initialized)
+    {
         return SYNTRA_STATUS_ERROR;
+    }
 
-    if (system_config.os_name[0] == '\0')
+    if (system_config.os_name[0] == '\0' ||
+        system_config.version[0] == '\0' ||
+        system_config.architecture[0] == '\0')
+    {
         return SYNTRA_STATUS_ERROR;
-
-    if (system_config.version[0] == '\0')
-        return SYNTRA_STATUS_ERROR;
-
-    if (system_config.architecture[0] == '\0')
-        return SYNTRA_STATUS_ERROR;
+    }
 
     if (system_config.cpu_count == 0U)
+    {
         return SYNTRA_STATUS_ERROR;
+    }
 
     if (system_config.debug_mode != 0 &&
         system_config.debug_mode != 1)
+    {
         return SYNTRA_STATUS_ERROR;
+    }
 
     return SYNTRA_STATUS_OK;
 }
