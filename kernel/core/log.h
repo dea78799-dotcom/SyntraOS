@@ -17,6 +17,9 @@ typedef struct
 {
     unsigned int level;
     unsigned int timestamp;
+    unsigned int hours;
+    unsigned int minutes;
+    unsigned int seconds;
     char message[SYNTRA_LOG_MESSAGE_SIZE];
 } syntra_log_entry_t;
 
