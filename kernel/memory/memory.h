@@ -13,6 +13,7 @@
 #define SYNTRA_MEMORY_ALIGNMENT 4096
 #define SYNTRA_MEMORY_HISTORY_SIZE 128
 #define SYNTRA_MEMORY_TAG_LENGTH 32
+#define SYNTRA_MEMORY_MAX_SNAPSHOTS 32
 
 typedef struct
 {
@@ -52,11 +53,9 @@ typedef enum
 typedef struct
 {
     syntra_memory_event_type_t type;
-
     unsigned int start_block;
     unsigned int block_count;
     unsigned int sequence;
-
     int valid;
 
 } syntra_memory_history_t;
@@ -69,8 +68,6 @@ typedef struct
     int active;
 
 } syntra_memory_allocation_t;
-
-/* Memory snapshot */
 
 typedef struct
 {
@@ -91,8 +88,6 @@ typedef struct
 
 } syntra_memory_snapshot_t;
 
-/* Memory report */
-
 typedef struct
 {
     unsigned int total_snapshots;
@@ -112,18 +107,13 @@ typedef struct
 
 } syntra_memory_report_t;
 
-/* Allocation tags */
-
 typedef struct
 {
     unsigned int allocation_index;
     char name[SYNTRA_MEMORY_TAG_LENGTH];
-
     int active;
 
 } syntra_memory_tag_t;
-
-/* Memory diagnostics */
 
 typedef enum
 {
@@ -149,7 +139,62 @@ typedef struct
 
 } syntra_memory_diagnostics_t;
 
-/* Core memory API */
+/* V7: Memory Pool Statistics */
+
+typedef struct
+{
+    unsigned int total_bytes;
+    unsigned int used_bytes;
+    unsigned int free_bytes;
+
+    unsigned int total_blocks;
+    unsigned int used_blocks;
+    unsigned int free_blocks;
+
+    unsigned int usage_percent;
+    unsigned int largest_free_region_bytes;
+
+    int valid;
+
+} syntra_memory_pool_stats_t;
+
+/* V7: Allocation Tracking */
+
+typedef struct
+{
+    unsigned int total_tracked;
+    unsigned int active_tracked;
+    unsigned int released_tracked;
+    unsigned int failed_tracked;
+
+    unsigned int total_allocated_blocks;
+    unsigned int current_allocated_blocks;
+    unsigned int peak_allocated_blocks;
+
+    int valid;
+
+} syntra_memory_tracking_t;
+
+/* V7: Performance Metrics */
+
+typedef struct
+{
+    unsigned int total_operations;
+    unsigned int allocation_operations;
+    unsigned int release_operations;
+    unsigned int failed_operations;
+
+    unsigned int peak_used_blocks;
+    unsigned int current_used_blocks;
+
+    unsigned int allocation_success_rate;
+    unsigned int usage_percent;
+
+    int valid;
+
+} syntra_memory_metrics_t;
+
+/* Core API */
 
 syntra_status_t memory_init(void);
 
@@ -174,7 +219,7 @@ syntra_status_t memory_validate(void);
 
 syntra_status_t memory_check_integrity(void);
 
-/* Memory history */
+/* History API */
 
 unsigned int memory_get_history_count(void);
 
@@ -182,7 +227,7 @@ const syntra_memory_history_t *memory_get_history(
     unsigned int index
 );
 
-/* Memory snapshot API */
+/* Snapshot API */
 
 syntra_status_t memory_create_snapshot(void);
 
@@ -192,13 +237,13 @@ const syntra_memory_snapshot_t *memory_get_snapshot(
     unsigned int index
 );
 
-/* Memory report API */
+/* Report API */
 
 syntra_status_t memory_generate_report(
     syntra_memory_report_t *report
 );
 
-/* Allocation tag API */
+/* Allocation Tag API */
 
 syntra_status_t memory_set_tag(
     unsigned int allocation_index,
@@ -209,10 +254,28 @@ const syntra_memory_tag_t *memory_get_tag(
     unsigned int allocation_index
 );
 
-/* Memory diagnostics API */
+/* Diagnostics API */
 
 syntra_status_t memory_run_diagnostics(
     syntra_memory_diagnostics_t *diagnostics
+);
+
+/* V7: Statistics API */
+
+syntra_status_t memory_get_pool_stats(
+    syntra_memory_pool_stats_t *stats
+);
+
+/* V7: Tracking API */
+
+syntra_status_t memory_get_tracking(
+    syntra_memory_tracking_t *tracking
+);
+
+/* V7: Performance API */
+
+syntra_status_t memory_get_metrics(
+    syntra_memory_metrics_t *metrics
 );
 
 #endif
