@@ -20,6 +20,14 @@ typedef struct
     unsigned int release_count;
     unsigned int active_allocations;
 
+    unsigned int failed_allocations;
+
+    unsigned int largest_free_block;
+    unsigned int free_regions;
+    unsigned int fragmentation_blocks;
+
+    unsigned int usage_percent;
+
 } syntra_memory_info_t;
 
 typedef struct
