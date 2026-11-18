@@ -3,6 +3,8 @@
 
 #include "../core/status.h"
 
+#define SYNTRA_MAX_THREADS 32
+
 typedef enum
 {
     THREAD_READY,
@@ -19,5 +21,12 @@ typedef struct
 } syntra_thread_t;
 
 syntra_status_t scheduler_init(void);
+
+syntra_status_t scheduler_add_thread(
+    unsigned int thread_id,
+    unsigned int priority
+);
+
+syntra_thread_t *scheduler_get_next_ready(void);
 
 #endif
