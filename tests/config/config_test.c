@@ -9,9 +9,22 @@ int main(void)
 {
     syntra_system_config_t config;
 
-    /* Initialization tests */
+    /* Uninitialized state tests */
 
     assert(config_validate() == SYNTRA_STATUS_ERROR);
+
+    assert(config_set_name("Test") == SYNTRA_STATUS_ERROR);
+    assert(config_set_version("1.0") == SYNTRA_STATUS_ERROR);
+    assert(config_set_architecture("ARM64") == SYNTRA_STATUS_ERROR);
+    assert(config_set_memory_size(4096ULL) == SYNTRA_STATUS_ERROR);
+    assert(config_set_cpu_count(4U) == SYNTRA_STATUS_ERROR);
+    assert(config_set_debug_mode(1) == SYNTRA_STATUS_ERROR);
+
+    assert(config_get_info(&config) == SYNTRA_STATUS_ERROR);
+    assert(config_get_info(NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    /* Initialization tests */
+
     assert(config_init() == SYNTRA_STATUS_OK);
     assert(config_init() == SYNTRA_STATUS_OK);
 
@@ -35,8 +48,6 @@ int main(void)
     assert(config_set_name("") == SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(config_set_name(NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
-    /* Name boundary tests */
-
     char long_name[SYNTRA_CONFIG_NAME_MAX + 1U];
 
     memset(long_name, 'A', sizeof(long_name));
@@ -50,8 +61,7 @@ int main(void)
 
     assert(config_set_version("1.0.0") == SYNTRA_STATUS_OK);
     assert(config_set_version("") == SYNTRA_STATUS_INVALID_ARGUMENT);
-
-    /* Version boundary tests */
+    assert(config_set_version(NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
     char long_version[SYNTRA_CONFIG_VERSION_MAX + 1U];
 
@@ -59,7 +69,6 @@ int main(void)
     long_version[sizeof(long_version) - 1U] = '\0';
 
     assert(config_set_version(long_version) == SYNTRA_STATUS_INVALID_ARGUMENT);
-
     assert(config_get_info(&config) == SYNTRA_STATUS_OK);
     assert(strcmp(config.version, "1.0.0") == 0);
 
@@ -67,8 +76,7 @@ int main(void)
 
     assert(config_set_architecture("ARM64") == SYNTRA_STATUS_OK);
     assert(config_set_architecture("") == SYNTRA_STATUS_INVALID_ARGUMENT);
-
-    /* Architecture boundary tests */
+    assert(config_set_architecture(NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
     char long_architecture[SYNTRA_CONFIG_ARCH_MAX + 1U];
 
@@ -76,7 +84,6 @@ int main(void)
     long_architecture[sizeof(long_architecture) - 1U] = '\0';
 
     assert(config_set_architecture(long_architecture) == SYNTRA_STATUS_INVALID_ARGUMENT);
-
     assert(config_get_info(&config) == SYNTRA_STATUS_OK);
     assert(strcmp(config.architecture, "ARM64") == 0);
 
@@ -85,16 +92,23 @@ int main(void)
     assert(config_set_memory_size(4096ULL) == SYNTRA_STATUS_OK);
     assert(config_set_memory_size(0ULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
+    assert(config_get_info(&config) == SYNTRA_STATUS_OK);
+    assert(config.memory_size == 4096ULL);
+
     /* CPU tests */
 
     assert(config_set_cpu_count(8U) == SYNTRA_STATUS_OK);
     assert(config_set_cpu_count(0U) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    assert(config_get_info(&config) == SYNTRA_STATUS_OK);
+    assert(config.cpu_count == 8U);
 
     /* Debug mode tests */
 
     assert(config_set_debug_mode(1) == SYNTRA_STATUS_OK);
     assert(config_set_debug_mode(0) == SYNTRA_STATUS_OK);
     assert(config_set_debug_mode(2) == SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(config_set_debug_mode(-1) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
     /* Updated configuration tests */
 
@@ -107,9 +121,10 @@ int main(void)
     assert(config.memory_size == 4096ULL);
     assert(config.cpu_count == 8U);
     assert(config.debug_mode == 0);
+    assert(config.initialized == 1);
     assert(config.valid == 1);
 
-    /* Information validation */
+    /* Validation tests */
 
     assert(config_get_info(NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(config_validate() == SYNTRA_STATUS_OK);
@@ -126,7 +141,10 @@ int main(void)
     assert(config.memory_size == 0ULL);
     assert(config.cpu_count == 1U);
     assert(config.debug_mode == 0);
+    assert(config.initialized == 1);
     assert(config.valid == 1);
+
+    assert(config_validate() == SYNTRA_STATUS_OK);
 
     printf("System Configuration V1: all tests passed.\n");
 
