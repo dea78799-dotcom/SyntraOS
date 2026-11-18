@@ -6,7 +6,7 @@
 
 /*
  * SyntraOS Memory Manager
- * Version: 0.2.0
+ * Version: 0.3.0
  */
 
 static unsigned char memory_pool[SYNTRA_MEMORY_POOL_SIZE];
@@ -21,6 +21,7 @@ static unsigned int used_blocks = 0;
 static unsigned int allocation_count = 0;
 static unsigned int release_count = 0;
 static unsigned int active_allocations = 0;
+static unsigned int failed_allocations = 0;
 
 static int memory_initialized = 0;
 
@@ -49,6 +50,7 @@ syntra_status_t memory_init(void)
     allocation_count = 0;
     release_count = 0;
     active_allocations = 0;
+    failed_allocations = 0;
 
     memory_initialized = 1;
 
@@ -78,13 +80,17 @@ static int find_free_slot(void)
 
 void *memory_allocate(unsigned int blocks)
 {
-    if (!memory_initialized || blocks == 0)
+    if (!memory_initialized)
     {
         return NULL;
     }
 
-    if (blocks > SYNTRA_MAX_MEMORY_BLOCKS)
+    if (
+        blocks == 0 ||
+        blocks > SYNTRA_MAX_MEMORY_BLOCKS
+    )
     {
+        failed_allocations++;
         return NULL;
     }
 
@@ -92,6 +98,7 @@ void *memory_allocate(unsigned int blocks)
 
     if (slot < 0)
     {
+        failed_allocations++;
         return NULL;
     }
 
@@ -132,6 +139,8 @@ void *memory_allocate(unsigned int blocks)
             return address;
         }
     }
+
+    failed_allocations++;
 
     return NULL;
 }
@@ -218,6 +227,45 @@ syntra_status_t memory_release(
 }
 
 /* =================================
+   CALCULATE FREE MEMORY REGIONS
+   ================================= */
+
+static void calculate_free_regions(
+    unsigned int *largest_free_block,
+    unsigned int *free_regions
+)
+{
+    unsigned int current_region = 0;
+    unsigned int largest = 0;
+    unsigned int regions = 0;
+
+    for (unsigned int i = 0; i < SYNTRA_MAX_MEMORY_BLOCKS; i++)
+    {
+        if (memory_bitmap[i] == 0)
+        {
+            current_region++;
+
+            if (current_region == 1)
+            {
+                regions++;
+            }
+
+            if (current_region > largest)
+            {
+                largest = current_region;
+            }
+        }
+        else
+        {
+            current_region = 0;
+        }
+    }
+
+    *largest_free_block = largest;
+    *free_regions = regions;
+}
+
+/* =================================
    GET MEMORY INFORMATION
    ================================= */
 
@@ -229,15 +277,20 @@ void memory_get_info(syntra_memory_info_t *info)
     }
 
     info->total_blocks = SYNTRA_MAX_MEMORY_BLOCKS;
-
     info->allocation_count = allocation_count;
     info->release_count = release_count;
     info->active_allocations = active_allocations;
+    info->failed_allocations = failed_allocations;
 
     if (!memory_initialized)
     {
         info->used_blocks = 0;
         info->free_blocks = 0;
+        info->largest_free_block = 0;
+        info->free_regions = 0;
+        info->fragmentation_blocks = 0;
+        info->usage_percent = 0;
+
         return;
     }
 
@@ -245,10 +298,21 @@ void memory_get_info(syntra_memory_info_t *info)
 
     info->free_blocks =
         SYNTRA_MAX_MEMORY_BLOCKS - used_blocks;
+
+    calculate_free_regions(
+        &info->largest_free_block,
+        &info->free_regions
+    );
+
+    info->fragmentation_blocks =
+        info->free_blocks - info->largest_free_block;
+
+    info->usage_percent =
+        (used_blocks * 100) / SYNTRA_MAX_MEMORY_BLOCKS;
 }
 
 /* =================================
-   GET ALLOCATION COUNT
+   GET ACTIVE ALLOCATION COUNT
    ================================= */
 
 unsigned int memory_get_allocation_count(void)
