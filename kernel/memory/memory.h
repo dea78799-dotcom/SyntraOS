@@ -10,6 +10,8 @@
 #define SYNTRA_MEMORY_POOL_SIZE \
     (SYNTRA_MEMORY_BLOCK_SIZE * SYNTRA_MAX_MEMORY_BLOCKS)
 
+#define SYNTRA_MEMORY_ALIGNMENT 4096
+
 typedef struct
 {
     unsigned int total_blocks;
@@ -27,6 +29,9 @@ typedef struct
     unsigned int fragmentation_blocks;
 
     unsigned int usage_percent;
+
+    unsigned int integrity_errors;
+    unsigned int validation_errors;
 
 } syntra_memory_info_t;
 
@@ -57,5 +62,9 @@ unsigned int memory_get_allocation_count(void);
 const syntra_memory_allocation_t *memory_get_allocation(
     unsigned int index
 );
+
+syntra_status_t memory_validate(void);
+
+syntra_status_t memory_check_integrity(void);
 
 #endif
