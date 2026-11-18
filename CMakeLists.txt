@@ -21,6 +21,7 @@ add_library(syntra_kernel STATIC
     kernel/process/process.c
     kernel/ipc/ipc.c
     kernel/interrupt/interrupt.c
+    kernel/exception/exception.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -31,6 +32,7 @@ target_include_directories(syntra_kernel PUBLIC
     kernel/process
     kernel/ipc
     kernel/interrupt
+    kernel/exception
 )
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -164,6 +166,19 @@ if(BUILD_TESTING)
     add_test(
         NAME InterruptManagerV1Test
         COMMAND interrupt_test
+    )
+
+    add_executable(exception_test
+        tests/exception/exception_test.c
+    )
+
+    target_link_libraries(exception_test
+        PRIVATE syntra_kernel
+    )
+
+    add_test(
+        NAME ExceptionManagerV1Test
+        COMMAND exception_test
     )
 
 endif()
