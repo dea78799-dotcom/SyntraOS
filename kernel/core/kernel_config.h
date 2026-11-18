@@ -1,0 +1,16 @@
+
+#ifndef SYNTRA_KERNEL_CONFIG_H
+#define SYNTRA_KERNEL_CONFIG_H
+
+#define SYNTRA_OS_NAME "SyntraOS"
+#define SYNTRA_OS_VERSION "0.1.0"
+
+#define SYNTRA_ARCH_ARM64   1
+#define SYNTRA_ARCH_X86_64  2
+#define SYNTRA_ARCH_RISCV64 3
+
+#define SYNTRA_KERNEL_TYPE "Microkernel"
+
+#define SYNTRA_DEBUG 1
+
+#endif
