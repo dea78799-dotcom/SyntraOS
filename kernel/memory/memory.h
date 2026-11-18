@@ -6,6 +6,9 @@
 #define SYNTRA_MEMORY_BLOCK_SIZE 4096
 #define SYNTRA_MAX_MEMORY_BLOCKS 1024
 
+#define SYNTRA_MEMORY_POOL_SIZE \
+    (SYNTRA_MEMORY_BLOCK_SIZE * SYNTRA_MAX_MEMORY_BLOCKS)
+
 typedef struct
 {
     unsigned int total_blocks;
@@ -15,16 +18,13 @@ typedef struct
 
 syntra_status_t memory_init(void);
 
-syntra_status_t memory_allocate(
-    unsigned int blocks
-);
+void *memory_allocate(unsigned int blocks);
 
 syntra_status_t memory_release(
+    void *address,
     unsigned int blocks
 );
 
-void memory_get_info(
-    syntra_memory_info_t *info
-);
+void memory_get_info(syntra_memory_info_t *info);
 
 #endif
