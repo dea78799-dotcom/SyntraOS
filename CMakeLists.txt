@@ -22,6 +22,7 @@ add_library(syntra_kernel STATIC
     kernel/ipc/ipc.c
     kernel/interrupt/interrupt.c
     kernel/exception/exception.c
+    kernel/timer/timer.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -33,6 +34,7 @@ target_include_directories(syntra_kernel PUBLIC
     kernel/ipc
     kernel/interrupt
     kernel/exception
+    kernel/timer
 )
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -179,6 +181,19 @@ if(BUILD_TESTING)
     add_test(
         NAME ExceptionManagerV1Test
         COMMAND exception_test
+    )
+
+    add_executable(timer_test
+        tests/timer/timer_test.c
+    )
+
+    target_link_libraries(timer_test
+        PRIVATE syntra_kernel
+    )
+
+    add_test(
+        NAME SystemTimerV1Test
+        COMMAND timer_test
     )
 
 endif()
