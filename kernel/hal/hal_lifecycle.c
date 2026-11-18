@@ -1,4 +1,6 @@
 
+#include <stddef.h>
+
 #include "hal_lifecycle.h"
 
 syntra_status_t hal_device_start(
