@@ -5,6 +5,7 @@
 #include "../scheduler/scheduler.h"
 #include "../memory/memory.h"
 #include "../process/process.h"
+#include "../ipc/ipc.h"
 
 syntra_status_t syntra_kernel_init(void)
 {
@@ -32,6 +33,14 @@ syntra_status_t syntra_kernel_init(void)
 
     /* Initialize Process Manager */
     status = process_init();
+
+    if (status != SYNTRA_STATUS_OK)
+    {
+        return status;
+    }
+
+    /* Initialize IPC Manager */
+    status = ipc_init();
 
     if (status != SYNTRA_STATUS_OK)
     {
