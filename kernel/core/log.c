@@ -5,7 +5,7 @@
 
 /*
  * SyntraOS Kernel Logging
- * Version: 0.3.0
+ * Version: 0.4.0
  */
 
 static syntra_log_entry_t log_entries[SYNTRA_LOG_MAX_ENTRIES];
@@ -18,10 +18,7 @@ static unsigned int log_count = 0;
    COPY MESSAGE
    ================================= */
 
-static void copy_message(
-    char *destination,
-    const char *source
-)
+static void copy_message(char *destination, const char *source)
 {
     unsigned int i = 0;
 
@@ -38,12 +35,13 @@ static void copy_message(
 }
 
 /* =================================
-   WRITE LOG
+   STORE LOG
    ================================= */
 
-void syntra_log_write(
+static void store_log(
     syntra_log_level_t level,
-    const char *message
+    const char *message,
+    unsigned int timestamp
 )
 {
     if (message == NULL)
@@ -75,15 +73,9 @@ void syntra_log_write(
 
     log_info.total_count++;
 
-    /* Remove oldest entry when full */
-
     if (log_count >= SYNTRA_LOG_MAX_ENTRIES)
     {
-        for (
-            unsigned int i = 1;
-            i < SYNTRA_LOG_MAX_ENTRIES;
-            i++
-        )
+        for (unsigned int i = 1; i < SYNTRA_LOG_MAX_ENTRIES; i++)
         {
             log_entries[i - 1] = log_entries[i];
         }
@@ -91,28 +83,46 @@ void syntra_log_write(
         log_count--;
     }
 
-    /* Store new entry */
+    syntra_log_entry_t *entry = &log_entries[log_count];
 
-    syntra_log_entry_t *entry =
-        &log_entries[log_count];
+    entry->level = (unsigned int)level;
+    entry->timestamp = timestamp;
 
-    entry->level = level;
-
-    copy_message(
-        entry->message,
-        message
-    );
+    copy_message(entry->message, message);
 
     log_count++;
+}
+
+/* =================================
+   WRITE LOG
+   ================================= */
+
+void syntra_log_write(
+    syntra_log_level_t level,
+    const char *message
+)
+{
+    store_log(level, message, 0);
+}
+
+/* =================================
+   WRITE LOG WITH TIMESTAMP
+   ================================= */
+
+void syntra_log_write_at(
+    syntra_log_level_t level,
+    const char *message,
+    unsigned int timestamp
+)
+{
+    store_log(level, message, timestamp);
 }
 
 /* =================================
    GET LOG INFORMATION
    ================================= */
 
-void syntra_log_get_info(
-    syntra_log_info_t *info
-)
+void syntra_log_get_info(syntra_log_info_t *info)
 {
     if (info == NULL)
     {
@@ -123,12 +133,10 @@ void syntra_log_get_info(
 }
 
 /* =================================
-   GET LOG ENTRY
+   GET LOG BY INDEX
    ================================= */
 
-const syntra_log_entry_t *syntra_log_get(
-    unsigned int index
-)
+const syntra_log_entry_t *syntra_log_get(unsigned int index)
 {
     if (index >= log_count)
     {
@@ -139,18 +147,42 @@ const syntra_log_entry_t *syntra_log_get(
 }
 
 /* =================================
+   FIND LOG BY LEVEL
+   ================================= */
+
+const syntra_log_entry_t *syntra_log_find_level(
+    syntra_log_level_t level,
+    unsigned int index
+)
+{
+    unsigned int found = 0;
+
+    for (unsigned int i = 0; i < log_count; i++)
+    {
+        if (log_entries[i].level == (unsigned int)level)
+        {
+            if (found == index)
+            {
+                return &log_entries[i];
+            }
+
+            found++;
+        }
+    }
+
+    return NULL;
+}
+
+/* =================================
    RESET LOGGING
    ================================= */
 
 void syntra_log_reset(void)
 {
-    for (
-        unsigned int i = 0;
-        i < SYNTRA_LOG_MAX_ENTRIES;
-        i++
-    )
+    for (unsigned int i = 0; i < SYNTRA_LOG_MAX_ENTRIES; i++)
     {
         log_entries[i].level = SYNTRA_LOG_INFO;
+        log_entries[i].timestamp = 0;
         log_entries[i].message[0] = '\0';
     }
 
