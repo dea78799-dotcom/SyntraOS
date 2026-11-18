@@ -29,6 +29,7 @@ add_library(syntra_kernel STATIC
     kernel/exception/exception.c
     kernel/timer/timer.c
     kernel/clock/clock.c
+    kernel/uptime/uptime.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -42,6 +43,7 @@ target_include_directories(syntra_kernel PUBLIC
     kernel/exception
     kernel/timer
     kernel/clock
+    kernel/uptime
 )
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -238,4 +240,19 @@ target_link_libraries(clock_test PRIVATE
 add_test(
     NAME ClockManagerV1Test
     COMMAND clock_test
+)
+
+# System Uptime V1 Test
+
+add_executable(uptime_test
+    tests/uptime/uptime_test.c
+)
+
+target_link_libraries(uptime_test PRIVATE
+    syntra_kernel
+)
+
+add_test(
+    NAME SystemUptimeV1Test
+    COMMAND uptime_test
 )
