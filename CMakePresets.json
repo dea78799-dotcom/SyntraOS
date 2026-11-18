@@ -1,0 +1,39 @@
+
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "host-debug",
+      "displayName": "SyntraOS Host Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/host-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "host-release",
+      "displayName": "SyntraOS Host Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/host-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "host-debug",
+      "configurePreset": "host-debug"
+    },
+    {
+      "name": "host-release",
+      "configurePreset": "host-release"
+    }
+  ]
+}
