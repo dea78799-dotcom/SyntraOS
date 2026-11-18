@@ -12,6 +12,8 @@
 
 #define SYNTRA_MEMORY_ALIGNMENT 4096
 
+#define SYNTRA_MEMORY_HISTORY_SIZE 128
+
 typedef struct
 {
     unsigned int total_blocks;
@@ -33,7 +35,34 @@ typedef struct
     unsigned int integrity_errors;
     unsigned int validation_errors;
 
+    unsigned int peak_used_blocks;
+    unsigned int peak_usage_percent;
+
+    unsigned int leak_count;
+    unsigned int leak_blocks;
+
 } syntra_memory_info_t;
+
+typedef enum
+{
+    SYNTRA_MEMORY_EVENT_ALLOCATE = 1,
+    SYNTRA_MEMORY_EVENT_RELEASE = 2,
+    SYNTRA_MEMORY_EVENT_FAILED = 3
+
+} syntra_memory_event_type_t;
+
+typedef struct
+{
+    syntra_memory_event_type_t type;
+
+    unsigned int start_block;
+    unsigned int block_count;
+
+    unsigned int sequence;
+
+    int valid;
+
+} syntra_memory_history_t;
 
 typedef struct
 {
@@ -66,5 +95,11 @@ const syntra_memory_allocation_t *memory_get_allocation(
 syntra_status_t memory_validate(void);
 
 syntra_status_t memory_check_integrity(void);
+
+unsigned int memory_get_history_count(void);
+
+const syntra_memory_history_t *memory_get_history(
+    unsigned int index
+);
 
 #endif
