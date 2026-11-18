@@ -12,7 +12,7 @@
 
 /*
  * SyntraOS Memory Manager
- * Version: 0.4.0
+ * Version: 0.5.0
  */
 
 static unsigned char memory_pool[SYNTRA_MEMORY_POOL_SIZE]
@@ -24,15 +24,63 @@ static syntra_memory_allocation_t allocations[
     SYNTRA_MAX_MEMORY_BLOCKS
 ];
 
+static syntra_memory_history_t history[
+    SYNTRA_MEMORY_HISTORY_SIZE
+];
+
 static unsigned int used_blocks = 0;
 static unsigned int allocation_count = 0;
 static unsigned int release_count = 0;
 static unsigned int active_allocations = 0;
 static unsigned int failed_allocations = 0;
+
 static unsigned int integrity_errors = 0;
 static unsigned int validation_errors = 0;
 
+static unsigned int peak_used_blocks = 0;
+
+static unsigned int history_count = 0;
+static unsigned int history_sequence = 0;
+
 static int memory_initialized = 0;
+
+/* =================================
+   RECORD MEMORY HISTORY
+   ================================= */
+
+static void record_history(
+    syntra_memory_event_type_t type,
+    unsigned int start_block,
+    unsigned int blocks
+)
+{
+    unsigned int index;
+
+    if (history_count < SYNTRA_MEMORY_HISTORY_SIZE)
+    {
+        index = history_count;
+        history_count++;
+    }
+    else
+    {
+        for (
+            unsigned int i = 1;
+            i < SYNTRA_MEMORY_HISTORY_SIZE;
+            i++
+        )
+        {
+            history[i - 1] = history[i];
+        }
+
+        index = SYNTRA_MEMORY_HISTORY_SIZE - 1;
+    }
+
+    history[index].type = type;
+    history[index].start_block = start_block;
+    history[index].block_count = blocks;
+    history[index].sequence = ++history_sequence;
+    history[index].valid = 1;
+}
 
 /* =================================
    INITIALIZE MEMORY
@@ -55,13 +103,28 @@ syntra_status_t memory_init(void)
         allocations[i].active = 0;
     }
 
+    for (unsigned int i = 0; i < SYNTRA_MEMORY_HISTORY_SIZE; i++)
+    {
+        history[i].type = 0;
+        history[i].start_block = 0;
+        history[i].block_count = 0;
+        history[i].sequence = 0;
+        history[i].valid = 0;
+    }
+
     used_blocks = 0;
     allocation_count = 0;
     release_count = 0;
     active_allocations = 0;
     failed_allocations = 0;
+
     integrity_errors = 0;
     validation_errors = 0;
+
+    peak_used_blocks = 0;
+
+    history_count = 0;
+    history_sequence = 0;
 
     memory_initialized = 1;
 
@@ -102,6 +165,13 @@ void *memory_allocate(unsigned int blocks)
     )
     {
         failed_allocations++;
+
+        record_history(
+            SYNTRA_MEMORY_EVENT_FAILED,
+            0,
+            blocks
+        );
+
         return NULL;
     }
 
@@ -110,6 +180,13 @@ void *memory_allocate(unsigned int blocks)
     if (slot < 0)
     {
         failed_allocations++;
+
+        record_history(
+            SYNTRA_MEMORY_EVENT_FAILED,
+            0,
+            blocks
+        );
+
         return NULL;
     }
 
@@ -147,11 +224,28 @@ void *memory_allocate(unsigned int blocks)
             allocation_count++;
             active_allocations++;
 
+            if (used_blocks > peak_used_blocks)
+            {
+                peak_used_blocks = used_blocks;
+            }
+
+            record_history(
+                SYNTRA_MEMORY_EVENT_ALLOCATE,
+                start,
+                blocks
+            );
+
             return address;
         }
     }
 
     failed_allocations++;
+
+    record_history(
+        SYNTRA_MEMORY_EVENT_FAILED,
+        0,
+        blocks
+    );
 
     return NULL;
 }
@@ -164,22 +258,12 @@ static int validate_allocation(
     const syntra_memory_allocation_t *allocation
 )
 {
-    if (allocation == NULL)
-    {
-        return 0;
-    }
-
-    if (!allocation->active)
-    {
-        return 0;
-    }
-
-    if (allocation->address == NULL)
-    {
-        return 0;
-    }
-
-    if (allocation->block_count == 0)
+    if (
+        allocation == NULL ||
+        !allocation->active ||
+        allocation->address == NULL ||
+        allocation->block_count == 0
+    )
     {
         return 0;
     }
@@ -270,10 +354,11 @@ syntra_status_t memory_release(
     }
 
     unsigned int start = allocation->start_block;
+    unsigned int count = allocation->block_count;
 
     for (
         unsigned int i = start;
-        i < start + allocation->block_count;
+        i < start + count;
         i++
     )
     {
@@ -287,14 +372,14 @@ syntra_status_t memory_release(
 
     for (
         unsigned int i = start;
-        i < start + allocation->block_count;
+        i < start + count;
         i++
     )
     {
         memory_bitmap[i] = 0;
     }
 
-    used_blocks -= allocation->block_count;
+    used_blocks -= count;
 
     allocation->address = NULL;
     allocation->start_block = 0;
@@ -303,6 +388,12 @@ syntra_status_t memory_release(
 
     release_count++;
     active_allocations--;
+
+    record_history(
+        SYNTRA_MEMORY_EVENT_RELEASE,
+        start,
+        count
+    );
 
     return SYNTRA_STATUS_OK;
 }
@@ -488,8 +579,17 @@ void memory_get_info(syntra_memory_info_t *info)
     info->release_count = release_count;
     info->active_allocations = active_allocations;
     info->failed_allocations = failed_allocations;
+
     info->integrity_errors = integrity_errors;
     info->validation_errors = validation_errors;
+
+    info->peak_used_blocks = peak_used_blocks;
+
+    info->peak_usage_percent =
+        (peak_used_blocks * 100) / SYNTRA_MAX_MEMORY_BLOCKS;
+
+    info->leak_count = active_allocations;
+    info->leak_blocks = used_blocks;
 
     if (!memory_initialized)
     {
@@ -499,6 +599,8 @@ void memory_get_info(syntra_memory_info_t *info)
         info->free_regions = 0;
         info->fragmentation_blocks = 0;
         info->usage_percent = 0;
+        info->leak_count = 0;
+        info->leak_blocks = 0;
 
         return;
     }
@@ -551,4 +653,33 @@ const syntra_memory_allocation_t *memory_get_allocation(
     }
 
     return &allocations[index];
+}
+
+/* =================================
+   GET HISTORY COUNT
+   ================================= */
+
+unsigned int memory_get_history_count(void)
+{
+    return history_count;
+}
+
+/* =================================
+   GET HISTORY ENTRY
+   ================================= */
+
+const syntra_memory_history_t *memory_get_history(
+    unsigned int index
+)
+{
+    if (
+        !memory_initialized ||
+        index >= history_count ||
+        !history[index].valid
+    )
+    {
+        return NULL;
+    }
+
+    return &history[index];
 }
