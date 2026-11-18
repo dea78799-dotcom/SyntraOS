@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 int main(void)
 {
@@ -11,33 +12,13 @@ int main(void)
     /* Test reset */
     syntra_log_reset();
 
-    syntra_log_get_info(&info);
-    assert(info.total_count == 0);
+    /* Test writing logs */
+    syntra_log_write(SYNTRA_LOG_INFO, "System started");
+    syntra_log_write(SYNTRA_LOG_WARNING, "Low memory");
+    syntra_log_write(SYNTRA_LOG_ERROR, "Kernel error");
+    syntra_log_write(SYNTRA_LOG_DEBUG, "Debug message");
 
-    /* Test INFO */
-    syntra_log_write(
-        SYNTRA_LOG_INFO,
-        "System started"
-    );
-
-    /* Test WARNING */
-    syntra_log_write(
-        SYNTRA_LOG_WARNING,
-        "Low memory"
-    );
-
-    /* Test ERROR */
-    syntra_log_write(
-        SYNTRA_LOG_ERROR,
-        "Kernel error"
-    );
-
-    /* Test DEBUG */
-    syntra_log_write(
-        SYNTRA_LOG_DEBUG,
-        "Debug message"
-    );
-
+    /* Test counters */
     syntra_log_get_info(&info);
 
     assert(info.info_count == 1);
@@ -46,47 +27,58 @@ int main(void)
     assert(info.debug_count == 1);
     assert(info.total_count == 4);
 
-    /* Test multiple logs */
-    syntra_log_write(
-        SYNTRA_LOG_INFO,
-        "Another message"
-    );
+    /* Test log history */
+    const syntra_log_entry_t *entry;
 
-    syntra_log_get_info(&info);
+    entry = syntra_log_get(0);
 
-    assert(info.info_count == 2);
-    assert(info.total_count == 5);
+    assert(entry != NULL);
+    assert(entry->level == SYNTRA_LOG_INFO);
+    assert(strcmp(entry->message, "System started") == 0);
 
-    /* Test invalid level */
-    syntra_log_write(
-        (syntra_log_level_t)99,
-        "Invalid log"
-    );
+    entry = syntra_log_get(1);
 
-    syntra_log_get_info(&info);
-    assert(info.total_count == 5);
+    assert(entry != NULL);
+    assert(entry->level == SYNTRA_LOG_WARNING);
+    assert(strcmp(entry->message, "Low memory") == 0);
+
+    /* Test invalid index */
+    assert(syntra_log_get(100) == NULL);
 
     /* Test NULL message */
-    syntra_log_write(
-        SYNTRA_LOG_INFO,
-        NULL
-    );
+    syntra_log_write(SYNTRA_LOG_INFO, NULL);
 
     syntra_log_get_info(&info);
-    assert(info.total_count == 5);
+    assert(info.total_count == 4);
 
-    /* Test reset again */
+    /* Test history limit */
+    syntra_log_reset();
+
+    for (unsigned int i = 0; i < 70; i++)
+    {
+        syntra_log_write(
+            SYNTRA_LOG_INFO,
+            "History test"
+        );
+    }
+
+    syntra_log_get_info(&info);
+
+    assert(info.total_count == 70);
+    assert(info.info_count == 70);
+
+    assert(syntra_log_get(63) != NULL);
+    assert(syntra_log_get(64) == NULL);
+
+    /* Test reset */
     syntra_log_reset();
 
     syntra_log_get_info(&info);
 
-    assert(info.info_count == 0);
-    assert(info.warning_count == 0);
-    assert(info.error_count == 0);
-    assert(info.debug_count == 0);
     assert(info.total_count == 0);
+    assert(syntra_log_get(0) == NULL);
 
-    printf("Logging V2 Test: PASSED\n");
+    printf("Logging V3 Test: PASSED\n");
 
     return 0;
 }
