@@ -1,3 +1,5 @@
+#include "scheduler.h"
+#include "../core/status.h"
 #include "kernel.h"
 #include "kernel_config.h"
 #include "../scheduler/scheduler.h"
