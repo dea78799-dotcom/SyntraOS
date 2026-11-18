@@ -20,6 +20,7 @@ add_library(syntra_kernel STATIC
     kernel/memory/memory.c
     kernel/process/process.c
     kernel/ipc/ipc.c
+    kernel/interrupt/interrupt.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -29,6 +30,7 @@ target_include_directories(syntra_kernel PUBLIC
     kernel/memory
     kernel/process
     kernel/ipc
+    kernel/interrupt
 )
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -149,6 +151,19 @@ if(BUILD_TESTING)
     add_test(
         NAME KernelPanicV2Test
         COMMAND panic_test
+    )
+
+    add_executable(interrupt_test
+        tests/interrupt/interrupt_test.c
+    )
+
+    target_link_libraries(interrupt_test
+        PRIVATE syntra_kernel
+    )
+
+    add_test(
+        NAME InterruptManagerV1Test
+        COMMAND interrupt_test
     )
 
 endif()
