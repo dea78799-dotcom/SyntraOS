@@ -15,7 +15,8 @@ typedef enum
 
 typedef struct
 {
-    syntra_log_level_t level;
+    unsigned int level;
+    unsigned int timestamp;
     char message[SYNTRA_LOG_MESSAGE_SIZE];
 } syntra_log_entry_t;
 
@@ -33,11 +34,22 @@ void syntra_log_write(
     const char *message
 );
 
+void syntra_log_write_at(
+    syntra_log_level_t level,
+    const char *message,
+    unsigned int timestamp
+);
+
 void syntra_log_get_info(
     syntra_log_info_t *info
 );
 
 const syntra_log_entry_t *syntra_log_get(
+    unsigned int index
+);
+
+const syntra_log_entry_t *syntra_log_find_level(
+    syntra_log_level_t level,
     unsigned int index
 );
 
