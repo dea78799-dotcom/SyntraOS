@@ -15,7 +15,21 @@ typedef struct
     unsigned int total_blocks;
     unsigned int used_blocks;
     unsigned int free_blocks;
+
+    unsigned int allocation_count;
+    unsigned int release_count;
+    unsigned int active_allocations;
+
 } syntra_memory_info_t;
+
+typedef struct
+{
+    void *address;
+    unsigned int start_block;
+    unsigned int block_count;
+    int active;
+
+} syntra_memory_allocation_t;
 
 syntra_status_t memory_init(void);
 
@@ -26,6 +40,14 @@ syntra_status_t memory_release(
     unsigned int blocks
 );
 
-void memory_get_info(syntra_memory_info_t *info);
+void memory_get_info(
+    syntra_memory_info_t *info
+);
+
+unsigned int memory_get_allocation_count(void);
+
+const syntra_memory_allocation_t *memory_get_allocation(
+    unsigned int index
+);
 
 #endif
