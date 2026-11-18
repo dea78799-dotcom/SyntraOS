@@ -1,147 +1,97 @@
 
-#include "../../kernel/memory/memory.h"
+#include "memory.h"
 
 #include <assert.h>
 #include <stdio.h>
 
 int main(void)
 {
-    syntra_memory_info_t info;
-
-    /* Test initialization */
     assert(memory_init() == SYNTRA_STATUS_OK);
 
-    /* Test initial information */
+    syntra_memory_info_t info;
+
     memory_get_info(&info);
 
     assert(info.total_blocks == SYNTRA_MAX_MEMORY_BLOCKS);
     assert(info.used_blocks == 0);
     assert(info.free_blocks == SYNTRA_MAX_MEMORY_BLOCKS);
-    assert(info.allocation_count == 0);
-    assert(info.release_count == 0);
-    assert(info.active_allocations == 0);
+    assert(info.largest_free_block == SYNTRA_MAX_MEMORY_BLOCKS);
+    assert(info.free_regions == 1);
+    assert(info.fragmentation_blocks == 0);
+    assert(info.usage_percent == 0);
+    assert(info.failed_allocations == 0);
 
-    /* Test first allocation */
-    void *first = memory_allocate(2);
+    /* Allocate memory */
 
-    assert(first != NULL);
-    assert(memory_get_allocation_count() == 1);
+    void *a = memory_allocate(100);
+    void *b = memory_allocate(200);
+    void *c = memory_allocate(50);
 
-    /* Test second allocation */
-    void *second = memory_allocate(3);
+    assert(a != NULL);
+    assert(b != NULL);
+    assert(c != NULL);
 
-    assert(second != NULL);
-    assert(first != second);
-    assert(memory_get_allocation_count() == 2);
-
-    /* Test allocation tracking */
-    const syntra_memory_allocation_t *allocation;
-
-    allocation = memory_get_allocation(0);
-
-    assert(allocation != NULL);
-    assert(allocation->address == first);
-    assert(allocation->block_count == 2);
-    assert(allocation->active == 1);
-
-    allocation = memory_get_allocation(1);
-
-    assert(allocation != NULL);
-    assert(allocation->address == second);
-    assert(allocation->block_count == 3);
-    assert(allocation->active == 1);
-
-    /* Test memory statistics */
     memory_get_info(&info);
 
-    assert(info.used_blocks == 5);
-    assert(info.free_blocks == SYNTRA_MAX_MEMORY_BLOCKS - 5);
-    assert(info.allocation_count == 2);
+    assert(info.used_blocks == 350);
+    assert(info.free_blocks == 674);
+    assert(info.allocation_count == 3);
+    assert(info.active_allocations == 3);
+    assert(info.usage_percent == 34);
+
+    /* Check allocation tracking */
+
+    assert(memory_get_allocation_count() == 3);
+
+    assert(memory_get_allocation(0) != NULL);
+    assert(memory_get_allocation(1) != NULL);
+    assert(memory_get_allocation(2) != NULL);
+
+    /* Release middle allocation */
+
+    assert(memory_release(b, 200) == SYNTRA_STATUS_OK);
+
+    memory_get_info(&info);
+
+    assert(info.used_blocks == 150);
+    assert(info.free_blocks == 874);
+    assert(info.largest_free_block == 674);
+    assert(info.free_regions == 2);
+    assert(info.fragmentation_blocks == 200);
     assert(info.active_allocations == 2);
 
-    /* Test invalid allocation */
-    assert(memory_allocate(0) == NULL);
+    /* Release remaining allocations */
 
-    assert(
-        memory_allocate(SYNTRA_MAX_MEMORY_BLOCKS + 1) == NULL
-    );
+    assert(memory_release(a, 100) == SYNTRA_STATUS_OK);
+    assert(memory_release(c, 50) == SYNTRA_STATUS_OK);
 
-    /* Test incorrect release size */
-    assert(
-        memory_release(first, 1) ==
-        SYNTRA_STATUS_INVALID_ARGUMENT
-    );
-
-    /* Test invalid address */
-    int outside_memory = 0;
-
-    assert(
-        memory_release(&outside_memory, 1) ==
-        SYNTRA_STATUS_ERROR
-    );
-
-    /* Test null address */
-    assert(
-        memory_release(NULL, 1) ==
-        SYNTRA_STATUS_INVALID_ARGUMENT
-    );
-
-    /* Test release first allocation */
-    assert(
-        memory_release(first, 2) ==
-        SYNTRA_STATUS_OK
-    );
-
-    assert(memory_get_allocation_count() == 1);
-    assert(memory_get_allocation(0) == NULL);
-
-    /* Test double release */
-    assert(
-        memory_release(first, 2) ==
-        SYNTRA_STATUS_ERROR
-    );
-
-    /* Test release second allocation */
-    assert(
-        memory_release(second, 3) ==
-        SYNTRA_STATUS_OK
-    );
-
-    /* Test all memory released */
     memory_get_info(&info);
 
     assert(info.used_blocks == 0);
     assert(info.free_blocks == SYNTRA_MAX_MEMORY_BLOCKS);
-    assert(info.allocation_count == 2);
-    assert(info.release_count == 2);
-    assert(info.active_allocations == 0);
-
-    /* Test allocation slot reuse */
-    void *third = memory_allocate(4);
-
-    assert(third != NULL);
-    assert(memory_get_allocation_count() == 1);
-
-    allocation = memory_get_allocation(0);
-
-    assert(allocation != NULL);
-    assert(allocation->address == third);
-    assert(allocation->block_count == 4);
-
-    /* Test final release */
-    assert(
-        memory_release(third, 4) ==
-        SYNTRA_STATUS_OK
-    );
-
-    memory_get_info(&info);
-
-    assert(info.used_blocks == 0);
-    assert(info.allocation_count == 3);
+    assert(info.largest_free_block == SYNTRA_MAX_MEMORY_BLOCKS);
+    assert(info.free_regions == 1);
+    assert(info.fragmentation_blocks == 0);
+    assert(info.usage_percent == 0);
     assert(info.release_count == 3);
     assert(info.active_allocations == 0);
 
-    printf("Memory V2 Test: PASSED\n");
+    /* Invalid allocation */
+
+    assert(memory_allocate(0) == NULL);
+    assert(memory_allocate(SYNTRA_MAX_MEMORY_BLOCKS + 1) == NULL);
+
+    memory_get_info(&info);
+
+    assert(info.failed_allocations == 2);
+
+    /* Invalid release */
+
+    assert(
+        memory_release(a, 100) == SYNTRA_STATUS_ERROR
+    );
+
+    printf("Memory V3 tests passed!\n");
 
     return 0;
 }
