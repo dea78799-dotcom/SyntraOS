@@ -1,0 +1,32 @@
+
+name: SyntraOS CI
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build SyntraOS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: cmake --preset host-debug
+
+      - name: Build Kernel
+        run: cmake --build --preset host-debug
+
+      - name: Build Release
+        run: cmake --preset host-release
+
+      - name: Compile Release
+        run: cmake --build --preset host-release
