@@ -6,10 +6,17 @@ project(SyntraOS
     LANGUAGES C
 )
 
+# =================================
+# C LANGUAGE CONFIGURATION
+# =================================
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-
 set(CMAKE_C_EXTENSIONS OFF)
+
+# =================================
+# KERNEL LIBRARY
+# =================================
 
 add_library(syntra_kernel STATIC
 
@@ -27,6 +34,7 @@ add_library(syntra_kernel STATIC
 )
 
 target_include_directories(syntra_kernel PUBLIC
+
     kernel/core
     kernel/scheduler
     kernel/memory
@@ -34,10 +42,55 @@ target_include_directories(syntra_kernel PUBLIC
     kernel/ipc
 )
 
+# =================================
+# COMPILER WARNINGS
+# =================================
+
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+
     target_compile_options(syntra_kernel PRIVATE
         -Wall
         -Wextra
         -Wpedantic
     )
+
+endif()
+
+# =================================
+# TESTING CONFIGURATION
+# =================================
+
+include(CTest)
+
+if(BUILD_TESTING)
+
+    enable_testing()
+
+    # Scheduler Unit Test
+
+    add_executable(scheduler_test
+
+        tests/scheduler/scheduler_test.c
+
+    )
+
+    target_link_libraries(scheduler_test
+        PRIVATE syntra_kernel
+    )
+
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+
+        target_compile_options(scheduler_test PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+        )
+
+    endif()
+
+    add_test(
+        NAME SchedulerTest
+        COMMAND scheduler_test
+    )
+
 endif()
