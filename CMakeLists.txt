@@ -10,10 +10,6 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-# =================================
-# KERNEL LIBRARY
-# =================================
-
 add_library(syntra_kernel STATIC
 
     kernel/core/kernel.c
@@ -45,17 +41,11 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
 
 endif()
 
-# =================================
-# TEST SYSTEM
-# =================================
-
 include(CTest)
 
 if(BUILD_TESTING)
 
     enable_testing()
-
-    # Scheduler Test
 
     add_executable(scheduler_test
         tests/scheduler/scheduler_test.c
@@ -70,8 +60,6 @@ if(BUILD_TESTING)
         COMMAND scheduler_test
     )
 
-    # Memory Test
-
     add_executable(memory_test
         tests/memory/memory_test.c
     )
@@ -84,8 +72,6 @@ if(BUILD_TESTING)
         NAME MemoryTest
         COMMAND memory_test
     )
-
-    # Process Test
 
     add_executable(process_test
         tests/process/process_test.c
@@ -100,8 +86,6 @@ if(BUILD_TESTING)
         COMMAND process_test
     )
 
-    # IPC Test
-
     add_executable(ipc_test
         tests/ipc/ipc_test.c
     )
@@ -114,8 +98,6 @@ if(BUILD_TESTING)
         NAME IPCTest
         COMMAND ipc_test
     )
-
-    # Kernel Integration Test
 
     add_executable(kernel_test
         tests/kernel/kernel_test.c
@@ -130,8 +112,6 @@ if(BUILD_TESTING)
         COMMAND kernel_test
     )
 
-    # Kernel Core Test
-
     add_executable(core_test
         tests/core/core_test.c
     )
@@ -145,8 +125,6 @@ if(BUILD_TESTING)
         COMMAND core_test
     )
 
-    # Logging V2 Test
-
     add_executable(log_test
         tests/core/log_test.c
     )
@@ -156,8 +134,21 @@ if(BUILD_TESTING)
     )
 
     add_test(
-        NAME LoggingV2Test
+        NAME LoggingV5Test
         COMMAND log_test
+    )
+
+    add_executable(panic_test
+        tests/core/panic_test.c
+    )
+
+    target_link_libraries(panic_test
+        PRIVATE syntra_kernel
+    )
+
+    add_test(
+        NAME KernelPanicV2Test
+        COMMAND panic_test
     )
 
 endif()
