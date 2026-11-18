@@ -1,13 +1,44 @@
-#ifndef SYNTRA_KERNEL_H
-#define SYNTRA_KERNEL_H
 
-#include "status.h"
+#ifndef SYNTRA_SCHEDULER_H
+#define SYNTRA_SCHEDULER_H
 
-/*
- * SyntraOS Kernel
- * Version: 0.1.0
- */
+#include "../core/status.h"
 
-syntra_status_t syntra_kernel_init(void);
+#define SYNTRA_MAX_THREADS 32
+
+typedef enum
+{
+    THREAD_READY,
+    THREAD_RUNNING,
+    THREAD_BLOCKED,
+    THREAD_TERMINATED
+} thread_state_t;
+
+typedef struct
+{
+    unsigned int thread_id;
+    unsigned int priority;
+    thread_state_t state;
+} syntra_thread_t;
+
+syntra_status_t scheduler_init(void);
+
+syntra_status_t scheduler_add_thread(
+    unsigned int thread_id,
+    unsigned int priority
+);
+
+syntra_thread_t *scheduler_get_next_ready(void);
+
+syntra_status_t scheduler_set_thread_state(
+    unsigned int thread_id,
+    thread_state_t new_state
+);
+
+syntra_thread_t *scheduler_get_thread(
+    unsigned int thread_id
+);
+
+unsigned int scheduler_get_thread_count(void);
 
 #endif
