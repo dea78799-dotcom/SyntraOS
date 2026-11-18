@@ -8,6 +8,8 @@
 int main(void)
 {
     syntra_hal_device_t device;
+    syntra_hal_device_t uninitialized_device = {0};
+
     syntra_hal_device_state_t state;
 
     /* Initialize device */
@@ -35,8 +37,6 @@ int main(void)
             SYNTRA_HAL_DEVICE_ONLINE
         ) == SYNTRA_STATUS_OK
     );
-
-    /* Read device state */
 
     assert(
         hal_device_get_state(&device, &state)
@@ -99,10 +99,32 @@ int main(void)
         ) == SYNTRA_STATUS_INVALID_ARGUMENT
     );
 
+    /* Uninitialized device */
+
     assert(
-        hal_device_get_state(&device, &state)
-        == SYNTRA_STATUS_ERROR
+        hal_device_get_state(
+            &uninitialized_device,
+            &state
+        ) == SYNTRA_STATUS_ERROR
     );
+
+    assert(
+        hal_device_set_state(
+            &uninitialized_device,
+            SYNTRA_HAL_DEVICE_ONLINE
+        ) == SYNTRA_STATUS_ERROR
+    );
+
+    /* Invalid state */
+
+    assert(
+        hal_device_set_state(
+            &device,
+            (syntra_hal_device_state_t)99
+        ) == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+
+    /* NULL arguments */
 
     assert(
         hal_device_get_state(NULL, &state)
