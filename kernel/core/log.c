@@ -5,7 +5,7 @@
 
 /*
  * SyntraOS Kernel Logging
- * Version: 0.4.0
+ * Version: 0.5.0
  */
 
 static syntra_log_entry_t log_entries[SYNTRA_LOG_MAX_ENTRIES];
@@ -32,6 +32,31 @@ static void copy_message(char *destination, const char *source)
     }
 
     destination[i] = '\0';
+}
+
+/* =================================
+   CONVERT TIMESTAMP
+   ================================= */
+
+static void convert_timestamp(
+    unsigned int timestamp,
+    unsigned int *hours,
+    unsigned int *minutes,
+    unsigned int *seconds
+)
+{
+    if (
+        hours == NULL ||
+        minutes == NULL ||
+        seconds == NULL
+    )
+    {
+        return;
+    }
+
+    *hours = (timestamp / 3600) % 24;
+    *minutes = (timestamp / 60) % 60;
+    *seconds = timestamp % 60;
 }
 
 /* =================================
@@ -88,6 +113,13 @@ static void store_log(
     entry->level = (unsigned int)level;
     entry->timestamp = timestamp;
 
+    convert_timestamp(
+        timestamp,
+        &entry->hours,
+        &entry->minutes,
+        &entry->seconds
+    );
+
     copy_message(entry->message, message);
 
     log_count++;
@@ -106,7 +138,7 @@ void syntra_log_write(
 }
 
 /* =================================
-   WRITE LOG WITH TIMESTAMP
+   WRITE LOG AT TIMESTAMP
    ================================= */
 
 void syntra_log_write_at(
@@ -183,6 +215,9 @@ void syntra_log_reset(void)
     {
         log_entries[i].level = SYNTRA_LOG_INFO;
         log_entries[i].timestamp = 0;
+        log_entries[i].hours = 0;
+        log_entries[i].minutes = 0;
+        log_entries[i].seconds = 0;
         log_entries[i].message[0] = '\0';
     }
 
