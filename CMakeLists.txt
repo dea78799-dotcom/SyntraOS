@@ -10,6 +10,10 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
+# ==================================================
+# Kernel Library
+# ==================================================
+
 add_library(syntra_kernel STATIC
 
     kernel/core/kernel.c
@@ -20,9 +24,11 @@ add_library(syntra_kernel STATIC
     kernel/memory/memory.c
     kernel/process/process.c
     kernel/ipc/ipc.c
+
     kernel/interrupt/interrupt.c
     kernel/exception/exception.c
     kernel/timer/timer.c
+    kernel/clock/clock.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -35,6 +41,7 @@ target_include_directories(syntra_kernel PUBLIC
     kernel/interrupt
     kernel/exception
     kernel/timer
+    kernel/clock
 )
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -47,153 +54,188 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
 
 endif()
 
-include(CTest)
+# ==================================================
+# Testing
+# ==================================================
 
-if(BUILD_TESTING)
+enable_testing()
 
-    enable_testing()
+# Scheduler Test
 
-    add_executable(scheduler_test
-        tests/scheduler/scheduler_test.c
-    )
+add_executable(scheduler_test
+    tests/scheduler/scheduler_test.c
+)
 
-    target_link_libraries(scheduler_test
-        PRIVATE syntra_kernel
-    )
+target_link_libraries(scheduler_test PRIVATE
+    syntra_kernel
+)
 
-    add_test(
-        NAME SchedulerTest
-        COMMAND scheduler_test
-    )
+add_test(
+    NAME SchedulerTest
+    COMMAND scheduler_test
+)
 
-    add_executable(memory_test
-        tests/memory/memory_test.c
-    )
+# Memory Test
 
-    target_link_libraries(memory_test
-        PRIVATE syntra_kernel
-    )
+add_executable(memory_test
+    tests/memory/memory_test.c
+)
 
-    add_test(
-        NAME MemoryTest
-        COMMAND memory_test
-    )
+target_link_libraries(memory_test PRIVATE
+    syntra_kernel
+)
 
-    add_executable(process_test
-        tests/process/process_test.c
-    )
+add_test(
+    NAME MemoryTest
+    COMMAND memory_test
+)
 
-    target_link_libraries(process_test
-        PRIVATE syntra_kernel
-    )
+# Process Test
 
-    add_test(
-        NAME ProcessTest
-        COMMAND process_test
-    )
+add_executable(process_test
+    tests/process/process_test.c
+)
 
-    add_executable(ipc_test
-        tests/ipc/ipc_test.c
-    )
+target_link_libraries(process_test PRIVATE
+    syntra_kernel
+)
 
-    target_link_libraries(ipc_test
-        PRIVATE syntra_kernel
-    )
+add_test(
+    NAME ProcessTest
+    COMMAND process_test
+)
 
-    add_test(
-        NAME IPCTest
-        COMMAND ipc_test
-    )
+# IPC Test
 
-    add_executable(kernel_test
-        tests/kernel/kernel_test.c
-    )
+add_executable(ipc_test
+    tests/ipc/ipc_test.c
+)
 
-    target_link_libraries(kernel_test
-        PRIVATE syntra_kernel
-    )
+target_link_libraries(ipc_test PRIVATE
+    syntra_kernel
+)
 
-    add_test(
-        NAME KernelIntegrationTest
-        COMMAND kernel_test
-    )
+add_test(
+    NAME IPCTest
+    COMMAND ipc_test
+)
 
-    add_executable(core_test
-        tests/core/core_test.c
-    )
+# Kernel Integration Test
 
-    target_link_libraries(core_test
-        PRIVATE syntra_kernel
-    )
+add_executable(kernel_test
+    tests/kernel/kernel_test.c
+)
 
-    add_test(
-        NAME KernelCoreTest
-        COMMAND core_test
-    )
+target_link_libraries(kernel_test PRIVATE
+    syntra_kernel
+)
 
-    add_executable(log_test
-        tests/core/log_test.c
-    )
+add_test(
+    NAME KernelIntegrationTest
+    COMMAND kernel_test
+)
 
-    target_link_libraries(log_test
-        PRIVATE syntra_kernel
-    )
+# Kernel Core Test
 
-    add_test(
-        NAME LoggingV5Test
-        COMMAND log_test
-    )
+add_executable(core_test
+    tests/core/core_test.c
+)
 
-    add_executable(panic_test
-        tests/core/panic_test.c
-    )
+target_link_libraries(core_test PRIVATE
+    syntra_kernel
+)
 
-    target_link_libraries(panic_test
-        PRIVATE syntra_kernel
-    )
+add_test(
+    NAME KernelCoreTest
+    COMMAND core_test
+)
 
-    add_test(
-        NAME KernelPanicV2Test
-        COMMAND panic_test
-    )
+# Logging V5 Test
 
-    add_executable(interrupt_test
-        tests/interrupt/interrupt_test.c
-    )
+add_executable(log_test
+    tests/core/log_test.c
+)
 
-    target_link_libraries(interrupt_test
-        PRIVATE syntra_kernel
-    )
+target_link_libraries(log_test PRIVATE
+    syntra_kernel
+)
 
-    add_test(
-        NAME InterruptManagerV1Test
-        COMMAND interrupt_test
-    )
+add_test(
+    NAME LoggingV5Test
+    COMMAND log_test
+)
 
-    add_executable(exception_test
-        tests/exception/exception_test.c
-    )
+# Kernel Panic V2 Test
 
-    target_link_libraries(exception_test
-        PRIVATE syntra_kernel
-    )
+add_executable(panic_test
+    tests/core/panic_test.c
+)
 
-    add_test(
-        NAME ExceptionManagerV1Test
-        COMMAND exception_test
-    )
+target_link_libraries(panic_test PRIVATE
+    syntra_kernel
+)
 
-    add_executable(timer_test
-        tests/timer/timer_test.c
-    )
+add_test(
+    NAME KernelPanicV2Test
+    COMMAND panic_test
+)
 
-    target_link_libraries(timer_test
-        PRIVATE syntra_kernel
-    )
+# Interrupt Manager V1 Test
 
-    add_test(
-        NAME SystemTimerV1Test
-        COMMAND timer_test
-    )
+add_executable(interrupt_test
+    tests/interrupt/interrupt_test.c
+)
 
-endif()
+target_link_libraries(interrupt_test PRIVATE
+    syntra_kernel
+)
+
+add_test(
+    NAME InterruptManagerV1Test
+    COMMAND interrupt_test
+)
+
+# Exception Manager V1 Test
+
+add_executable(exception_test
+    tests/exception/exception_test.c
+)
+
+target_link_libraries(exception_test PRIVATE
+    syntra_kernel
+)
+
+add_test(
+    NAME ExceptionManagerV1Test
+    COMMAND exception_test
+)
+
+# System Timer V1 Test
+
+add_executable(timer_test
+    tests/timer/timer_test.c
+)
+
+target_link_libraries(timer_test PRIVATE
+    syntra_kernel
+)
+
+add_test(
+    NAME SystemTimerV1Test
+    COMMAND timer_test
+)
+
+# Clock Manager V1 Test
+
+add_executable(clock_test
+    tests/clock/clock_test.c
+)
+
+target_link_libraries(clock_test PRIVATE
+    syntra_kernel
+)
+
+add_test(
+    NAME ClockManagerV1Test
+    COMMAND clock_test
+)
