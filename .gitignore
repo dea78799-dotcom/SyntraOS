@@ -1,0 +1,27 @@
+# Build files
+build/
+out/
+dist/
+
+# Object files
+*.o
+*.obj
+*.a
+*.so
+*.dll
+
+# Debug files
+*.log
+*.tmp
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Editor files
+.vscode/
+.idea/
+
+# Temporary files
+*.bak
+*.swp
