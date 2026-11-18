@@ -30,7 +30,9 @@ add_library(syntra_kernel STATIC
     kernel/timer/timer.c
     kernel/clock/clock.c
     kernel/uptime/uptime.c
+
     kernel/config/config.c
+    kernel/config/config_manager.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -203,3 +205,13 @@ add_executable(config_test
 target_link_libraries(config_test PRIVATE syntra_kernel)
 
 add_test(NAME SystemConfigurationV1Test COMMAND config_test)
+
+# Config Manager V2 Test
+
+add_executable(config_manager_test
+    tests/config/config_manager_test.c
+)
+
+target_link_libraries(config_manager_test PRIVATE syntra_kernel)
+
+add_test(NAME ConfigManagerV2Test COMMAND config_manager_test)
