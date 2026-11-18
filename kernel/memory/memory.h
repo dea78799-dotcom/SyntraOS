@@ -1,3 +1,4 @@
+
 #ifndef SYNTRA_MEMORY_H
 #define SYNTRA_MEMORY_H
 
