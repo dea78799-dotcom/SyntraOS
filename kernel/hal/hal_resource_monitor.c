@@ -27,7 +27,7 @@ syntra_status_t hal_resource_monitor_init(
     monitor->update_count = 0U;
     monitor->initialized = 1;
 
-    return SYNTRA_STATUS_SUCCESS;
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t hal_resource_monitor_reset(
@@ -46,7 +46,7 @@ syntra_status_t hal_resource_monitor_reset(
     monitor->update_count = 0U;
     monitor->initialized = 0;
 
-    return SYNTRA_STATUS_SUCCESS;
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t hal_resource_monitor_update(
@@ -121,7 +121,7 @@ syntra_status_t hal_resource_monitor_update(
     monitor->invalid_resources = invalid;
     ++monitor->update_count;
 
-    return SYNTRA_STATUS_SUCCESS;
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t hal_resource_monitor_validate(
@@ -158,5 +158,5 @@ syntra_status_t hal_resource_monitor_validate(
         return SYNTRA_STATUS_ERROR;
     }
 
-    return SYNTRA_STATUS_SUCCESS;
+    return SYNTRA_STATUS_OK;
 }
