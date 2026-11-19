@@ -278,14 +278,14 @@ int main(void)
     /* Invalid arguments */
 
     assert(
-        hal_device_manager_init(NULL, &registry)
-        == SYNTRA_STATUS_ERROR
-    );
+    hal_device_manager_init(NULL, &registry)
+    == SYNTRA_STATUS_INVALID_ARGUMENT
+);
 
-    assert(
-        hal_device_manager_init(&manager, NULL)
-        == SYNTRA_STATUS_ERROR
-    );
+assert(
+    hal_device_manager_init(&manager, NULL)
+    == SYNTRA_STATUS_INVALID_ARGUMENT
+);
 
     assert(
         hal_device_manager_reset(NULL)
