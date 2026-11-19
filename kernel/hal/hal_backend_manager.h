@@ -12,7 +12,8 @@ typedef enum
     SYNTRA_HAL_BACKEND_EVENT_REGISTERED = 0,
     SYNTRA_HAL_BACKEND_EVENT_UNREGISTERED,
     SYNTRA_HAL_BACKEND_EVENT_AVAILABLE,
-    SYNTRA_HAL_BACKEND_EVENT_UNAVAILABLE
+    SYNTRA_HAL_BACKEND_EVENT_UNAVAILABLE,
+    SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT
 } syntra_hal_backend_event_type_t;
 
 typedef struct
@@ -41,6 +42,10 @@ typedef struct
 
     unsigned int event_count;
     unsigned int event_sequence;
+
+    unsigned int event_type_counts[
+        SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT
+    ];
 
     int initialized;
     int dirty;
@@ -97,6 +102,25 @@ syntra_status_t hal_backend_manager_get_event(
 
 syntra_status_t hal_backend_manager_clear_events(
     syntra_hal_backend_manager_t *manager
+);
+
+syntra_status_t hal_backend_manager_filter_events(
+    const syntra_hal_backend_manager_t *manager,
+    unsigned int backend_id,
+    syntra_hal_backend_event_type_t type,
+    syntra_hal_backend_event_t *results,
+    unsigned int capacity,
+    unsigned int *result_count
+);
+
+syntra_status_t hal_backend_manager_get_event_statistics(
+    const syntra_hal_backend_manager_t *manager,
+    unsigned int *results,
+    unsigned int capacity
+);
+
+syntra_status_t hal_backend_manager_validate_history(
+    const syntra_hal_backend_manager_t *manager
 );
 
 #endif
