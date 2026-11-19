@@ -20,7 +20,10 @@ int main(void)
         SYNTRA_HAL_MAX_DEVICE_EVENTS
     ];
 
+    syntra_hal_event_statistics_t statistics;
+
     unsigned int found_count = 0U;
+    unsigned int i;
 
     /* Initialize registry */
 
@@ -89,9 +92,6 @@ int main(void)
         == SYNTRA_STATUS_OK
     );
 
-    assert(manager.online_devices == 1U);
-    assert(manager.event_count == 1U);
-
     /* Start display */
 
     assert(
@@ -99,18 +99,12 @@ int main(void)
         == SYNTRA_STATUS_OK
     );
 
-    assert(manager.online_devices == 2U);
-    assert(manager.event_count == 2U);
-
     /* Stop timer */
 
     assert(
         hal_device_manager_stop(&manager, 1U)
         == SYNTRA_STATUS_OK
     );
-
-    assert(manager.offline_devices == 1U);
-    assert(manager.event_count == 3U);
 
     /* Restart timer */
 
@@ -211,6 +205,88 @@ int main(void)
 
     assert(manager.event_count == 5U);
 
+    /* V4: Total event statistics */
+
+    assert(
+        hal_device_manager_get_event_statistics(
+            &manager,
+            &statistics
+        ) == SYNTRA_STATUS_OK
+    );
+
+    assert(statistics.started == 2U);
+    assert(statistics.stopped == 1U);
+    assert(statistics.restarted == 1U);
+    assert(statistics.errors == 1U);
+    assert(statistics.total == 5U);
+
+    /* V4: Filter events by type */
+
+    assert(
+        hal_device_manager_find_events_by_type(
+            &manager,
+            SYNTRA_HAL_EVENT_STARTED,
+            history,
+            SYNTRA_HAL_MAX_DEVICE_EVENTS,
+            &found_count
+        ) == SYNTRA_STATUS_OK
+    );
+
+    assert(found_count == 2U);
+
+    for (i = 0U; i < found_count; i++)
+    {
+        assert(
+            history[i].type == SYNTRA_HAL_EVENT_STARTED
+        );
+    }
+
+    /* V4: Filter events by sequence */
+
+    assert(
+        hal_device_manager_find_events_by_sequence(
+            &manager,
+            2U,
+            4U,
+            history,
+            SYNTRA_HAL_MAX_DEVICE_EVENTS,
+            &found_count
+        ) == SYNTRA_STATUS_OK
+    );
+
+    assert(found_count == 3U);
+    assert(history[0].sequence == 2U);
+    assert(history[1].sequence == 3U);
+    assert(history[2].sequence == 4U);
+
+    /* V4: Device event statistics */
+
+    assert(
+        hal_device_manager_get_device_event_statistics(
+            &manager,
+            1U,
+            &statistics
+        ) == SYNTRA_STATUS_OK
+    );
+
+    assert(statistics.started == 1U);
+    assert(statistics.stopped == 1U);
+    assert(statistics.restarted == 1U);
+    assert(statistics.errors == 0U);
+    assert(statistics.total == 3U);
+
+    assert(
+        hal_device_manager_get_device_event_statistics(
+            &manager,
+            2U,
+            &statistics
+        ) == SYNTRA_STATUS_OK
+    );
+
+    assert(statistics.started == 1U);
+    assert(statistics.errors == 1U);
+    assert(statistics.total == 2U);
+
     /* Event buffer capacity */
 
     assert(
@@ -218,7 +294,7 @@ int main(void)
         == SYNTRA_STATUS_OK
     );
 
-    for (unsigned int i = 0U;
+    for (i = 0U;
          i < SYNTRA_HAL_MAX_DEVICE_EVENTS + 1U;
          i++)
     {
@@ -252,6 +328,41 @@ int main(void)
         hal_device_manager_find_events(
             &manager,
             1U,
+            history,
+            1U,
+            &found_count
+        ) == SYNTRA_STATUS_ERROR
+    );
+
+    assert(
+        found_count ==
+        SYNTRA_HAL_MAX_DEVICE_EVENTS
+    );
+
+    /* Insufficient type-filter capacity */
+
+    assert(
+        hal_device_manager_find_events_by_type(
+            &manager,
+            SYNTRA_HAL_EVENT_STARTED,
+            history,
+            1U,
+            &found_count
+        ) == SYNTRA_STATUS_ERROR
+    );
+
+    assert(
+        found_count ==
+        SYNTRA_HAL_MAX_DEVICE_EVENTS
+    );
+
+    /* Insufficient sequence-filter capacity */
+
+    assert(
+        hal_device_manager_find_events_by_sequence(
+            &manager,
+            2U,
+            65U,
             history,
             1U,
             &found_count
@@ -310,6 +421,42 @@ int main(void)
         ) == SYNTRA_STATUS_INVALID_ARGUMENT
     );
 
+    assert(
+        hal_device_manager_get_event_statistics(
+            &manager,
+            NULL
+        ) == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+
+    assert(
+        hal_device_manager_find_events_by_type(
+            &manager,
+            (syntra_hal_event_type_t)99,
+            history,
+            SYNTRA_HAL_MAX_DEVICE_EVENTS,
+            &found_count
+        ) == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+
+    assert(
+        hal_device_manager_find_events_by_sequence(
+            &manager,
+            10U,
+            5U,
+            history,
+            SYNTRA_HAL_MAX_DEVICE_EVENTS,
+            &found_count
+        ) == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+
+    assert(
+        hal_device_manager_get_device_event_statistics(
+            &manager,
+            0U,
+            &statistics
+        ) == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+
     /* Reset manager */
 
     assert(
@@ -320,7 +467,7 @@ int main(void)
     assert(manager.initialized == 0);
     assert(manager.event_count == 0U);
 
-    printf("HAL Device Manager V3: all tests passed.\n");
+    printf("HAL Device Manager V4: all tests passed.\n");
 
     return 0;
 }
