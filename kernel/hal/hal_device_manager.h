@@ -7,7 +7,7 @@
 
 /*
  * SyntraOS HAL Device Manager
- * Version: 3.0.0
+ * Version: 4.0.0
  */
 
 #define SYNTRA_HAL_MAX_DEVICE_EVENTS 64U
@@ -20,6 +20,8 @@ typedef enum
     SYNTRA_HAL_EVENT_ERROR
 } syntra_hal_event_type_t;
 
+#define SYNTRA_HAL_EVENT_TYPE_COUNT 4U
+
 typedef struct
 {
     unsigned int device_id;
@@ -27,6 +29,16 @@ typedef struct
     unsigned int sequence;
 
 } syntra_hal_device_event_t;
+
+typedef struct
+{
+    unsigned int started;
+    unsigned int stopped;
+    unsigned int restarted;
+    unsigned int errors;
+    unsigned int total;
+
+} syntra_hal_event_statistics_t;
 
 typedef struct
 {
@@ -126,6 +138,36 @@ syntra_status_t hal_device_manager_find_events(
 
 syntra_status_t hal_device_manager_clear_events(
     syntra_hal_device_manager_t *manager
+);
+
+/* V4: Event filtering and statistics */
+
+syntra_status_t hal_device_manager_get_event_statistics(
+    const syntra_hal_device_manager_t *manager,
+    syntra_hal_event_statistics_t *statistics
+);
+
+syntra_status_t hal_device_manager_find_events_by_type(
+    const syntra_hal_device_manager_t *manager,
+    syntra_hal_event_type_t type,
+    syntra_hal_device_event_t *events,
+    unsigned int capacity,
+    unsigned int *found
+);
+
+syntra_status_t hal_device_manager_find_events_by_sequence(
+    const syntra_hal_device_manager_t *manager,
+    unsigned int first_sequence,
+    unsigned int last_sequence,
+    syntra_hal_device_event_t *events,
+    unsigned int capacity,
+    unsigned int *found
+);
+
+syntra_status_t hal_device_manager_get_device_event_statistics(
+    const syntra_hal_device_manager_t *manager,
+    unsigned int device_id,
+    syntra_hal_event_statistics_t *statistics
 );
 
 #endif
