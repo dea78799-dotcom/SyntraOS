@@ -16,6 +16,7 @@ syntra_status_t hal_backend_manager_init(
     memset(manager, 0, sizeof(*manager));
 
     manager->initialized = 1;
+    manager->dirty = 0;
 
     return SYNTRA_STATUS_OK;
 }
@@ -41,13 +42,17 @@ syntra_status_t hal_backend_manager_validate(
     unsigned int i;
     unsigned int j;
     unsigned int count = 0U;
+    unsigned int available = 0U;
+    unsigned int unavailable = 0U;
 
     if (manager == NULL)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
 
-    if (manager->initialized != 1)
+    if (manager->initialized != 1 ||
+        manager->dirty < 0 ||
+        manager->dirty > 1)
     {
         return SYNTRA_STATUS_ERROR;
     }
@@ -87,10 +92,30 @@ syntra_status_t hal_backend_manager_validate(
             }
         }
 
+        if (backend->available == 1)
+        {
+            ++available;
+        }
+        else
+        {
+            ++unavailable;
+        }
+
         ++count;
     }
 
     if (count != manager->backend_count)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    /*
+     * Statistics may be stale while dirty is set.
+     * They must match the backend list after an update.
+     */
+    if (manager->dirty == 0 &&
+        (manager->available_backends != available ||
+         manager->unavailable_backends != unavailable))
     {
         return SYNTRA_STATUS_ERROR;
     }
@@ -149,6 +174,7 @@ syntra_status_t hal_backend_manager_register(
     manager->backends[empty_index] = backend;
     ++manager->backend_count;
     ++manager->update_count;
+    manager->dirty = 1;
 
     return SYNTRA_STATUS_OK;
 }
@@ -180,6 +206,7 @@ syntra_status_t hal_backend_manager_unregister(
             manager->backends[i] = NULL;
             --manager->backend_count;
             ++manager->update_count;
+            manager->dirty = 1;
 
             return SYNTRA_STATUS_OK;
         }
@@ -201,12 +228,12 @@ syntra_status_t hal_backend_manager_find(
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
 
+    *result = NULL;
+
     if (hal_backend_manager_validate(manager) != SYNTRA_STATUS_OK)
     {
         return SYNTRA_STATUS_ERROR;
     }
-
-    *result = NULL;
 
     for (i = 0U;
          i < SYNTRA_HAL_BACKEND_MANAGER_MAX_BACKENDS;
@@ -240,6 +267,67 @@ syntra_status_t hal_backend_manager_get_count(
     }
 
     *result = manager->backend_count;
+
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t hal_backend_manager_update(
+    syntra_hal_backend_manager_t *manager
+)
+{
+    unsigned int i;
+    unsigned int available = 0U;
+    unsigned int unavailable = 0U;
+    unsigned int count = 0U;
+
+    if (manager == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (manager->initialized != 1 ||
+        manager->backend_count >
+        SYNTRA_HAL_BACKEND_MANAGER_MAX_BACKENDS)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    for (i = 0U;
+         i < SYNTRA_HAL_BACKEND_MANAGER_MAX_BACKENDS;
+         ++i)
+    {
+        syntra_hal_backend_t *backend = manager->backends[i];
+
+        if (backend == NULL)
+        {
+            continue;
+        }
+
+        if (hal_backend_validate(backend) != SYNTRA_STATUS_OK)
+        {
+            return SYNTRA_STATUS_ERROR;
+        }
+
+        if (backend->available == 1)
+        {
+            ++available;
+        }
+        else
+        {
+            ++unavailable;
+        }
+
+        ++count;
+    }
+
+    if (count != manager->backend_count)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    manager->available_backends = available;
+    manager->unavailable_backends = unavailable;
+    manager->dirty = 0;
 
     return SYNTRA_STATUS_OK;
 }
