@@ -173,6 +173,11 @@ syntra_status_t hal_device_manager_validate(
     unsigned int previous_sequence = 0U;
     syntra_hal_device_t *device;
 
+    if (manager == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
     if (!manager_is_valid(manager))
     {
         return SYNTRA_STATUS_ERROR;
