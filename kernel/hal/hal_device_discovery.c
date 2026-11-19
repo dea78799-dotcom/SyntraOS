@@ -42,7 +42,7 @@ static syntra_status_t hal_device_discovery_record_event(
 
     discovery->event_count++;
 
-    return SYNTRA_STATUS_OK;
+    return hal_device_discovery_update_stats(discovery);
 }
 
 syntra_status_t hal_device_discovery_init(
@@ -77,6 +77,14 @@ syntra_status_t hal_device_discovery_init(
     discovery->discovery_count = 0U;
     discovery->event_count = 0U;
     discovery->event_sequence = 0U;
+
+    discovery->stats.total_events = 0U;
+    discovery->stats.added_events = 0U;
+    discovery->stats.removed_events = 0U;
+    discovery->stats.reset_events = 0U;
+
+    discovery->update_count = 0U;
+
     discovery->initialized = 1;
     discovery->dirty = 0;
 
@@ -92,12 +100,7 @@ syntra_status_t hal_device_discovery_reset(
         return SYNTRA_STATUS_ERROR;
     }
 
-    if (hal_device_discovery_init(discovery) != SYNTRA_STATUS_OK)
-    {
-        return SYNTRA_STATUS_ERROR;
-    }
-
-    return SYNTRA_STATUS_OK;
+    return hal_device_discovery_init(discovery);
 }
 
 syntra_status_t hal_device_discovery_add(
@@ -139,16 +142,11 @@ syntra_status_t hal_device_discovery_add(
     discovery->discovery_count++;
     discovery->dirty = 1;
 
-    if (hal_device_discovery_record_event(
-            discovery,
-            device->device_id,
-            SYNTRA_HAL_DISCOVERY_EVENT_ADDED
-        ) != SYNTRA_STATUS_OK)
-    {
-        return SYNTRA_STATUS_ERROR;
-    }
-
-    return SYNTRA_STATUS_OK;
+    return hal_device_discovery_record_event(
+        discovery,
+        device->device_id,
+        SYNTRA_HAL_DISCOVERY_EVENT_ADDED
+    );
 }
 
 syntra_status_t hal_device_discovery_remove(
@@ -182,20 +180,14 @@ syntra_status_t hal_device_discovery_remove(
             }
 
             discovery->device_count--;
-
             discovery->devices[discovery->device_count] = NULL;
             discovery->dirty = 1;
 
-            if (hal_device_discovery_record_event(
-                    discovery,
-                    device_id,
-                    SYNTRA_HAL_DISCOVERY_EVENT_REMOVED
-                ) != SYNTRA_STATUS_OK)
-            {
-                return SYNTRA_STATUS_ERROR;
-            }
-
-            return SYNTRA_STATUS_OK;
+            return hal_device_discovery_record_event(
+                discovery,
+                device_id,
+                SYNTRA_HAL_DISCOVERY_EVENT_REMOVED
+            );
         }
     }
 
@@ -292,6 +284,135 @@ syntra_status_t hal_device_discovery_get_event(
     return SYNTRA_STATUS_OK;
 }
 
+syntra_status_t hal_device_discovery_find_event(
+    const syntra_hal_device_discovery_t *discovery,
+    unsigned int device_id,
+    unsigned int occurrence,
+    syntra_hal_discovery_event_t *result
+)
+{
+    unsigned int index;
+    unsigned int found = 0U;
+
+    if (discovery == NULL ||
+        result == NULL ||
+        !discovery->initialized)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    for (index = 0U; index < discovery->event_count; index++)
+    {
+        if (discovery->events[index].device_id == device_id)
+        {
+            if (found == occurrence)
+            {
+                *result = discovery->events[index];
+                return SYNTRA_STATUS_OK;
+            }
+
+            found++;
+        }
+    }
+
+    return SYNTRA_STATUS_ERROR;
+}
+
+syntra_status_t hal_device_discovery_get_event_by_type(
+    const syntra_hal_device_discovery_t *discovery,
+    syntra_hal_discovery_event_type_t type,
+    unsigned int occurrence,
+    syntra_hal_discovery_event_t *result
+)
+{
+    unsigned int index;
+    unsigned int found = 0U;
+
+    if (discovery == NULL ||
+        result == NULL ||
+        !discovery->initialized ||
+        type > SYNTRA_HAL_DISCOVERY_EVENT_RESET)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    for (index = 0U; index < discovery->event_count; index++)
+    {
+        if (discovery->events[index].type == type)
+        {
+            if (found == occurrence)
+            {
+                *result = discovery->events[index];
+                return SYNTRA_STATUS_OK;
+            }
+
+            found++;
+        }
+    }
+
+    return SYNTRA_STATUS_ERROR;
+}
+
+syntra_status_t hal_device_discovery_get_stats(
+    const syntra_hal_device_discovery_t *discovery,
+    syntra_hal_discovery_stats_t *result
+)
+{
+    if (discovery == NULL ||
+        result == NULL ||
+        !discovery->initialized)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    *result = discovery->stats;
+
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t hal_device_discovery_update_stats(
+    syntra_hal_device_discovery_t *discovery
+)
+{
+    unsigned int index;
+
+    if (discovery == NULL || !discovery->initialized)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    discovery->stats.total_events = discovery->event_count;
+    discovery->stats.added_events = 0U;
+    discovery->stats.removed_events = 0U;
+    discovery->stats.reset_events = 0U;
+
+    for (index = 0U; index < discovery->event_count; index++)
+    {
+        switch (discovery->events[index].type)
+        {
+            case SYNTRA_HAL_DISCOVERY_EVENT_ADDED:
+                discovery->stats.added_events++;
+                break;
+
+            case SYNTRA_HAL_DISCOVERY_EVENT_REMOVED:
+                discovery->stats.removed_events++;
+                break;
+
+            case SYNTRA_HAL_DISCOVERY_EVENT_RESET:
+                discovery->stats.reset_events++;
+                break;
+
+            default:
+                return SYNTRA_STATUS_ERROR;
+        }
+    }
+
+    discovery->update_count++;
+    discovery->dirty = 0;
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t hal_device_discovery_clear_events(
     syntra_hal_device_discovery_t *discovery
 )
@@ -316,7 +437,7 @@ syntra_status_t hal_device_discovery_clear_events(
     discovery->event_count = 0U;
     discovery->dirty = 1;
 
-    return SYNTRA_STATUS_OK;
+    return hal_device_discovery_update_stats(discovery);
 }
 
 syntra_status_t hal_device_discovery_validate(
@@ -325,6 +446,9 @@ syntra_status_t hal_device_discovery_validate(
 {
     unsigned int index;
     unsigned int other;
+    unsigned int added = 0U;
+    unsigned int removed = 0U;
+    unsigned int reset = 0U;
 
     if (discovery == NULL || !discovery->initialized)
     {
@@ -332,12 +456,8 @@ syntra_status_t hal_device_discovery_validate(
     }
 
     if (discovery->device_count >
-        SYNTRA_HAL_DEVICE_DISCOVERY_MAX_DEVICES)
-    {
-        return SYNTRA_STATUS_ERROR;
-    }
-
-    if (discovery->event_count >
+        SYNTRA_HAL_DEVICE_DISCOVERY_MAX_DEVICES ||
+        discovery->event_count >
         SYNTRA_HAL_DEVICE_DISCOVERY_MAX_EVENTS)
     {
         return SYNTRA_STATUS_ERROR;
@@ -376,16 +496,38 @@ syntra_status_t hal_device_discovery_validate(
 
     for (index = 0U; index < discovery->event_count; index++)
     {
-        if (discovery->events[index].sequence == 0U)
+        if (discovery->events[index].sequence == 0U ||
+            discovery->events[index].sequence >
+                discovery->event_sequence)
         {
             return SYNTRA_STATUS_ERROR;
         }
 
-        if (discovery->events[index].type >
-            SYNTRA_HAL_DISCOVERY_EVENT_RESET)
+        switch (discovery->events[index].type)
         {
-            return SYNTRA_STATUS_ERROR;
+            case SYNTRA_HAL_DISCOVERY_EVENT_ADDED:
+                added++;
+                break;
+
+            case SYNTRA_HAL_DISCOVERY_EVENT_REMOVED:
+                removed++;
+                break;
+
+            case SYNTRA_HAL_DISCOVERY_EVENT_RESET:
+                reset++;
+                break;
+
+            default:
+                return SYNTRA_STATUS_ERROR;
         }
+    }
+
+    if (discovery->stats.total_events != discovery->event_count ||
+        discovery->stats.added_events != added ||
+        discovery->stats.removed_events != removed ||
+        discovery->stats.reset_events != reset)
+    {
+        return SYNTRA_STATUS_ERROR;
     }
 
     return SYNTRA_STATUS_OK;
