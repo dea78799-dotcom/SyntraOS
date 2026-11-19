@@ -83,8 +83,12 @@ syntra_status_t hal_device_discovery_init(
     discovery->stats.removed_events = 0U;
     discovery->stats.reset_events = 0U;
 
-    discovery->update_count = 0U;
+    discovery->validation_report.invalid_events = 0U;
+    discovery->validation_report.duplicate_sequences = 0U;
+    discovery->validation_report.out_of_order_events = 0U;
+    discovery->validation_report.sequence_gaps = 0U;
 
+    discovery->update_count = 0U;
     discovery->initialized = 1;
     discovery->dirty = 0;
 
@@ -126,12 +130,8 @@ syntra_status_t hal_device_discovery_add(
 
     for (index = 0U; index < discovery->device_count; index++)
     {
-        if (discovery->devices[index] == NULL)
-        {
-            return SYNTRA_STATUS_ERROR;
-        }
-
-        if (discovery->devices[index]->device_id == device->device_id)
+        if (discovery->devices[index] == NULL ||
+            discovery->devices[index]->device_id == device->device_id)
         {
             return SYNTRA_STATUS_ERROR;
         }
@@ -244,7 +244,6 @@ syntra_status_t hal_device_discovery_get_count(
     }
 
     *result = discovery->device_count;
-
     return SYNTRA_STATUS_OK;
 }
 
@@ -261,7 +260,6 @@ syntra_status_t hal_device_discovery_get_event_count(
     }
 
     *result = discovery->event_count;
-
     return SYNTRA_STATUS_OK;
 }
 
@@ -280,7 +278,6 @@ syntra_status_t hal_device_discovery_get_event(
     }
 
     *result = discovery->events[index];
-
     return SYNTRA_STATUS_OK;
 }
 
@@ -366,7 +363,6 @@ syntra_status_t hal_device_discovery_get_stats(
     }
 
     *result = discovery->stats;
-
     return SYNTRA_STATUS_OK;
 }
 
@@ -413,6 +409,75 @@ syntra_status_t hal_device_discovery_update_stats(
     return SYNTRA_STATUS_OK;
 }
 
+syntra_status_t hal_device_discovery_get_validation_report(
+    const syntra_hal_device_discovery_t *discovery,
+    syntra_hal_discovery_validation_report_t *result
+)
+{
+    if (discovery == NULL ||
+        result == NULL ||
+        !discovery->initialized)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    *result = discovery->validation_report;
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t hal_device_discovery_validate_history(
+    syntra_hal_device_discovery_t *discovery
+)
+{
+    unsigned int index;
+    unsigned int previous_sequence = 0U;
+
+    if (discovery == NULL || !discovery->initialized)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    discovery->validation_report.invalid_events = 0U;
+    discovery->validation_report.duplicate_sequences = 0U;
+    discovery->validation_report.out_of_order_events = 0U;
+    discovery->validation_report.sequence_gaps = 0U;
+
+    for (index = 0U; index < discovery->event_count; index++)
+    {
+        const syntra_hal_discovery_event_t *event =
+            &discovery->events[index];
+
+        if (event->sequence == 0U ||
+            event->sequence > discovery->event_sequence ||
+            event->type > SYNTRA_HAL_DISCOVERY_EVENT_RESET)
+        {
+            discovery->validation_report.invalid_events++;
+        }
+
+        if (index > 0U)
+        {
+            if (event->sequence == previous_sequence)
+            {
+                discovery->validation_report.duplicate_sequences++;
+            }
+
+            if (event->sequence <= previous_sequence)
+            {
+                discovery->validation_report.out_of_order_events++;
+            }
+            else if (event->sequence > previous_sequence + 1U)
+            {
+                discovery->validation_report.sequence_gaps +=
+                    event->sequence - previous_sequence - 1U;
+            }
+        }
+
+        previous_sequence = event->sequence;
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t hal_device_discovery_clear_events(
     syntra_hal_device_discovery_t *discovery
 )
@@ -437,7 +502,13 @@ syntra_status_t hal_device_discovery_clear_events(
     discovery->event_count = 0U;
     discovery->dirty = 1;
 
-    return hal_device_discovery_update_stats(discovery);
+    if (hal_device_discovery_update_stats(discovery) !=
+        SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    return hal_device_discovery_validate_history(discovery);
 }
 
 syntra_status_t hal_device_discovery_validate(
