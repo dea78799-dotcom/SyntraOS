@@ -7,15 +7,18 @@
 
 /*
  * SyntraOS HAL Device Event Router
- * Version: 3.0.0
+ * Version: 4.0.0
  *
  * Features:
  * - V1 single-target API compatibility
  * - V2 multi-target routing
  * - V2 historical target statistics
  * - V3 per-event-type monitoring
+ * - V4 strengthened integrity validation
  * - Saturating statistics counters
- * - Global and per-type validation
+ * - Global and per-type accounting validation
+ * - Duplicate target detection
+ * - Registration and state validation
  */
 
 static void counter_increment(unsigned int *counter)
@@ -54,6 +57,23 @@ static int event_type_is_valid(
         SYNTRA_HAL_DEVICE_EVENT_TYPE_COUNT;
 }
 
+static int status_is_valid(syntra_status_t status)
+{
+    switch (status)
+    {
+        case SYNTRA_STATUS_OK:
+        case SYNTRA_STATUS_ERROR:
+        case SYNTRA_STATUS_INVALID_ARGUMENT:
+        case SYNTRA_STATUS_NOT_IMPLEMENTED:
+        case SYNTRA_STATUS_OUT_OF_MEMORY:
+        case SYNTRA_STATUS_PERMISSION_DENIED:
+            return 1;
+
+        default:
+            return 0;
+    }
+}
+
 static int event_is_valid(
     const syntra_hal_device_event_t *event
 )
@@ -88,6 +108,81 @@ static int event_is_valid(
     return 1;
 }
 
+/* =========================================================
+ * Statistics validation
+ * ========================================================= */
+
+static int type_statistics_are_valid(
+    const syntra_hal_device_event_type_stats_t *statistics
+)
+{
+    unsigned int accounted_routes = 0U;
+    unsigned int accounted_deliveries = 0U;
+
+    if (statistics == NULL)
+    {
+        return 0;
+    }
+
+    if (!status_is_valid(statistics->last_route_status))
+    {
+        return 0;
+    }
+
+    counter_add(
+        &accounted_routes,
+        statistics->successful_routes
+    );
+
+    counter_add(
+        &accounted_routes,
+        statistics->failed_routes
+    );
+
+    counter_add(
+        &accounted_routes,
+        statistics->unhandled_events
+    );
+
+    if (accounted_routes != statistics->total_routes)
+    {
+        return 0;
+    }
+
+    counter_add(
+        &accounted_deliveries,
+        statistics->successful_deliveries
+    );
+
+    counter_add(
+        &accounted_deliveries,
+        statistics->failed_deliveries
+    );
+
+    if (accounted_deliveries != statistics->total_deliveries)
+    {
+        return 0;
+    }
+
+    if (statistics->partially_routed_events >
+        statistics->successful_routes)
+    {
+        return 0;
+    }
+
+    if (statistics->partially_routed_events >
+        statistics->total_routes)
+    {
+        return 0;
+    }
+
+    return 1;
+}
+
+/* =========================================================
+ * Entry management
+ * ========================================================= */
+
 static void retire_entry(
     syntra_hal_device_event_router_t *router,
     syntra_hal_device_event_route_entry_t *entry
@@ -114,64 +209,36 @@ static void retire_entry(
     entry->registered = 0;
 }
 
-static int type_statistics_are_valid(
-    const syntra_hal_device_event_type_stats_t *statistics
-)
-{
-    unsigned int accounted_routes;
-    unsigned int accounted_deliveries;
-
-    if (statistics == NULL)
-    {
-        return 0;
-    }
-
-    accounted_routes = statistics->successful_routes;
-
-    counter_add(
-        &accounted_routes,
-        statistics->failed_routes
-    );
-
-    counter_add(
-        &accounted_routes,
-        statistics->unhandled_events
-    );
-
-    if (accounted_routes != statistics->total_routes)
-    {
-        return 0;
-    }
-
-    accounted_deliveries = statistics->successful_deliveries;
-
-    counter_add(
-        &accounted_deliveries,
-        statistics->failed_deliveries
-    );
-
-    if (accounted_deliveries != statistics->total_deliveries)
-    {
-        return 0;
-    }
-
-    if (statistics->partially_routed_events >
-        statistics->successful_routes)
-    {
-        return 0;
-    }
-
-    return 1;
-}
+/* =========================================================
+ * Router integrity validation
+ * ========================================================= */
 
 static int router_is_valid(
     const syntra_hal_device_event_router_t *router
 )
 {
-    unsigned int registered_routes = 0U;
-    unsigned int registered_targets = 0U;
     unsigned int type_index;
     unsigned int target_index;
+    unsigned int compare_index;
+
+    unsigned int registered_routes = 0U;
+    unsigned int registered_targets = 0U;
+
+    unsigned int total_entry_routes;
+    unsigned int total_entry_failures;
+
+    unsigned int type_total_routes = 0U;
+    unsigned int type_successful_routes = 0U;
+    unsigned int type_failed_routes = 0U;
+    unsigned int type_unhandled_events = 0U;
+    unsigned int type_partial_events = 0U;
+
+    unsigned int type_total_deliveries = 0U;
+    unsigned int type_successful_deliveries = 0U;
+    unsigned int type_failed_deliveries = 0U;
+
+    unsigned int accounted_routes = 0U;
+    unsigned int accounted_deliveries = 0U;
 
     if (router == NULL)
     {
@@ -183,11 +250,92 @@ static int router_is_valid(
         return 0;
     }
 
+    if (router->dirty != 0 && router->dirty != 1)
+    {
+        return 0;
+    }
+
+    if (router->registered_routes >
+        SYNTRA_HAL_DEVICE_EVENT_ROUTER_MAX_ROUTES)
+    {
+        return 0;
+    }
+
+    if (router->registered_targets >
+        SYNTRA_HAL_DEVICE_EVENT_ROUTER_MAX_ROUTES *
+        SYNTRA_HAL_DEVICE_EVENT_ROUTER_MAX_TARGETS)
+    {
+        return 0;
+    }
+
+    if (router->historical_failure_count >
+        router->historical_routed_count)
+    {
+        return 0;
+    }
+
+    total_entry_routes = router->historical_routed_count;
+    total_entry_failures = router->historical_failure_count;
+
     for (type_index = 0U;
-         type_index < SYNTRA_HAL_DEVICE_EVENT_ROUTER_MAX_ROUTES;
+         type_index < SYNTRA_HAL_DEVICE_EVENT_TYPE_COUNT;
          type_index++)
     {
         unsigned int count = 0U;
+
+        const syntra_hal_device_event_type_stats_t *statistics =
+            &router->type_statistics[type_index];
+
+        if (router->target_counts[type_index] >
+            SYNTRA_HAL_DEVICE_EVENT_ROUTER_MAX_TARGETS)
+        {
+            return 0;
+        }
+
+        if (!type_statistics_are_valid(statistics))
+        {
+            return 0;
+        }
+
+        counter_add(
+            &type_total_routes,
+            statistics->total_routes
+        );
+
+        counter_add(
+            &type_successful_routes,
+            statistics->successful_routes
+        );
+
+        counter_add(
+            &type_failed_routes,
+            statistics->failed_routes
+        );
+
+        counter_add(
+            &type_unhandled_events,
+            statistics->unhandled_events
+        );
+
+        counter_add(
+            &type_partial_events,
+            statistics->partially_routed_events
+        );
+
+        counter_add(
+            &type_total_deliveries,
+            statistics->total_deliveries
+        );
+
+        counter_add(
+            &type_successful_deliveries,
+            statistics->successful_deliveries
+        );
+
+        counter_add(
+            &type_failed_deliveries,
+            statistics->failed_deliveries
+        );
 
         for (target_index = 0U;
              target_index <
@@ -216,8 +364,38 @@ static int router_is_valid(
                     return 0;
                 }
 
+                /*
+                 * Prevent duplicate queue registration
+                 * for the same event type.
+                 */
+                for (compare_index = target_index + 1U;
+                     compare_index <
+                         SYNTRA_HAL_DEVICE_EVENT_ROUTER_MAX_TARGETS;
+                     compare_index++)
+                {
+                    const syntra_hal_device_event_route_entry_t
+                        *other =
+                        &router->routes[type_index][compare_index];
+
+                    if (other->registered == 1 &&
+                        other->target_queue == entry->target_queue)
+                    {
+                        return 0;
+                    }
+                }
+
                 count++;
                 registered_targets++;
+
+                counter_add(
+                    &total_entry_routes,
+                    entry->routed_count
+                );
+
+                counter_add(
+                    &total_entry_failures,
+                    entry->failure_count
+                );
             }
             else if (entry->registered == 0)
             {
@@ -247,14 +425,9 @@ static int router_is_valid(
         {
             registered_routes++;
         }
-
-        if (!type_statistics_are_valid(
-                &router->type_statistics[type_index]
-            ))
-        {
-            return 0;
-        }
     }
+
+    /* Registration accounting. */
 
     if (registered_routes != router->registered_routes)
     {
@@ -266,15 +439,86 @@ static int router_is_valid(
         return 0;
     }
 
-    if (router->registered_targets >
-        SYNTRA_HAL_DEVICE_EVENT_ROUTER_MAX_ROUTES *
-        SYNTRA_HAL_DEVICE_EVENT_ROUTER_MAX_TARGETS)
+    /* Per-type event accounting against global counters. */
+
+    if (type_total_routes != router->total_routes ||
+        type_successful_routes != router->successful_routes ||
+        type_failed_routes != router->failed_routes ||
+        type_unhandled_events != router->unhandled_events ||
+        type_partial_events != router->partially_routed_events)
     {
         return 0;
     }
 
-    if (router->historical_failure_count >
-        router->historical_routed_count)
+    /* Per-type delivery accounting against global counters. */
+
+    if (type_total_deliveries != router->total_deliveries ||
+        type_successful_deliveries !=
+            router->successful_deliveries ||
+        type_failed_deliveries != router->failed_deliveries)
+    {
+        return 0;
+    }
+
+    /* Historical and active target accounting. */
+
+    if (total_entry_routes != router->total_deliveries)
+    {
+        return 0;
+    }
+
+    if (total_entry_failures != router->failed_deliveries)
+    {
+        return 0;
+    }
+
+    /* Global event accounting. */
+
+    counter_add(
+        &accounted_routes,
+        router->successful_routes
+    );
+
+    counter_add(
+        &accounted_routes,
+        router->failed_routes
+    );
+
+    counter_add(
+        &accounted_routes,
+        router->unhandled_events
+    );
+
+    if (accounted_routes != router->total_routes)
+    {
+        return 0;
+    }
+
+    /* Global delivery accounting. */
+
+    counter_add(
+        &accounted_deliveries,
+        router->successful_deliveries
+    );
+
+    counter_add(
+        &accounted_deliveries,
+        router->failed_deliveries
+    );
+
+    if (accounted_deliveries != router->total_deliveries)
+    {
+        return 0;
+    }
+
+    if (router->partially_routed_events >
+        router->successful_routes)
+    {
+        return 0;
+    }
+
+    if (router->partially_routed_events >
+        router->total_routes)
     {
         return 0;
     }
@@ -948,160 +1192,19 @@ syntra_status_t hal_device_event_router_get_type_statistics(
 }
 
 /* =========================================================
- * Validation
+ * V4 Validation API
  * ========================================================= */
 
 syntra_status_t hal_device_event_router_validate(
     const syntra_hal_device_event_router_t *router
 )
 {
-    unsigned int type_index;
-    unsigned int target_index;
-
-    unsigned int total_entry_routes = 0U;
-    unsigned int total_entry_failures = 0U;
-
-    unsigned int event_accounted = 0U;
-    unsigned int delivery_accounted = 0U;
-
-    unsigned int type_total_routes = 0U;
-    unsigned int type_successful_routes = 0U;
-    unsigned int type_failed_routes = 0U;
-    unsigned int type_unhandled_events = 0U;
-    unsigned int type_partial_events = 0U;
-
-    unsigned int type_total_deliveries = 0U;
-    unsigned int type_successful_deliveries = 0U;
-    unsigned int type_failed_deliveries = 0U;
-
     if (router == NULL)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
 
     if (!router_is_valid(router))
-    {
-        return SYNTRA_STATUS_ERROR;
-    }
-
-    total_entry_routes = router->historical_routed_count;
-    total_entry_failures = router->historical_failure_count;
-
-    for (type_index = 0U;
-         type_index < SYNTRA_HAL_DEVICE_EVENT_TYPE_COUNT;
-         type_index++)
-    {
-        const syntra_hal_device_event_type_stats_t *statistics =
-            &router->type_statistics[type_index];
-
-        counter_add(
-            &type_total_routes,
-            statistics->total_routes
-        );
-
-        counter_add(
-            &type_successful_routes,
-            statistics->successful_routes
-        );
-
-        counter_add(
-            &type_failed_routes,
-            statistics->failed_routes
-        );
-
-        counter_add(
-            &type_unhandled_events,
-            statistics->unhandled_events
-        );
-
-        counter_add(
-            &type_partial_events,
-            statistics->partially_routed_events
-        );
-
-        counter_add(
-            &type_total_deliveries,
-            statistics->total_deliveries
-        );
-
-        counter_add(
-            &type_successful_deliveries,
-            statistics->successful_deliveries
-        );
-
-        counter_add(
-            &type_failed_deliveries,
-            statistics->failed_deliveries
-        );
-
-        for (target_index = 0U;
-             target_index <
-                 SYNTRA_HAL_DEVICE_EVENT_ROUTER_MAX_TARGETS;
-             target_index++)
-        {
-            const syntra_hal_device_event_route_entry_t *entry =
-                &router->routes[type_index][target_index];
-
-            if (entry->registered == 1)
-            {
-                counter_add(
-                    &total_entry_routes,
-                    entry->routed_count
-                );
-
-                counter_add(
-                    &total_entry_failures,
-                    entry->failure_count
-                );
-            }
-        }
-    }
-
-    if (type_total_routes != router->total_routes ||
-        type_successful_routes != router->successful_routes ||
-        type_failed_routes != router->failed_routes ||
-        type_unhandled_events != router->unhandled_events ||
-        type_partial_events != router->partially_routed_events)
-    {
-        return SYNTRA_STATUS_ERROR;
-    }
-
-    if (type_total_deliveries != router->total_deliveries ||
-        type_successful_deliveries !=
-            router->successful_deliveries ||
-        type_failed_deliveries != router->failed_deliveries)
-    {
-        return SYNTRA_STATUS_ERROR;
-    }
-
-    if (total_entry_routes != router->total_deliveries)
-    {
-        return SYNTRA_STATUS_ERROR;
-    }
-
-    if (total_entry_failures != router->failed_deliveries)
-    {
-        return SYNTRA_STATUS_ERROR;
-    }
-
-    delivery_accounted = router->successful_deliveries;
-
-    counter_add(
-        &delivery_accounted,
-        router->failed_deliveries
-    );
-
-    if (delivery_accounted != router->total_deliveries)
-    {
-        return SYNTRA_STATUS_ERROR;
-    }
-
-    event_accounted = router->successful_routes;
-
-    counter_add(&event_accounted, router->failed_routes);
-    counter_add(&event_accounted, router->unhandled_events);
-
-    if (event_accounted != router->total_routes)
     {
         return SYNTRA_STATUS_ERROR;
     }
