@@ -12,10 +12,10 @@ int main(void)
 
     /* Initialize */
 
-    assert(hal_resource_manager_init(&manager) == SYNTRA_STATUS_SUCCESS);
-    assert(hal_resource_monitor_init(&monitor) == SYNTRA_STATUS_SUCCESS);
+    assert(hal_resource_manager_init(&manager) == SYNTRA_STATUS_OK);
+    assert(hal_resource_monitor_init(&monitor) == SYNTRA_STATUS_OK);
 
-    assert(hal_resource_monitor_validate(&monitor) == SYNTRA_STATUS_SUCCESS);
+    assert(hal_resource_monitor_validate(&monitor) == SYNTRA_STATUS_OK);
 
     /* Register resources */
 
@@ -25,7 +25,7 @@ int main(void)
             1U,
             "Memory",
             SYNTRA_HAL_RESOURCE_MEMORY
-        ) == SYNTRA_STATUS_SUCCESS
+        ) == SYNTRA_STATUS_OK
     );
 
     assert(
@@ -34,7 +34,7 @@ int main(void)
             2U,
             "Interrupt",
             SYNTRA_HAL_RESOURCE_INTERRUPT
-        ) == SYNTRA_STATUS_SUCCESS
+        ) == SYNTRA_STATUS_OK
     );
 
     assert(
@@ -43,14 +43,14 @@ int main(void)
             3U,
             "DMA",
             SYNTRA_HAL_RESOURCE_DMA
-        ) == SYNTRA_STATUS_SUCCESS
+        ) == SYNTRA_STATUS_OK
     );
 
     /* Initial monitoring */
 
     assert(
         hal_resource_monitor_update(&monitor, &manager)
-        == SYNTRA_STATUS_SUCCESS
+        == SYNTRA_STATUS_OK
     );
 
     assert(monitor.total_resources == 3U);
@@ -65,12 +65,12 @@ int main(void)
             &manager,
             1U,
             100U
-        ) == SYNTRA_STATUS_SUCCESS
+        ) == SYNTRA_STATUS_OK
     );
 
     assert(
         hal_resource_monitor_update(&monitor, &manager)
-        == SYNTRA_STATUS_SUCCESS
+        == SYNTRA_STATUS_OK
     );
 
     assert(monitor.total_resources == 3U);
@@ -85,12 +85,12 @@ int main(void)
             &manager,
             1U,
             100U
-        ) == SYNTRA_STATUS_SUCCESS
+        ) == SYNTRA_STATUS_OK
     );
 
     assert(
         hal_resource_monitor_update(&monitor, &manager)
-        == SYNTRA_STATUS_SUCCESS
+        == SYNTRA_STATUS_OK
     );
 
     assert(monitor.allocated_resources == 0U);
@@ -103,7 +103,7 @@ int main(void)
             &manager,
             2U,
             &resource
-        ) == SYNTRA_STATUS_SUCCESS
+        ) == SYNTRA_STATUS_OK
     );
 
     assert(resource != NULL);
@@ -114,7 +114,7 @@ int main(void)
 
     assert(
         hal_resource_monitor_validate(&monitor)
-        == SYNTRA_STATUS_SUCCESS
+        == SYNTRA_STATUS_OK
     );
 
     /* Invalid arguments */
@@ -138,7 +138,7 @@ int main(void)
 
     assert(
         hal_resource_monitor_reset(&monitor)
-        == SYNTRA_STATUS_SUCCESS
+        == SYNTRA_STATUS_OK
     );
 
     assert(monitor.initialized == 0);
