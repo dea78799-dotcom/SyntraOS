@@ -5,6 +5,23 @@
 #include "hal_backend.h"
 
 #define SYNTRA_HAL_BACKEND_MANAGER_MAX_BACKENDS 32U
+#define SYNTRA_HAL_BACKEND_MANAGER_MAX_EVENTS 64U
+
+typedef enum
+{
+    SYNTRA_HAL_BACKEND_EVENT_REGISTERED = 0,
+    SYNTRA_HAL_BACKEND_EVENT_UNREGISTERED,
+    SYNTRA_HAL_BACKEND_EVENT_AVAILABLE,
+    SYNTRA_HAL_BACKEND_EVENT_UNAVAILABLE
+} syntra_hal_backend_event_type_t;
+
+typedef struct
+{
+    unsigned int sequence;
+    unsigned int backend_id;
+    syntra_hal_backend_event_type_t type;
+
+} syntra_hal_backend_event_t;
 
 typedef struct
 {
@@ -12,11 +29,18 @@ typedef struct
         SYNTRA_HAL_BACKEND_MANAGER_MAX_BACKENDS
     ];
 
+    syntra_hal_backend_event_t events[
+        SYNTRA_HAL_BACKEND_MANAGER_MAX_EVENTS
+    ];
+
     unsigned int backend_count;
     unsigned int available_backends;
     unsigned int unavailable_backends;
 
     unsigned int update_count;
+
+    unsigned int event_count;
+    unsigned int event_sequence;
 
     int initialized;
     int dirty;
@@ -58,6 +82,21 @@ syntra_status_t hal_backend_manager_update(
 
 syntra_status_t hal_backend_manager_validate(
     const syntra_hal_backend_manager_t *manager
+);
+
+syntra_status_t hal_backend_manager_get_event_count(
+    const syntra_hal_backend_manager_t *manager,
+    unsigned int *result
+);
+
+syntra_status_t hal_backend_manager_get_event(
+    const syntra_hal_backend_manager_t *manager,
+    unsigned int index,
+    syntra_hal_backend_event_t *result
+);
+
+syntra_status_t hal_backend_manager_clear_events(
+    syntra_hal_backend_manager_t *manager
 );
 
 #endif
