@@ -1,4 +1,3 @@
-
 #ifndef SYNTRA_HAL_DEVICE_EVENT_ROUTER_H
 #define SYNTRA_HAL_DEVICE_EVENT_ROUTER_H
 
@@ -24,6 +23,7 @@ typedef struct
         SYNTRA_HAL_DEVICE_EVENT_ROUTER_MAX_ROUTES
     ];
 
+    unsigned int registered_routes;
     unsigned int total_routes;
     unsigned int successful_routes;
     unsigned int failed_routes;
