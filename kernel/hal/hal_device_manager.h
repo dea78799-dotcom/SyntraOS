@@ -7,7 +7,7 @@
 
 /*
  * SyntraOS HAL Device Manager
- * Version: 4.0.0
+ * Version: 5.0.0
  */
 
 #define SYNTRA_HAL_MAX_DEVICE_EVENTS 64U
@@ -140,7 +140,7 @@ syntra_status_t hal_device_manager_clear_events(
     syntra_hal_device_manager_t *manager
 );
 
-/* V4: Event filtering and statistics */
+/* Event statistics and filtering */
 
 syntra_status_t hal_device_manager_get_event_statistics(
     const syntra_hal_device_manager_t *manager,
