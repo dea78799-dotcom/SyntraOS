@@ -1,4 +1,3 @@
-
 #ifndef SYNTRA_HAL_DEVICE_SCANNER_H
 #define SYNTRA_HAL_DEVICE_SCANNER_H
 
@@ -20,7 +19,9 @@ typedef enum
     SYNTRA_HAL_SCAN_EVENT_STARTED = 0,
     SYNTRA_HAL_SCAN_EVENT_COMPLETED,
     SYNTRA_HAL_SCAN_EVENT_FAILED,
-    SYNTRA_HAL_SCAN_EVENT_RESET
+    SYNTRA_HAL_SCAN_EVENT_RESET,
+
+    SYNTRA_HAL_SCAN_EVENT_TYPE_COUNT
 } syntra_hal_scan_event_type_t;
 
 typedef struct
@@ -37,6 +38,27 @@ typedef struct
     syntra_hal_scan_event_type_t type;
     unsigned int device_count;
 } syntra_hal_scan_event_t;
+
+/* Event statistics */
+
+typedef struct
+{
+    unsigned int total;
+    unsigned int started;
+    unsigned int completed;
+    unsigned int failed;
+    unsigned int resets;
+} syntra_hal_scan_event_statistics_t;
+
+/* Validation report */
+
+typedef struct
+{
+    unsigned int invalid_events;
+    unsigned int duplicate_sequences;
+    unsigned int out_of_order_sequences;
+    unsigned int sequence_gaps;
+} syntra_hal_scan_validation_report_t;
 
 typedef struct
 {
@@ -56,10 +78,17 @@ typedef struct
     unsigned int event_count;
     unsigned int event_sequence;
 
+    /* V3 statistics */
+    syntra_hal_scan_event_statistics_t statistics;
+    unsigned int update_count;
+    int dirty;
+
     syntra_hal_scan_status_t status;
     int initialized;
 
 } syntra_hal_device_scanner_t;
+
+/* Lifecycle */
 
 syntra_status_t hal_device_scanner_init(
     syntra_hal_device_scanner_t *scanner,
@@ -70,9 +99,13 @@ syntra_status_t hal_device_scanner_reset(
     syntra_hal_device_scanner_t *scanner
 );
 
+/* Scanning */
+
 syntra_status_t hal_device_scanner_scan(
     syntra_hal_device_scanner_t *scanner
 );
+
+/* Results */
 
 syntra_status_t hal_device_scanner_get_result(
     const syntra_hal_device_scanner_t *scanner,
@@ -90,6 +123,8 @@ syntra_status_t hal_device_scanner_get_status(
     syntra_hal_scan_status_t *status
 );
 
+/* Event history */
+
 syntra_status_t hal_device_scanner_get_event_count(
     const syntra_hal_device_scanner_t *scanner,
     unsigned int *count
@@ -103,6 +138,38 @@ syntra_status_t hal_device_scanner_get_event(
 
 syntra_status_t hal_device_scanner_clear_events(
     syntra_hal_device_scanner_t *scanner
+);
+
+/* V3: Event filtering */
+
+syntra_status_t hal_device_scanner_find_events_by_type(
+    const syntra_hal_device_scanner_t *scanner,
+    syntra_hal_scan_event_type_t type,
+    syntra_hal_scan_event_t *events,
+    unsigned int capacity,
+    unsigned int *found
+);
+
+/* V3: Statistics */
+
+syntra_status_t hal_device_scanner_update_statistics(
+    syntra_hal_device_scanner_t *scanner
+);
+
+syntra_status_t hal_device_scanner_get_statistics(
+    const syntra_hal_device_scanner_t *scanner,
+    syntra_hal_scan_event_statistics_t *statistics
+);
+
+/* V3: Validation */
+
+syntra_status_t hal_device_scanner_validate(
+    const syntra_hal_device_scanner_t *scanner
+);
+
+syntra_status_t hal_device_scanner_get_validation_report(
+    const syntra_hal_device_scanner_t *scanner,
+    syntra_hal_scan_validation_report_t *report
 );
 
 #endif
