@@ -13,12 +13,18 @@ int main(void)
     syntra_hal_backend_t *found = NULL;
 
     syntra_hal_backend_event_t event;
+    syntra_hal_backend_event_t filtered[
+        SYNTRA_HAL_BACKEND_MANAGER_MAX_EVENTS
+    ];
+
+    unsigned int statistics[
+        SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT
+    ];
 
     unsigned int count = 0U;
     unsigned int event_count = 0U;
+    unsigned int filtered_count = 0U;
     unsigned int i;
-
-    /* Initialize manager */
 
     assert(
         hal_backend_manager_init(&manager)
@@ -29,8 +35,6 @@ int main(void)
     assert(manager.backend_count == 0U);
     assert(manager.event_count == 0U);
     assert(manager.event_sequence == 0U);
-
-    /* Initialize backends */
 
     assert(
         hal_backend_init(
@@ -50,8 +54,6 @@ int main(void)
         ) == SYNTRA_STATUS_OK
     );
 
-    /* Register backend 1 */
-
     assert(
         hal_backend_manager_register(
             &manager,
@@ -63,24 +65,6 @@ int main(void)
     assert(manager.event_count == 1U);
     assert(manager.event_sequence == 1U);
 
-    /* Check registration event */
-
-    assert(
-        hal_backend_manager_get_event(
-            &manager,
-            0U,
-            &event
-        ) == SYNTRA_STATUS_OK
-    );
-
-    assert(event.sequence == 1U);
-    assert(event.backend_id == 1U);
-    assert(
-        event.type == SYNTRA_HAL_BACKEND_EVENT_REGISTERED
-    );
-
-    /* Register backend 2 */
-
     assert(
         hal_backend_manager_register(
             &manager,
@@ -90,9 +74,6 @@ int main(void)
 
     assert(manager.backend_count == 2U);
     assert(manager.event_count == 2U);
-    assert(manager.event_sequence == 2U);
-
-    /* Update backend statistics */
 
     assert(
         hal_backend_manager_update(&manager)
@@ -111,8 +92,6 @@ int main(void)
 
     assert(event_count == 4U);
 
-    /* Check availability events */
-
     assert(
         hal_backend_manager_get_event(
             &manager,
@@ -122,9 +101,7 @@ int main(void)
     );
 
     assert(event.backend_id == 1U);
-    assert(
-        event.type == SYNTRA_HAL_BACKEND_EVENT_AVAILABLE
-    );
+    assert(event.type == SYNTRA_HAL_BACKEND_EVENT_AVAILABLE);
 
     assert(
         hal_backend_manager_get_event(
@@ -135,9 +112,7 @@ int main(void)
     );
 
     assert(event.backend_id == 2U);
-    assert(
-        event.type == SYNTRA_HAL_BACKEND_EVENT_UNAVAILABLE
-    );
+    assert(event.type == SYNTRA_HAL_BACKEND_EVENT_UNAVAILABLE);
 
     /* Find backend */
 
@@ -161,6 +136,94 @@ int main(void)
     );
 
     assert(count == 2U);
+
+    /* Filter by backend ID */
+
+    assert(
+        hal_backend_manager_filter_events(
+            &manager,
+            1U,
+            SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT,
+            filtered,
+            SYNTRA_HAL_BACKEND_MANAGER_MAX_EVENTS,
+            &filtered_count
+        ) == SYNTRA_STATUS_OK
+    );
+
+    assert(filtered_count == 2U);
+    assert(filtered[0].backend_id == 1U);
+    assert(filtered[1].backend_id == 1U);
+
+    /* Filter by event type */
+
+    assert(
+        hal_backend_manager_filter_events(
+            &manager,
+            0U,
+            SYNTRA_HAL_BACKEND_EVENT_REGISTERED,
+            filtered,
+            SYNTRA_HAL_BACKEND_MANAGER_MAX_EVENTS,
+            &filtered_count
+        ) == SYNTRA_STATUS_OK
+    );
+
+    assert(filtered_count == 2U);
+
+    /* Filter all events */
+
+    assert(
+        hal_backend_manager_filter_events(
+            &manager,
+            0U,
+            SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT,
+            filtered,
+            SYNTRA_HAL_BACKEND_MANAGER_MAX_EVENTS,
+            &filtered_count
+        ) == SYNTRA_STATUS_OK
+    );
+
+    assert(filtered_count == 4U);
+
+    /* Insufficient filter capacity */
+
+    assert(
+        hal_backend_manager_filter_events(
+            &manager,
+            0U,
+            SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT,
+            filtered,
+            1U,
+            &filtered_count
+        ) == SYNTRA_STATUS_ERROR
+    );
+
+    assert(filtered_count == 4U);
+
+    /* Event statistics */
+
+    assert(
+        hal_backend_manager_get_event_statistics(
+            &manager,
+            statistics,
+            SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT
+        ) == SYNTRA_STATUS_OK
+    );
+
+    assert(
+        statistics[SYNTRA_HAL_BACKEND_EVENT_REGISTERED] == 2U
+    );
+
+    assert(
+        statistics[SYNTRA_HAL_BACKEND_EVENT_UNREGISTERED] == 0U
+    );
+
+    assert(
+        statistics[SYNTRA_HAL_BACKEND_EVENT_AVAILABLE] == 1U
+    );
+
+    assert(
+        statistics[SYNTRA_HAL_BACKEND_EVENT_UNAVAILABLE] == 1U
+    );
 
     /* Duplicate registration */
 
@@ -194,20 +257,32 @@ int main(void)
     );
 
     assert(event.backend_id == 1U);
-    assert(
-        event.type == SYNTRA_HAL_BACKEND_EVENT_UNREGISTERED
-    );
+    assert(event.type == SYNTRA_HAL_BACKEND_EVENT_UNREGISTERED);
 
-    /* Get event count */
+    /* Updated statistics */
 
     assert(
-        hal_backend_manager_get_event_count(
+        hal_backend_manager_get_event_statistics(
             &manager,
-            &event_count
+            statistics,
+            SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT
         ) == SYNTRA_STATUS_OK
     );
 
-    assert(event_count == 5U);
+    assert(
+        statistics[SYNTRA_HAL_BACKEND_EVENT_REGISTERED] == 2U
+    );
+
+    assert(
+        statistics[SYNTRA_HAL_BACKEND_EVENT_UNREGISTERED] == 1U
+    );
+
+    /* History validation */
+
+    assert(
+        hal_backend_manager_validate_history(&manager)
+        == SYNTRA_STATUS_OK
+    );
 
     /* Invalid event index */
 
@@ -256,6 +331,45 @@ int main(void)
         == SYNTRA_STATUS_INVALID_ARGUMENT
     );
 
+    assert(
+        hal_backend_manager_filter_events(
+            NULL,
+            0U,
+            SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT,
+            filtered,
+            SYNTRA_HAL_BACKEND_MANAGER_MAX_EVENTS,
+            &filtered_count
+        ) == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+
+    assert(
+        hal_backend_manager_filter_events(
+            &manager,
+            0U,
+            (syntra_hal_backend_event_type_t)
+                SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT + 1,
+            filtered,
+            SYNTRA_HAL_BACKEND_MANAGER_MAX_EVENTS,
+            &filtered_count
+        ) == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+
+    assert(
+        hal_backend_manager_get_event_statistics(
+            &manager,
+            NULL,
+            SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT
+        ) == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+
+    assert(
+        hal_backend_manager_get_event_statistics(
+            &manager,
+            statistics,
+            0U
+        ) == SYNTRA_STATUS_ERROR
+    );
+
     /* Clear event history */
 
     assert(
@@ -265,25 +379,19 @@ int main(void)
 
     assert(manager.event_count == 0U);
 
-    assert(
-        hal_backend_manager_get_event_count(
-            &manager,
-            &event_count
-        ) == SYNTRA_STATUS_OK
-    );
-
-    assert(event_count == 0U);
-
-    /* Event sequence remains monotonic */
-
-    assert(manager.event_sequence == 5U);
-
-    /* Validate manager */
+    for (i = 0U;
+         i < SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT;
+         ++i)
+    {
+        assert(manager.event_type_counts[i] == 0U);
+    }
 
     assert(
-        hal_backend_manager_validate(&manager)
+        hal_backend_manager_validate_history(&manager)
         == SYNTRA_STATUS_OK
     );
+
+    assert(manager.event_sequence == 5U);
 
     /* Fill event history beyond capacity */
 
@@ -315,6 +423,11 @@ int main(void)
         manager.event_sequence ==
         5U + 2U *
         (SYNTRA_HAL_BACKEND_MANAGER_MAX_EVENTS + 2U)
+    );
+
+    assert(
+        hal_backend_manager_validate_history(&manager)
+        == SYNTRA_STATUS_OK
     );
 
     assert(
@@ -356,7 +469,12 @@ int main(void)
         == SYNTRA_STATUS_INVALID_ARGUMENT
     );
 
-    printf("HAL Backend Manager V3 tests passed.\n");
+    assert(
+        hal_backend_manager_validate_history(NULL)
+        == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+
+    printf("HAL Backend Manager V4 tests passed.\n");
 
     return 0;
 }
