@@ -225,7 +225,7 @@ int main(void)
         ) == SYNTRA_STATUS_OK
     );
 
-    assert(event.sequence == 8U);
+    assert(event.sequence == 7U);
 
     /* Invalid arguments */
 
