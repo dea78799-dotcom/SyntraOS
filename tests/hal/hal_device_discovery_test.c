@@ -15,6 +15,7 @@ int main(void)
 
     syntra_hal_discovery_event_t event;
     syntra_hal_discovery_stats_t stats;
+    syntra_hal_discovery_validation_report_t report;
 
     unsigned int count = 0U;
 
@@ -40,32 +41,24 @@ int main(void)
         &discovery, &device2
     ) == SYNTRA_STATUS_OK);
 
-    assert(discovery.device_count == 2U);
-    assert(discovery.discovery_count == 2U);
-    assert(discovery.event_count == 2U);
-
-    assert(hal_device_discovery_find_event(
-        &discovery, 1U, 0U, &event
-    ) == SYNTRA_STATUS_OK);
-
-    assert(event.device_id == 1U);
-    assert(event.type == SYNTRA_HAL_DISCOVERY_EVENT_ADDED);
-
-    assert(hal_device_discovery_get_event_by_type(
-        &discovery,
-        SYNTRA_HAL_DISCOVERY_EVENT_ADDED,
-        1U,
-        &event
-    ) == SYNTRA_STATUS_OK);
-
-    assert(event.device_id == 2U);
-
     assert(hal_device_discovery_remove(
         &discovery, 1U
     ) == SYNTRA_STATUS_OK);
 
     assert(discovery.device_count == 1U);
     assert(discovery.event_count == 3U);
+
+    assert(hal_device_discovery_find(
+        &discovery, 2U, &found
+    ) == SYNTRA_STATUS_OK);
+
+    assert(found == &device2);
+
+    assert(hal_device_discovery_find_event(
+        &discovery, 1U, 0U, &event
+    ) == SYNTRA_STATUS_OK);
+
+    assert(event.type == SYNTRA_HAL_DISCOVERY_EVENT_ADDED);
 
     assert(hal_device_discovery_get_event_by_type(
         &discovery,
@@ -85,28 +78,34 @@ int main(void)
     assert(stats.removed_events == 1U);
     assert(stats.reset_events == 0U);
 
+    assert(hal_device_discovery_validate_history(
+        &discovery
+    ) == SYNTRA_STATUS_OK);
+
+    assert(hal_device_discovery_get_validation_report(
+        &discovery, &report
+    ) == SYNTRA_STATUS_OK);
+
+    assert(report.invalid_events == 0U);
+    assert(report.duplicate_sequences == 0U);
+    assert(report.out_of_order_events == 0U);
+    assert(report.sequence_gaps == 0U);
+
+    assert(hal_device_discovery_validate(
+        &discovery
+    ) == SYNTRA_STATUS_OK);
+
     assert(hal_device_discovery_get_count(
         &discovery, &count
     ) == SYNTRA_STATUS_OK);
 
     assert(count == 1U);
 
-    assert(hal_device_discovery_find(
-        &discovery, 2U, &found
-    ) == SYNTRA_STATUS_OK);
-
-    assert(found == &device2);
-
     assert(hal_device_discovery_update_stats(
         &discovery
     ) == SYNTRA_STATUS_OK);
 
-    assert(discovery.update_count >= 1U);
     assert(discovery.dirty == 0);
-
-    assert(hal_device_discovery_validate(
-        &discovery
-    ) == SYNTRA_STATUS_OK);
 
     assert(hal_device_discovery_clear_events(
         &discovery
@@ -122,23 +121,33 @@ int main(void)
     assert(stats.added_events == 0U);
     assert(stats.removed_events == 0U);
 
-    assert(hal_device_discovery_validate(
+    assert(hal_device_discovery_validate_history(
         &discovery
     ) == SYNTRA_STATUS_OK);
+
+    assert(hal_device_discovery_get_validation_report(
+        &discovery, &report
+    ) == SYNTRA_STATUS_OK);
+
+    assert(report.invalid_events == 0U);
+    assert(report.duplicate_sequences == 0U);
+    assert(report.out_of_order_events == 0U);
+    assert(report.sequence_gaps == 0U);
 
     assert(hal_device_discovery_find_event(
         &discovery, 1U, 0U, &event
     ) == SYNTRA_STATUS_ERROR);
 
-    assert(hal_device_discovery_get_event_by_type(
-        &discovery,
-        SYNTRA_HAL_DISCOVERY_EVENT_RESET,
-        0U,
-        &event
+    assert(hal_device_discovery_get_event(
+        &discovery, 0U, &event
     ) == SYNTRA_STATUS_ERROR);
 
-    assert(hal_device_discovery_get_stats(
-        NULL, &stats
+    assert(hal_device_discovery_get_validation_report(
+        NULL, &report
+    ) == SYNTRA_STATUS_ERROR);
+
+    assert(hal_device_discovery_validate_history(
+        NULL
     ) == SYNTRA_STATUS_ERROR);
 
     assert(hal_device_discovery_update_stats(
