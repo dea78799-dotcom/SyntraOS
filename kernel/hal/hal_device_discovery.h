@@ -33,6 +33,15 @@ typedef struct
 
 typedef struct
 {
+    unsigned int invalid_events;
+    unsigned int duplicate_sequences;
+    unsigned int out_of_order_events;
+    unsigned int sequence_gaps;
+
+} syntra_hal_discovery_validation_report_t;
+
+typedef struct
+{
     syntra_hal_device_t *devices[
         SYNTRA_HAL_DEVICE_DISCOVERY_MAX_DEVICES
     ];
@@ -48,6 +57,7 @@ typedef struct
     unsigned int event_sequence;
 
     syntra_hal_discovery_stats_t stats;
+    syntra_hal_discovery_validation_report_t validation_report;
 
     unsigned int update_count;
 
@@ -116,6 +126,15 @@ syntra_status_t hal_device_discovery_get_stats(
 );
 
 syntra_status_t hal_device_discovery_update_stats(
+    syntra_hal_device_discovery_t *discovery
+);
+
+syntra_status_t hal_device_discovery_get_validation_report(
+    const syntra_hal_device_discovery_t *discovery,
+    syntra_hal_discovery_validation_report_t *result
+);
+
+syntra_status_t hal_device_discovery_validate_history(
     syntra_hal_device_discovery_t *discovery
 );
 
