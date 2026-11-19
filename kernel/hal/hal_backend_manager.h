@@ -13,10 +13,13 @@ typedef struct
     ];
 
     unsigned int backend_count;
+    unsigned int available_backends;
+    unsigned int unavailable_backends;
 
     unsigned int update_count;
 
     int initialized;
+    int dirty;
 
 } syntra_hal_backend_manager_t;
 
@@ -47,6 +50,10 @@ syntra_status_t hal_backend_manager_find(
 syntra_status_t hal_backend_manager_get_count(
     const syntra_hal_backend_manager_t *manager,
     unsigned int *result
+);
+
+syntra_status_t hal_backend_manager_update(
+    syntra_hal_backend_manager_t *manager
 );
 
 syntra_status_t hal_backend_manager_validate(
