@@ -19,10 +19,49 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Install build tools
+      - name: Check build tools
+        id: tools
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build gcc
+          set +e
+
+          MISSING=0
+
+          for tool in cmake ninja gcc; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              echo "$tool is available:"
+              "$tool" --version | head -n 1
+            else
+              echo "$tool is missing"
+              MISSING=1
+            fi
+          done
+
+          echo "missing=$MISSING" >> "$GITHUB_OUTPUT"
+
+      - name: Install build tools
+        if: steps.tools.outputs.missing == '1'
+        shell: bash
+        run: |
+          set -e
+
+          sudo apt-get \
+            -o Acquire::Retries=5 \
+            -o Acquire::http::Timeout=30 \
+            -o Acquire::https::Timeout=30 \
+            update
+
+          sudo apt-get \
+            -o Acquire::Retries=5 \
+            -o Acquire::http::Timeout=30 \
+            -o Acquire::https::Timeout=30 \
+            install -y cmake ninja-build gcc
+
+      - name: Verify build tools
+        run: |
+          cmake --version
+          ninja --version
+          gcc --version
 
       - name: Configure Debug
         run: cmake --preset host-debug
