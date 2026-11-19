@@ -254,11 +254,11 @@ add_executable(hal_lifecycle_test
 target_link_libraries(hal_lifecycle_test PRIVATE syntra_kernel)
 add_test(NAME HALLifecycleV1Test COMMAND hal_lifecycle_test)
 
-# HAL Device Manager V1 Test
+# HAL Device Manager V2 Test
 
 add_executable(hal_device_manager_test
     tests/hal/hal_device_manager_test.c
 )
 
 target_link_libraries(hal_device_manager_test PRIVATE syntra_kernel)
-add_test(NAME HALDeviceManagerV1Test COMMAND hal_device_manager_test)
+add_test(NAME HALDeviceManagerV2Test COMMAND hal_device_manager_test)
