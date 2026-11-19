@@ -19,7 +19,7 @@ int main(void)
             &device1,
             1U,
             "Device One",
-            SYNTRA_HAL_DEVICE_TYPE_GENERIC
+            SYNTRA_HAL_DEVICE_TIMER
         ) == SYNTRA_STATUS_OK
     );
 
@@ -28,7 +28,7 @@ int main(void)
             &device2,
             2U,
             "Device Two",
-            SYNTRA_HAL_DEVICE_TYPE_GENERIC
+            SYNTRA_HAL_DEVICE_TIMER
         ) == SYNTRA_STATUS_OK
     );
 
