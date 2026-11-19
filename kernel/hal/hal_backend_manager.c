@@ -13,7 +13,10 @@ static syntra_status_t hal_backend_manager_record_event(
 {
     unsigned int i;
 
-    if (manager == NULL || backend_id == 0U)
+    if (manager == NULL ||
+        backend_id == 0U ||
+        (unsigned int)type >=
+            SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
@@ -26,6 +29,18 @@ static syntra_status_t hal_backend_manager_record_event(
     if (manager->event_count >=
         SYNTRA_HAL_BACKEND_MANAGER_MAX_EVENTS)
     {
+        unsigned int removed_type =
+            (unsigned int)manager->events[0].type;
+
+        if (removed_type >=
+            SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT ||
+            manager->event_type_counts[removed_type] == 0U)
+        {
+            return SYNTRA_STATUS_ERROR;
+        }
+
+        --manager->event_type_counts[removed_type];
+
         for (i = 1U;
              i < SYNTRA_HAL_BACKEND_MANAGER_MAX_EVENTS;
              ++i)
@@ -47,6 +62,7 @@ static syntra_status_t hal_backend_manager_record_event(
     manager->events[manager->event_count].type = type;
 
     ++manager->event_count;
+    ++manager->event_type_counts[(unsigned int)type];
 
     return SYNTRA_STATUS_OK;
 }
@@ -82,6 +98,66 @@ syntra_status_t hal_backend_manager_reset(
     return SYNTRA_STATUS_OK;
 }
 
+syntra_status_t hal_backend_manager_validate_history(
+    const syntra_hal_backend_manager_t *manager
+)
+{
+    unsigned int i;
+    unsigned int previous_sequence = 0U;
+    unsigned int counts[SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT] = {0U};
+
+    if (manager == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (manager->initialized != 1 ||
+        manager->event_count >
+            SYNTRA_HAL_BACKEND_MANAGER_MAX_EVENTS ||
+        manager->event_sequence < manager->event_count)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    for (i = 0U; i < manager->event_count; ++i)
+    {
+        const syntra_hal_backend_event_t *event =
+            &manager->events[i];
+
+        unsigned int type = (unsigned int)event->type;
+
+        if (event->sequence == 0U ||
+            event->sequence <= previous_sequence ||
+            event->sequence > manager->event_sequence ||
+            event->backend_id == 0U ||
+            type >= SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT)
+        {
+            return SYNTRA_STATUS_ERROR;
+        }
+
+        previous_sequence = event->sequence;
+        ++counts[type];
+    }
+
+    if (manager->event_count > 0U &&
+        previous_sequence != manager->event_sequence)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    for (i = 0U;
+         i < SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT;
+         ++i)
+    {
+        if (counts[i] != manager->event_type_counts[i])
+        {
+            return SYNTRA_STATUS_ERROR;
+        }
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t hal_backend_manager_validate(
     const syntra_hal_backend_manager_t *manager
 )
@@ -91,7 +167,6 @@ syntra_status_t hal_backend_manager_validate(
     unsigned int count = 0U;
     unsigned int available = 0U;
     unsigned int unavailable = 0U;
-    unsigned int previous_sequence = 0U;
 
     if (manager == NULL)
     {
@@ -106,10 +181,13 @@ syntra_status_t hal_backend_manager_validate(
     }
 
     if (manager->backend_count >
-            SYNTRA_HAL_BACKEND_MANAGER_MAX_BACKENDS ||
-        manager->event_count >
-            SYNTRA_HAL_BACKEND_MANAGER_MAX_EVENTS ||
-        manager->event_sequence < manager->event_count)
+        SYNTRA_HAL_BACKEND_MANAGER_MAX_BACKENDS)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    if (hal_backend_manager_validate_history(manager) !=
+        SYNTRA_STATUS_OK)
     {
         return SYNTRA_STATUS_ERROR;
     }
@@ -167,30 +245,6 @@ syntra_status_t hal_backend_manager_validate(
         return SYNTRA_STATUS_ERROR;
     }
 
-    for (i = 0U; i < manager->event_count; ++i)
-    {
-        const syntra_hal_backend_event_t *event =
-            &manager->events[i];
-
-        if (event->sequence == 0U ||
-            event->sequence <= previous_sequence ||
-            event->sequence > manager->event_sequence ||
-            event->backend_id == 0U ||
-            event->type < SYNTRA_HAL_BACKEND_EVENT_REGISTERED ||
-            event->type > SYNTRA_HAL_BACKEND_EVENT_UNAVAILABLE)
-        {
-            return SYNTRA_STATUS_ERROR;
-        }
-
-        previous_sequence = event->sequence;
-    }
-
-    if (manager->event_count > 0U &&
-        previous_sequence != manager->event_sequence)
-    {
-        return SYNTRA_STATUS_ERROR;
-    }
-
     return SYNTRA_STATUS_OK;
 }
 
@@ -214,7 +268,8 @@ syntra_status_t hal_backend_manager_register(
         return SYNTRA_STATUS_ERROR;
     }
 
-    if (manager->event_sequence == UINT_MAX)
+    if (manager->event_sequence == UINT_MAX ||
+        manager->update_count == UINT_MAX)
     {
         return SYNTRA_STATUS_ERROR;
     }
@@ -276,7 +331,8 @@ syntra_status_t hal_backend_manager_unregister(
         return SYNTRA_STATUS_ERROR;
     }
 
-    if (manager->event_sequence == UINT_MAX)
+    if (manager->event_sequence == UINT_MAX ||
+        manager->update_count == UINT_MAX)
     {
         return SYNTRA_STATUS_ERROR;
     }
@@ -511,13 +567,113 @@ syntra_status_t hal_backend_manager_clear_events(
         return SYNTRA_STATUS_ERROR;
     }
 
+    memset(manager->events, 0, sizeof(manager->events));
+
     memset(
-        manager->events,
+        manager->event_type_counts,
         0,
-        sizeof(manager->events)
+        sizeof(manager->event_type_counts)
     );
 
     manager->event_count = 0U;
+
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t hal_backend_manager_filter_events(
+    const syntra_hal_backend_manager_t *manager,
+    unsigned int backend_id,
+    syntra_hal_backend_event_type_t type,
+    syntra_hal_backend_event_t *results,
+    unsigned int capacity,
+    unsigned int *result_count
+)
+{
+    unsigned int i;
+    unsigned int count = 0U;
+    unsigned int type_filter = (unsigned int)type;
+
+    if (manager == NULL ||
+        result_count == NULL ||
+        (capacity > 0U && results == NULL) ||
+        (type_filter != SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT &&
+         type_filter >= SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT))
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (hal_backend_manager_validate(manager) != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    for (i = 0U; i < manager->event_count; ++i)
+    {
+        const syntra_hal_backend_event_t *event =
+            &manager->events[i];
+
+        if ((backend_id == 0U ||
+             event->backend_id == backend_id) &&
+            (type_filter == SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT ||
+             (unsigned int)event->type == type_filter))
+        {
+            ++count;
+        }
+    }
+
+    *result_count = count;
+
+    if (count > capacity)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    count = 0U;
+
+    for (i = 0U; i < manager->event_count; ++i)
+    {
+        const syntra_hal_backend_event_t *event =
+            &manager->events[i];
+
+        if ((backend_id == 0U ||
+             event->backend_id == backend_id) &&
+            (type_filter == SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT ||
+             (unsigned int)event->type == type_filter))
+        {
+            results[count] = *event;
+            ++count;
+        }
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t hal_backend_manager_get_event_statistics(
+    const syntra_hal_backend_manager_t *manager,
+    unsigned int *results,
+    unsigned int capacity
+)
+{
+    if (manager == NULL || results == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (capacity < SYNTRA_HAL_BACKEND_EVENT_TYPE_COUNT)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    if (hal_backend_manager_validate(manager) != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    memcpy(
+        results,
+        manager->event_type_counts,
+        sizeof(manager->event_type_counts)
+    );
 
     return SYNTRA_STATUS_OK;
 }
