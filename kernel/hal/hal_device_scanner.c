@@ -23,6 +23,42 @@ static syntra_status_t scanner_validate(
     return SYNTRA_STATUS_OK;
 }
 
+static void scanner_record_event(
+    syntra_hal_device_scanner_t *scanner,
+    syntra_hal_scan_event_type_t type,
+    unsigned int device_count
+)
+{
+    unsigned int i;
+
+    if (scanner->event_count >=
+        SYNTRA_HAL_SCANNER_MAX_EVENTS)
+    {
+        for (i = 1U;
+             i < SYNTRA_HAL_SCANNER_MAX_EVENTS;
+             i++)
+        {
+            scanner->events[i - 1U] =
+                scanner->events[i];
+        }
+
+        scanner->event_count--;
+    }
+
+    scanner->event_sequence++;
+
+    scanner->events[scanner->event_count].sequence =
+        scanner->event_sequence;
+
+    scanner->events[scanner->event_count].type =
+        type;
+
+    scanner->events[scanner->event_count].device_count =
+        device_count;
+
+    scanner->event_count++;
+}
+
 syntra_status_t hal_device_scanner_init(
     syntra_hal_device_scanner_t *scanner,
     syntra_hal_device_discovery_t *discovery
@@ -66,6 +102,12 @@ syntra_status_t hal_device_scanner_reset(
     scanner->scanned_count = 0U;
     scanner->status = SYNTRA_HAL_SCAN_STATUS_IDLE;
 
+    scanner_record_event(
+        scanner,
+        SYNTRA_HAL_SCAN_EVENT_RESET,
+        0U
+    );
+
     return SYNTRA_STATUS_OK;
 }
 
@@ -91,6 +133,12 @@ syntra_status_t hal_device_scanner_scan(
         sizeof(scanner->results)
     );
 
+    scanner_record_event(
+        scanner,
+        SYNTRA_HAL_SCAN_EVENT_STARTED,
+        0U
+    );
+
     device_count = scanner->discovery->device_count;
 
     if (device_count >
@@ -98,6 +146,13 @@ syntra_status_t hal_device_scanner_scan(
         device_count > SYNTRA_HAL_SCANNER_MAX_RESULTS)
     {
         scanner->status = SYNTRA_HAL_SCAN_STATUS_FAILED;
+
+        scanner_record_event(
+            scanner,
+            SYNTRA_HAL_SCAN_EVENT_FAILED,
+            scanner->scanned_count
+        );
+
         return SYNTRA_STATUS_ERROR;
     }
 
@@ -111,6 +166,13 @@ syntra_status_t hal_device_scanner_scan(
         if (device == NULL || device->initialized == 0)
         {
             scanner->status = SYNTRA_HAL_SCAN_STATUS_FAILED;
+
+            scanner_record_event(
+                scanner,
+                SYNTRA_HAL_SCAN_EVENT_FAILED,
+                scanner->scanned_count
+            );
+
             return SYNTRA_STATUS_ERROR;
         }
 
@@ -126,6 +188,12 @@ syntra_status_t hal_device_scanner_scan(
     }
 
     scanner->status = SYNTRA_HAL_SCAN_STATUS_COMPLETED;
+
+    scanner_record_event(
+        scanner,
+        SYNTRA_HAL_SCAN_EVENT_COMPLETED,
+        scanner->scanned_count
+    );
 
     return SYNTRA_STATUS_OK;
 }
@@ -176,6 +244,61 @@ syntra_status_t hal_device_scanner_get_status(
     }
 
     *status = scanner->status;
+
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t hal_device_scanner_get_event_count(
+    const syntra_hal_device_scanner_t *scanner,
+    unsigned int *count
+)
+{
+    if (scanner_validate(scanner) != SYNTRA_STATUS_OK ||
+        count == NULL)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    *count = scanner->event_count;
+
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t hal_device_scanner_get_event(
+    const syntra_hal_device_scanner_t *scanner,
+    unsigned int index,
+    syntra_hal_scan_event_t *event
+)
+{
+    if (scanner_validate(scanner) != SYNTRA_STATUS_OK ||
+        event == NULL ||
+        index >= scanner->event_count)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    *event = scanner->events[index];
+
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t hal_device_scanner_clear_events(
+    syntra_hal_device_scanner_t *scanner
+)
+{
+    if (scanner_validate(scanner) != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    memset(
+        scanner->events,
+        0,
+        sizeof(scanner->events)
+    );
+
+    scanner->event_count = 0U;
+    scanner->event_sequence = 0U;
 
     return SYNTRA_STATUS_OK;
 }
