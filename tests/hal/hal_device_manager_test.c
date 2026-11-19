@@ -19,7 +19,6 @@ int main(void)
 
     syntra_hal_event_statistics_t statistics;
 
-    unsigned int count = 0U;
     unsigned int found = 0U;
     unsigned int i;
 
@@ -278,28 +277,28 @@ int main(void)
     /* Invalid arguments */
 
     assert(
-    hal_device_manager_init(NULL, &registry)
-    == SYNTRA_STATUS_INVALID_ARGUMENT
-);
+        hal_device_manager_init(NULL, &registry)
+        == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
 
-assert(
-    hal_device_manager_init(&manager, NULL)
-    == SYNTRA_STATUS_INVALID_ARGUMENT
-);
+    assert(
+        hal_device_manager_init(&manager, NULL)
+        == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
 
     assert(
         hal_device_manager_reset(NULL)
-        == SYNTRA_STATUS_ERROR
+        == SYNTRA_STATUS_INVALID_ARGUMENT
     );
 
     assert(
         hal_device_manager_validate(NULL)
-        == SYNTRA_STATUS_ERROR
+        == SYNTRA_STATUS_INVALID_ARGUMENT
     );
 
     assert(
         hal_device_manager_refresh(NULL)
-        == SYNTRA_STATUS_ERROR
+        == SYNTRA_STATUS_INVALID_ARGUMENT
     );
 
     assert(
@@ -307,7 +306,7 @@ assert(
             &manager,
             1U,
             NULL
-        ) == SYNTRA_STATUS_ERROR
+        ) == SYNTRA_STATUS_INVALID_ARGUMENT
     );
 
     assert(
@@ -315,7 +314,7 @@ assert(
             &manager,
             0U,
             NULL
-        ) == SYNTRA_STATUS_ERROR
+        ) == SYNTRA_STATUS_INVALID_ARGUMENT
     );
 
     assert(
@@ -330,12 +329,12 @@ assert(
         hal_device_manager_get_event_statistics(
             &manager,
             NULL
-        ) == SYNTRA_STATUS_ERROR
+        ) == SYNTRA_STATUS_INVALID_ARGUMENT
     );
 
     assert(
         hal_device_manager_clear_events(NULL)
-        == SYNTRA_STATUS_ERROR
+        == SYNTRA_STATUS_INVALID_ARGUMENT
     );
 
     return 0;
