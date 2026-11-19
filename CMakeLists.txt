@@ -1,3 +1,4 @@
+
 cmake_minimum_required(VERSION 3.20)
 
 project(SyntraOS
@@ -50,6 +51,7 @@ add_library(syntra_kernel STATIC
     kernel/hal/hal_device_event_manager.c
     kernel/hal/hal_device_event_queue.c
     kernel/hal/hal_device_event_dispatcher.c
+    kernel/hal/hal_device_event_router.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -329,13 +331,24 @@ add_test(
 add_executable(hal_device_event_dispatcher_test
     tests/hal/hal_device_event_dispatcher_test.c
 )
-
 target_link_libraries(
     hal_device_event_dispatcher_test
     PRIVATE syntra_kernel
 )
-
 add_test(
     NAME HALDeviceEventDispatcherV1Test
     COMMAND hal_device_event_dispatcher_test
+)
+
+# HAL Device Event Router V1 Test
+add_executable(hal_device_event_router_test
+    tests/hal/hal_device_event_router_test.c
+)
+target_link_libraries(
+    hal_device_event_router_test
+    PRIVATE syntra_kernel
+)
+add_test(
+    NAME HALDeviceEventRouterV1Test
+    COMMAND hal_device_event_router_test
 )
