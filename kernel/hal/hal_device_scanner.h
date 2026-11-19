@@ -1,3 +1,4 @@
+
 #ifndef SYNTRA_HAL_DEVICE_SCANNER_H
 #define SYNTRA_HAL_DEVICE_SCANNER_H
 
@@ -20,7 +21,6 @@ typedef enum
     SYNTRA_HAL_SCAN_EVENT_COMPLETED,
     SYNTRA_HAL_SCAN_EVENT_FAILED,
     SYNTRA_HAL_SCAN_EVENT_RESET,
-
     SYNTRA_HAL_SCAN_EVENT_TYPE_COUNT
 } syntra_hal_scan_event_type_t;
 
@@ -39,7 +39,7 @@ typedef struct
     unsigned int device_count;
 } syntra_hal_scan_event_t;
 
-/* Event statistics */
+/* V3: Event statistics */
 
 typedef struct
 {
@@ -50,7 +50,7 @@ typedef struct
     unsigned int resets;
 } syntra_hal_scan_event_statistics_t;
 
-/* Validation report */
+/* V3: Validation report */
 
 typedef struct
 {
@@ -59,6 +59,28 @@ typedef struct
     unsigned int out_of_order_sequences;
     unsigned int sequence_gaps;
 } syntra_hal_scan_validation_report_t;
+
+/* V4: Query filter */
+
+typedef struct
+{
+    unsigned int device_id;
+    syntra_hal_device_type_t type;
+    syntra_hal_device_state_t state;
+
+    int match_device_id;
+    int match_type;
+    int match_state;
+    int match_found;
+} syntra_hal_scan_query_t;
+
+/* V4: Query result */
+
+typedef struct
+{
+    unsigned int matched_count;
+    unsigned int total_count;
+} syntra_hal_scan_query_report_t;
 
 typedef struct
 {
@@ -82,6 +104,10 @@ typedef struct
     syntra_hal_scan_event_statistics_t statistics;
     unsigned int update_count;
     int dirty;
+
+    /* V4 query tracking */
+    unsigned int query_count;
+    unsigned int last_query_count;
 
     syntra_hal_scan_status_t status;
     int initialized;
@@ -170,6 +196,28 @@ syntra_status_t hal_device_scanner_validate(
 syntra_status_t hal_device_scanner_get_validation_report(
     const syntra_hal_device_scanner_t *scanner,
     syntra_hal_scan_validation_report_t *report
+);
+
+/* V4: Result queries */
+
+syntra_status_t hal_device_scanner_find_by_device_id(
+    const syntra_hal_device_scanner_t *scanner,
+    unsigned int device_id,
+    syntra_hal_scan_result_t *result
+);
+
+syntra_status_t hal_device_scanner_query(
+    syntra_hal_device_scanner_t *scanner,
+    const syntra_hal_scan_query_t *query,
+    syntra_hal_scan_result_t *results,
+    unsigned int capacity,
+    syntra_hal_scan_query_report_t *report
+);
+
+syntra_status_t hal_device_scanner_count_matches(
+    const syntra_hal_device_scanner_t *scanner,
+    const syntra_hal_scan_query_t *query,
+    unsigned int *count
 );
 
 #endif
