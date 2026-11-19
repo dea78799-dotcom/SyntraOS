@@ -4,6 +4,31 @@
 #include <stddef.h>
 #include <string.h>
 
+static syntra_status_t manager_is_valid(
+    const syntra_hal_device_manager_t *manager
+)
+{
+    if (manager == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (manager->initialized != 1 ||
+        manager->registry == NULL)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    if (manager->registry->initialized != 1 ||
+        manager->registry->device_count >
+            SYNTRA_HAL_REGISTRY_MAX_DEVICES)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t hal_device_manager_init(
     syntra_hal_device_manager_t *manager,
     syntra_hal_registry_t *registry
@@ -15,7 +40,8 @@ syntra_status_t hal_device_manager_init(
     }
 
     if (registry->initialized != 1 ||
-        registry->device_count > SYNTRA_HAL_REGISTRY_MAX_DEVICES)
+        registry->device_count >
+            SYNTRA_HAL_REGISTRY_MAX_DEVICES)
     {
         return SYNTRA_STATUS_ERROR;
     }
@@ -24,8 +50,16 @@ syntra_status_t hal_device_manager_init(
 
     manager->registry = registry;
     manager->initialized = 1;
+    manager->dirty = 1;
 
-    return hal_device_manager_refresh(manager);
+    if (hal_device_manager_refresh(manager) !=
+        SYNTRA_STATUS_OK)
+    {
+        memset(manager, 0, sizeof(*manager));
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t hal_device_manager_reset(
@@ -42,6 +76,46 @@ syntra_status_t hal_device_manager_reset(
     return SYNTRA_STATUS_OK;
 }
 
+syntra_status_t hal_device_manager_validate(
+    const syntra_hal_device_manager_t *manager
+)
+{
+    syntra_status_t status =
+        manager_is_valid(manager);
+
+    if (status != SYNTRA_STATUS_OK)
+    {
+        return status;
+    }
+
+    for (unsigned int i = 0U;
+         i < manager->registry->device_count;
+         i++)
+    {
+        const syntra_hal_device_t *device =
+            manager->registry->devices[i];
+
+        if (device == NULL)
+        {
+            return SYNTRA_STATUS_ERROR;
+        }
+
+        if (device->initialized != 1)
+        {
+            return SYNTRA_STATUS_ERROR;
+        }
+
+        if (device->state != SYNTRA_HAL_DEVICE_ONLINE &&
+            device->state != SYNTRA_HAL_DEVICE_OFFLINE &&
+            device->state != SYNTRA_HAL_DEVICE_ERROR)
+        {
+            return SYNTRA_STATUS_ERROR;
+        }
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t hal_device_manager_start(
     syntra_hal_device_manager_t *manager,
     unsigned int device_id
@@ -49,15 +123,12 @@ syntra_status_t hal_device_manager_start(
 {
     syntra_hal_device_t *device = NULL;
 
-    if (manager == NULL)
-    {
-        return SYNTRA_STATUS_INVALID_ARGUMENT;
-    }
+    syntra_status_t status =
+        manager_is_valid(manager);
 
-    if (manager->initialized != 1 ||
-        manager->registry == NULL)
+    if (status != SYNTRA_STATUS_OK)
     {
-        return SYNTRA_STATUS_ERROR;
+        return status;
     }
 
     if (hal_registry_find_by_id(
@@ -69,10 +140,14 @@ syntra_status_t hal_device_manager_start(
         return SYNTRA_STATUS_ERROR;
     }
 
-    if (hal_device_start(device) != SYNTRA_STATUS_OK)
+    status = hal_device_start(device);
+
+    if (status != SYNTRA_STATUS_OK)
     {
-        return SYNTRA_STATUS_ERROR;
+        return status;
     }
+
+    manager->dirty = 1;
 
     return hal_device_manager_refresh(manager);
 }
@@ -84,15 +159,12 @@ syntra_status_t hal_device_manager_stop(
 {
     syntra_hal_device_t *device = NULL;
 
-    if (manager == NULL)
-    {
-        return SYNTRA_STATUS_INVALID_ARGUMENT;
-    }
+    syntra_status_t status =
+        manager_is_valid(manager);
 
-    if (manager->initialized != 1 ||
-        manager->registry == NULL)
+    if (status != SYNTRA_STATUS_OK)
     {
-        return SYNTRA_STATUS_ERROR;
+        return status;
     }
 
     if (hal_registry_find_by_id(
@@ -104,10 +176,14 @@ syntra_status_t hal_device_manager_stop(
         return SYNTRA_STATUS_ERROR;
     }
 
-    if (hal_device_stop(device) != SYNTRA_STATUS_OK)
+    status = hal_device_stop(device);
+
+    if (status != SYNTRA_STATUS_OK)
     {
-        return SYNTRA_STATUS_ERROR;
+        return status;
     }
+
+    manager->dirty = 1;
 
     return hal_device_manager_refresh(manager);
 }
@@ -119,15 +195,12 @@ syntra_status_t hal_device_manager_restart(
 {
     syntra_hal_device_t *device = NULL;
 
-    if (manager == NULL)
-    {
-        return SYNTRA_STATUS_INVALID_ARGUMENT;
-    }
+    syntra_status_t status =
+        manager_is_valid(manager);
 
-    if (manager->initialized != 1 ||
-        manager->registry == NULL)
+    if (status != SYNTRA_STATUS_OK)
     {
-        return SYNTRA_STATUS_ERROR;
+        return status;
     }
 
     if (hal_registry_find_by_id(
@@ -139,10 +212,14 @@ syntra_status_t hal_device_manager_restart(
         return SYNTRA_STATUS_ERROR;
     }
 
-    if (hal_device_restart(device) != SYNTRA_STATUS_OK)
+    status = hal_device_restart(device);
+
+    if (status != SYNTRA_STATUS_OK)
     {
-        return SYNTRA_STATUS_ERROR;
+        return status;
     }
+
+    manager->dirty = 1;
 
     return hal_device_manager_refresh(manager);
 }
@@ -158,8 +235,7 @@ syntra_status_t hal_device_manager_get_device(
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
 
-    if (manager->initialized != 1 ||
-        manager->registry == NULL)
+    if (manager_is_valid(manager) != SYNTRA_STATUS_OK)
     {
         return SYNTRA_STATUS_ERROR;
     }
@@ -181,8 +257,7 @@ syntra_status_t hal_device_manager_get_info(
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
 
-    if (manager->initialized != 1 ||
-        manager->registry == NULL)
+    if (manager_is_valid(manager) != SYNTRA_STATUS_OK)
     {
         return SYNTRA_STATUS_ERROR;
     }
@@ -196,26 +271,14 @@ syntra_status_t hal_device_manager_refresh(
     syntra_hal_device_manager_t *manager
 )
 {
-    if (manager == NULL)
-    {
-        return SYNTRA_STATUS_INVALID_ARGUMENT;
-    }
-
-    if (manager->initialized != 1 ||
-        manager->registry == NULL)
-    {
-        return SYNTRA_STATUS_ERROR;
-    }
-
-    if (manager->registry->initialized != 1 ||
-        manager->registry->device_count >
-            SYNTRA_HAL_REGISTRY_MAX_DEVICES)
+    if (manager_is_valid(manager) != SYNTRA_STATUS_OK)
     {
         return SYNTRA_STATUS_ERROR;
     }
 
     unsigned int online = 0U;
     unsigned int offline = 0U;
+    unsigned int errors = 0U;
 
     for (unsigned int i = 0U;
          i < manager->registry->device_count;
@@ -238,6 +301,10 @@ syntra_status_t hal_device_manager_refresh(
         {
             offline++;
         }
+        else if (device->state == SYNTRA_HAL_DEVICE_ERROR)
+        {
+            errors++;
+        }
         else
         {
             return SYNTRA_STATUS_ERROR;
@@ -249,6 +316,10 @@ syntra_status_t hal_device_manager_refresh(
 
     manager->online_devices = online;
     manager->offline_devices = offline;
+    manager->error_devices = errors;
+
+    manager->update_count++;
+    manager->dirty = 0;
 
     return SYNTRA_STATUS_OK;
 }
