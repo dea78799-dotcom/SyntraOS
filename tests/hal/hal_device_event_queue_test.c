@@ -1,4 +1,3 @@
-
 #include "hal_device_event_queue.h"
 
 #include <assert.h>
@@ -15,8 +14,8 @@ static syntra_hal_device_event_t create_event(
     event.sequence = sequence;
     event.device_id = device_id;
     event.type = type;
-    event.previous_state = SYNTRA_HAL_DEVICE_STATE_OFFLINE;
-    event.current_state = SYNTRA_HAL_DEVICE_STATE_ONLINE;
+    event.previous_state = SYNTRA_HAL_DEVICE_OFFLINE;
+    event.current_state = SYNTRA_HAL_DEVICE_ONLINE;
 
     return event;
 }
