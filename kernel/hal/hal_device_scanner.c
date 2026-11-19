@@ -1,3 +1,4 @@
+ 
 #include "hal_device_scanner.h"
 
 #include <limits.h>
@@ -6,7 +7,7 @@
 
 /*
  * SyntraOS HAL Device Scanner
- * Version: 3.0.0
+ * Version: 4.0.0
  */
 
 static int scan_event_type_is_valid(
@@ -14,8 +15,7 @@ static int scan_event_type_is_valid(
 )
 {
     return (int)type >= (int)SYNTRA_HAL_SCAN_EVENT_STARTED &&
-           (unsigned int)type <
-               SYNTRA_HAL_SCAN_EVENT_TYPE_COUNT;
+           (unsigned int)type < SYNTRA_HAL_SCAN_EVENT_TYPE_COUNT;
 }
 
 static int scan_status_is_valid(
@@ -32,39 +32,13 @@ static int scanner_is_valid(
     const syntra_hal_device_scanner_t *scanner
 )
 {
-    if (scanner == NULL)
-    {
-        return 0;
-    }
-
-    if (scanner->initialized != 1)
-    {
-        return 0;
-    }
-
-    if (scanner->discovery == NULL)
-    {
-        return 0;
-    }
-
-    if (scanner->discovery->initialized != 1)
-    {
-        return 0;
-    }
-
-    if (scanner->result_count >
-        SYNTRA_HAL_SCANNER_MAX_RESULTS)
-    {
-        return 0;
-    }
-
-    if (scanner->event_count >
-        SYNTRA_HAL_SCANNER_MAX_EVENTS)
-    {
-        return 0;
-    }
-
-    if (!scan_status_is_valid(scanner->status))
+    if (scanner == NULL ||
+        scanner->initialized != 1 ||
+        scanner->discovery == NULL ||
+        scanner->discovery->initialized != 1 ||
+        scanner->result_count > SYNTRA_HAL_SCANNER_MAX_RESULTS ||
+        scanner->event_count > SYNTRA_HAL_SCANNER_MAX_EVENTS ||
+        !scan_status_is_valid(scanner->status))
     {
         return 0;
     }
@@ -140,8 +114,7 @@ static syntra_status_t scanner_record_event(
         return SYNTRA_STATUS_ERROR;
     }
 
-    if (scanner->event_count <
-        SYNTRA_HAL_SCANNER_MAX_EVENTS)
+    if (scanner->event_count < SYNTRA_HAL_SCANNER_MAX_EVENTS)
     {
         index = scanner->event_count;
         scanner->event_count++;
@@ -160,17 +133,83 @@ static syntra_status_t scanner_record_event(
 
     scanner->event_sequence++;
 
-    scanner->events[index].sequence =
-        scanner->event_sequence;
-
+    scanner->events[index].sequence = scanner->event_sequence;
     scanner->events[index].type = type;
-
-    scanner->events[index].device_count =
-        scanner->scanned_count;
+    scanner->events[index].device_count = scanner->scanned_count;
 
     scanner->dirty = 1;
 
     return SYNTRA_STATUS_OK;
+}
+
+/* V4: Query validation */
+
+static int scan_query_is_valid(
+    const syntra_hal_scan_query_t *query
+)
+{
+    if (query == NULL)
+    {
+        return 0;
+    }
+
+    if ((query->match_device_id != 0 &&
+         query->match_device_id != 1) ||
+        (query->match_type != 0 &&
+         query->match_type != 1) ||
+        (query->match_state != 0 &&
+         query->match_state != 1) ||
+        (query->match_found != 0 &&
+         query->match_found != 1))
+    {
+        return 0;
+    }
+
+    if (query->match_type &&
+        (int)query->type < 0)
+    {
+        return 0;
+    }
+
+    if (query->match_state &&
+        (int)query->state < 0)
+    {
+        return 0;
+    }
+
+    return 1;
+}
+
+static int scan_result_matches(
+    const syntra_hal_scan_result_t *result,
+    const syntra_hal_scan_query_t *query
+)
+{
+    if (query->match_device_id &&
+        result->device_id != query->device_id)
+    {
+        return 0;
+    }
+
+    if (query->match_type &&
+        result->type != query->type)
+    {
+        return 0;
+    }
+
+    if (query->match_state &&
+        result->state != query->state)
+    {
+        return 0;
+    }
+
+    if (query->match_found &&
+        result->found != 1)
+    {
+        return 0;
+    }
+
+    return 1;
 }
 
 /* Lifecycle */
@@ -214,16 +253,14 @@ syntra_status_t hal_device_scanner_reset(
         return SYNTRA_STATUS_ERROR;
     }
 
-    memset(
-        scanner->results,
-        0,
-        sizeof(scanner->results)
-    );
+    memset(scanner->results, 0, sizeof(scanner->results));
 
     scanner->result_count = 0U;
     scanner->scanned_count = 0U;
     scanner->status = SYNTRA_HAL_SCAN_STATUS_IDLE;
 
+    scanner->query_count = 0U;
+    scanner->last_query_count = 0U;
     scanner->dirty = 1;
 
     if (scanner_record_event(
@@ -271,14 +308,12 @@ syntra_status_t hal_device_scanner_scan(
         return SYNTRA_STATUS_ERROR;
     }
 
-    memset(
-        scanner->results,
-        0,
-        sizeof(scanner->results)
-    );
+    memset(scanner->results, 0, sizeof(scanner->results));
 
     scanner->result_count = 0U;
     scanner->scanned_count = 0U;
+    scanner->query_count = 0U;
+    scanner->last_query_count = 0U;
 
     scanner->status = SYNTRA_HAL_SCAN_STATUS_RUNNING;
     scanner->dirty = 1;
@@ -292,9 +327,7 @@ syntra_status_t hal_device_scanner_scan(
         return SYNTRA_STATUS_ERROR;
     }
 
-    for (i = 0U;
-         i < scanner->discovery->device_count;
-         i++)
+    for (i = 0U; i < scanner->discovery->device_count; i++)
     {
         device = scanner->discovery->devices[i];
 
@@ -312,15 +345,9 @@ syntra_status_t hal_device_scanner_scan(
             return SYNTRA_STATUS_ERROR;
         }
 
-        scanner->results[i].device_id =
-            device->device_id;
-
-        scanner->results[i].type =
-            device->type;
-
-        scanner->results[i].state =
-            device->state;
-
+        scanner->results[i].device_id = device->device_id;
+        scanner->results[i].type = device->type;
+        scanner->results[i].state = device->state;
         scanner->results[i].found = 1;
 
         scanner->result_count++;
@@ -350,8 +377,7 @@ syntra_status_t hal_device_scanner_get_result(
     syntra_hal_scan_result_t *result
 )
 {
-    if (!scanner_is_valid(scanner) ||
-        result == NULL)
+    if (!scanner_is_valid(scanner) || result == NULL)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
@@ -371,8 +397,7 @@ syntra_status_t hal_device_scanner_get_count(
     unsigned int *count
 )
 {
-    if (!scanner_is_valid(scanner) ||
-        count == NULL)
+    if (!scanner_is_valid(scanner) || count == NULL)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
@@ -387,8 +412,7 @@ syntra_status_t hal_device_scanner_get_status(
     syntra_hal_scan_status_t *status
 )
 {
-    if (!scanner_is_valid(scanner) ||
-        status == NULL)
+    if (!scanner_is_valid(scanner) || status == NULL)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
@@ -405,8 +429,7 @@ syntra_status_t hal_device_scanner_get_event_count(
     unsigned int *count
 )
 {
-    if (!scanner_is_valid(scanner) ||
-        count == NULL)
+    if (!scanner_is_valid(scanner) || count == NULL)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
@@ -422,8 +445,7 @@ syntra_status_t hal_device_scanner_get_event(
     syntra_hal_scan_event_t *event
 )
 {
-    if (!scanner_is_valid(scanner) ||
-        event == NULL)
+    if (!scanner_is_valid(scanner) || event == NULL)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
@@ -452,11 +474,7 @@ syntra_status_t hal_device_scanner_clear_events(
         return SYNTRA_STATUS_ERROR;
     }
 
-    memset(
-        scanner->events,
-        0,
-        sizeof(scanner->events)
-    );
+    memset(scanner->events, 0, sizeof(scanner->events));
 
     scanner->event_count = 0U;
     scanner->event_sequence = 0U;
@@ -503,12 +521,9 @@ syntra_status_t hal_device_scanner_find_events_by_type(
 
     *found = count;
 
-    if (count > capacity)
-    {
-        return SYNTRA_STATUS_ERROR;
-    }
-
-    return SYNTRA_STATUS_OK;
+    return count > capacity
+        ? SYNTRA_STATUS_ERROR
+        : SYNTRA_STATUS_OK;
 }
 
 /* V3: Statistics */
@@ -533,9 +548,7 @@ syntra_status_t hal_device_scanner_update_statistics(
 
     for (i = 0U; i < scanner->event_count; i++)
     {
-        if (!scan_event_type_is_valid(
-                scanner->events[i].type
-            ))
+        if (!scan_event_type_is_valid(scanner->events[i].type))
         {
             return SYNTRA_STATUS_ERROR;
         }
@@ -546,7 +559,11 @@ syntra_status_t hal_device_scanner_update_statistics(
         );
     }
 
-    scanner->update_count++;
+    if (scanner->update_count < UINT_MAX)
+    {
+        scanner->update_count++;
+    }
+
     scanner->dirty = 0;
 
     return SYNTRA_STATUS_OK;
@@ -557,8 +574,7 @@ syntra_status_t hal_device_scanner_get_statistics(
     syntra_hal_scan_event_statistics_t *statistics
 )
 {
-    if (!scanner_is_valid(scanner) ||
-        statistics == NULL)
+    if (!scanner_is_valid(scanner) || statistics == NULL)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
@@ -589,25 +605,20 @@ syntra_status_t hal_device_scanner_validate(
 
     for (i = 0U; i < scanner->event_count; i++)
     {
-        if (!scan_event_type_is_valid(
-                scanner->events[i].type
-            ) ||
+        if (!scan_event_type_is_valid(scanner->events[i].type) ||
             scanner->events[i].sequence == 0U ||
-            scanner->events[i].sequence >
-                scanner->event_sequence)
+            scanner->events[i].sequence > scanner->event_sequence)
         {
             return SYNTRA_STATUS_ERROR;
         }
 
         if (i > 0U &&
-            scanner->events[i].sequence <=
-                previous_sequence)
+            scanner->events[i].sequence <= previous_sequence)
         {
             return SYNTRA_STATUS_ERROR;
         }
 
-        previous_sequence =
-            scanner->events[i].sequence;
+        previous_sequence = scanner->events[i].sequence;
     }
 
     return SYNTRA_STATUS_OK;
@@ -621,8 +632,7 @@ syntra_status_t hal_device_scanner_get_validation_report(
     unsigned int i;
     unsigned int previous_sequence = 0U;
 
-    if (!scanner_is_valid(scanner) ||
-        report == NULL)
+    if (!scanner_is_valid(scanner) || report == NULL)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
@@ -631,31 +641,27 @@ syntra_status_t hal_device_scanner_get_validation_report(
 
     for (i = 0U; i < scanner->event_count; i++)
     {
-        const syntra_hal_scan_event_t *event =
-            &scanner->events[i];
+        const syntra_hal_scan_event_t *event = &scanner->events[i];
 
         if (!scan_event_type_is_valid(event->type) ||
             event->sequence == 0U ||
-            event->sequence >
-                scanner->event_sequence)
+            event->sequence > scanner->event_sequence)
         {
             report->invalid_events++;
         }
 
         if (i > 0U)
         {
-            if (event->sequence ==
-                previous_sequence)
+            if (event->sequence == previous_sequence)
             {
                 report->duplicate_sequences++;
             }
-            else if (event->sequence <
-                     previous_sequence)
+            else if (event->sequence < previous_sequence)
             {
                 report->out_of_order_sequences++;
             }
-            else if (event->sequence >
-                     previous_sequence + 1U)
+            else if (previous_sequence != UINT_MAX &&
+                     event->sequence > previous_sequence + 1U)
             {
                 report->sequence_gaps++;
             }
@@ -663,6 +669,121 @@ syntra_status_t hal_device_scanner_get_validation_report(
 
         previous_sequence = event->sequence;
     }
+
+    return SYNTRA_STATUS_OK;
+}
+
+/* V4: Find by device ID */
+
+syntra_status_t hal_device_scanner_find_by_device_id(
+    const syntra_hal_device_scanner_t *scanner,
+    unsigned int device_id,
+    syntra_hal_scan_result_t *result
+)
+{
+    unsigned int i;
+
+    if (!scanner_is_valid(scanner) || result == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    for (i = 0U; i < scanner->result_count; i++)
+    {
+        if (scanner->results[i].device_id == device_id &&
+            scanner->results[i].found == 1)
+        {
+            *result = scanner->results[i];
+            return SYNTRA_STATUS_OK;
+        }
+    }
+
+    return SYNTRA_STATUS_ERROR;
+}
+
+/* V4: Query results */
+
+syntra_status_t hal_device_scanner_query(
+    syntra_hal_device_scanner_t *scanner,
+    const syntra_hal_scan_query_t *query,
+    syntra_hal_scan_result_t *results,
+    unsigned int capacity,
+    syntra_hal_scan_query_report_t *report
+)
+{
+    unsigned int i;
+    unsigned int matched = 0U;
+
+    if (!scanner_is_valid(scanner) ||
+        !scan_query_is_valid(query) ||
+        report == NULL ||
+        (capacity > 0U && results == NULL))
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    report->matched_count = 0U;
+    report->total_count = scanner->result_count;
+
+    for (i = 0U; i < scanner->result_count; i++)
+    {
+        if (!scan_result_matches(&scanner->results[i], query))
+        {
+            continue;
+        }
+
+        if (matched < capacity)
+        {
+            results[matched] = scanner->results[i];
+        }
+
+        matched++;
+    }
+
+    report->matched_count = matched;
+
+    if (scanner->query_count < UINT_MAX)
+    {
+        scanner->query_count++;
+    }
+
+    scanner->last_query_count = matched;
+
+    if (matched > capacity)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
+/* V4: Count matching results */
+
+syntra_status_t hal_device_scanner_count_matches(
+    const syntra_hal_device_scanner_t *scanner,
+    const syntra_hal_scan_query_t *query,
+    unsigned int *count
+)
+{
+    unsigned int i;
+    unsigned int matched = 0U;
+
+    if (!scanner_is_valid(scanner) ||
+        !scan_query_is_valid(query) ||
+        count == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    for (i = 0U; i < scanner->result_count; i++)
+    {
+        if (scan_result_matches(&scanner->results[i], query))
+        {
+            matched++;
+        }
+    }
+
+    *count = matched;
 
     return SYNTRA_STATUS_OK;
 }
