@@ -44,6 +44,7 @@ add_library(syntra_kernel STATIC
     kernel/hal/hal_resource_monitor.c
     kernel/hal/hal_capability_manager.c
     kernel/hal/hal_platform.c
+    kernel/hal/hal_backend.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -302,3 +303,12 @@ add_executable(hal_platform_test
 
 target_link_libraries(hal_platform_test PRIVATE syntra_kernel)
 add_test(NAME HALPlatformInterfaceV1Test COMMAND hal_platform_test)
+
+# HAL Hardware Backend V1 Test
+
+add_executable(hal_backend_test
+    tests/hal/hal_backend_test.c
+)
+
+target_link_libraries(hal_backend_test PRIVATE syntra_kernel)
+add_test(NAME HALHardwareBackendV1Test COMMAND hal_backend_test)
