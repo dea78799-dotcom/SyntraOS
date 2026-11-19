@@ -1,3 +1,4 @@
+
 #include "hal_device_event_dispatcher.h"
 
 #include <limits.h>
@@ -17,6 +18,24 @@ static int event_type_is_valid(
                (int)SYNTRA_HAL_DEVICE_EVENT_ADDED &&
            (int)type <
                (int)SYNTRA_HAL_DEVICE_EVENT_TYPE_COUNT;
+}
+
+static int device_state_is_valid(
+    syntra_hal_device_state_t state
+)
+{
+    return (int)state >=
+               (int)SYNTRA_HAL_DEVICE_OFFLINE &&
+           (int)state <=
+               (int)SYNTRA_HAL_DEVICE_ERROR;
+}
+
+static void update_counter(unsigned int *counter)
+{
+    if (*counter < UINT_MAX)
+    {
+        (*counter)++;
+    }
 }
 
 static int dispatcher_is_valid(
@@ -47,17 +66,20 @@ static int dispatcher_is_valid(
         {
             return 0;
         }
+
+        if (entry->registered == 0 &&
+            (entry->handler != NULL || entry->context != NULL))
+        {
+            return 0;
+        }
+
+        if (entry->failure_count > entry->dispatch_count)
+        {
+            return 0;
+        }
     }
 
     return 1;
-}
-
-static void update_counter(unsigned int *counter)
-{
-    if (*counter < UINT_MAX)
-    {
-        (*counter)++;
-    }
 }
 
 static syntra_status_t validate_event(
@@ -71,14 +93,8 @@ static syntra_status_t validate_event(
 
     if (event->sequence == 0U ||
         !event_type_is_valid(event->type) ||
-        (int)event->previous_state <
-            (int)SYNTRA_HAL_DEVICE_OFFLINE ||
-        (int)event->previous_state >
-            (int)SYNTRA_HAL_DEVICE_ERROR ||
-        (int)event->current_state <
-            (int)SYNTRA_HAL_DEVICE_OFFLINE ||
-        (int)event->current_state >
-            (int)SYNTRA_HAL_DEVICE_ERROR)
+        !device_state_is_valid(event->previous_state) ||
+        !device_state_is_valid(event->current_state))
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
@@ -140,10 +156,9 @@ syntra_status_t hal_device_event_dispatcher_register(
 
     entry->handler = handler;
     entry->context = context;
-    entry->dispatch_count = 0U;
-    entry->failure_count = 0U;
     entry->registered = 1;
 
+    update_counter(&dispatcher->update_count);
     dispatcher->dirty = 1;
 
     return SYNTRA_STATUS_OK;
@@ -169,8 +184,16 @@ syntra_status_t hal_device_event_dispatcher_unregister(
         return SYNTRA_STATUS_ERROR;
     }
 
-    memset(entry, 0, sizeof(*entry));
+    /*
+     * Preserve dispatch_count and failure_count.
+     * They represent historical statistics for this event type.
+     */
 
+    entry->handler = NULL;
+    entry->context = NULL;
+    entry->registered = 0;
+
+    update_counter(&dispatcher->update_count);
     dispatcher->dirty = 1;
 
     return SYNTRA_STATUS_OK;
@@ -203,6 +226,8 @@ syntra_status_t hal_device_event_dispatcher_dispatch(
     if (entry->registered != 1)
     {
         update_counter(&dispatcher->unhandled_events);
+        update_counter(&dispatcher->update_count);
+
         dispatcher->dirty = 1;
 
         return SYNTRA_STATUS_NOT_IMPLEMENTED;
@@ -222,6 +247,7 @@ syntra_status_t hal_device_event_dispatcher_dispatch(
         update_counter(&entry->failure_count);
     }
 
+    update_counter(&dispatcher->update_count);
     dispatcher->dirty = 1;
 
     return status;
@@ -235,8 +261,7 @@ syntra_status_t hal_device_event_dispatcher_process_next(
     syntra_hal_device_event_t event;
     syntra_status_t status;
 
-    if (!dispatcher_is_valid(dispatcher) ||
-        queue == NULL)
+    if (!dispatcher_is_valid(dispatcher) || queue == NULL)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
@@ -264,7 +289,9 @@ syntra_status_t hal_device_event_dispatcher_process_all(
 )
 {
     unsigned int count = 0U;
+    unsigned int remaining;
     syntra_status_t status;
+    syntra_status_t first_error = SYNTRA_STATUS_OK;
 
     if (!dispatcher_is_valid(dispatcher) ||
         queue == NULL ||
@@ -277,40 +304,35 @@ syntra_status_t hal_device_event_dispatcher_process_all(
 
     for (;;)
     {
-        status = hal_device_event_dispatcher_process_next(
-            dispatcher,
-            queue
+        status = hal_device_event_queue_get_count(
+            queue,
+            &remaining
         );
 
-        if (status == SYNTRA_STATUS_ERROR)
-        {
-            unsigned int remaining;
-
-            if (hal_device_event_queue_get_count(
-                    queue,
-                    &remaining
-                ) != SYNTRA_STATUS_OK)
-            {
-                return SYNTRA_STATUS_ERROR;
-            }
-
-            if (remaining == 0U)
-            {
-                *processed = count;
-                return SYNTRA_STATUS_OK;
-            }
-
-            *processed = count;
-            return SYNTRA_STATUS_ERROR;
-        }
-
-        if (status == SYNTRA_STATUS_INVALID_ARGUMENT)
+        if (status != SYNTRA_STATUS_OK)
         {
             *processed = count;
             return status;
         }
 
+        if (remaining == 0U)
+        {
+            *processed = count;
+            return first_error;
+        }
+
+        status = hal_device_event_dispatcher_process_next(
+            dispatcher,
+            queue
+        );
+
         count++;
+
+        if (status != SYNTRA_STATUS_OK &&
+            first_error == SYNTRA_STATUS_OK)
+        {
+            first_error = status;
+        }
     }
 }
 
@@ -344,10 +366,14 @@ syntra_status_t hal_device_event_dispatcher_validate(
 )
 {
     unsigned int index;
-    unsigned int total_handlers = 0U;
-    unsigned int successful = 0U;
-    unsigned int failed = 0U;
-    unsigned int unhandled = 0U;
+
+    unsigned long long handler_dispatches = 0ULL;
+    unsigned long long handler_failures = 0ULL;
+
+    unsigned long long expected_total;
+    unsigned long long expected_success;
+    unsigned long long expected_failed;
+    unsigned long long expected_unhandled;
 
     if (!dispatcher_is_valid(dispatcher))
     {
@@ -361,39 +387,47 @@ syntra_status_t hal_device_event_dispatcher_validate(
         const syntra_hal_device_event_handler_entry_t *entry =
             &dispatcher->handlers[index];
 
-        if (entry->registered == 1)
-        {
-            if (UINT_MAX - total_handlers < entry->dispatch_count ||
-                UINT_MAX - failed < entry->failure_count)
-            {
-                return SYNTRA_STATUS_ERROR;
-            }
-
-            total_handlers += entry->dispatch_count;
-            failed += entry->failure_count;
-
-            if (entry->failure_count > entry->dispatch_count)
-            {
-                return SYNTRA_STATUS_ERROR;
-            }
-        }
+        handler_dispatches += entry->dispatch_count;
+        handler_failures += entry->failure_count;
     }
 
-    successful = dispatcher->successful_dispatches;
-    unhandled = dispatcher->unhandled_events;
+    expected_failed = handler_failures;
 
-    if (dispatcher->total_dispatches !=
-        successful + failed + unhandled)
+    if (expected_failed > UINT_MAX)
+    {
+        expected_failed = UINT_MAX;
+    }
+
+    if (expected_failed != dispatcher->failed_dispatches)
     {
         return SYNTRA_STATUS_ERROR;
     }
 
-    if (total_handlers != successful + failed)
+    expected_success = handler_dispatches - handler_failures;
+
+    if (expected_success > UINT_MAX)
+    {
+        expected_success = UINT_MAX;
+    }
+
+    if (expected_success != dispatcher->successful_dispatches)
     {
         return SYNTRA_STATUS_ERROR;
     }
 
-    if (dispatcher->failed_dispatches != failed)
+    expected_unhandled = dispatcher->unhandled_events;
+
+    expected_total =
+        (unsigned long long)dispatcher->successful_dispatches +
+        dispatcher->failed_dispatches +
+        expected_unhandled;
+
+    if (expected_total > UINT_MAX)
+    {
+        expected_total = UINT_MAX;
+    }
+
+    if (expected_total != dispatcher->total_dispatches)
     {
         return SYNTRA_STATUS_ERROR;
     }
