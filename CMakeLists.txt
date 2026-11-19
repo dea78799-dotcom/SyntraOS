@@ -42,6 +42,7 @@ add_library(syntra_kernel STATIC
     kernel/hal/hal_device_manager.c
     kernel/hal/hal_resource_manager.c
     kernel/hal/hal_resource_monitor.c
+    kernel/hal/hal_capability_manager.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -274,9 +275,7 @@ add_executable(hal_resource_manager_test
 target_link_libraries(hal_resource_manager_test PRIVATE syntra_kernel)
 add_test(NAME HALResourceManagerV1Test COMMAND hal_resource_manager_test)
 
-# ==================================================
 # HAL Resource Monitor V1 Test
-# ==================================================
 
 add_executable(hal_resource_monitor_test
     tests/hal/hal_resource_monitor_test.c
@@ -284,3 +283,12 @@ add_executable(hal_resource_monitor_test
 
 target_link_libraries(hal_resource_monitor_test PRIVATE syntra_kernel)
 add_test(NAME HALResourceMonitorV1Test COMMAND hal_resource_monitor_test)
+
+# HAL Capability Manager V1 Test
+
+add_executable(hal_capability_manager_test
+    tests/hal/hal_capability_manager_test.c
+)
+
+target_link_libraries(hal_capability_manager_test PRIVATE syntra_kernel)
+add_test(NAME HALCapabilityManagerV1Test COMMAND hal_capability_manager_test)
