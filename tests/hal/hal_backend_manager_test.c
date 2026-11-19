@@ -21,6 +21,9 @@ int main(void)
 
     assert(manager.initialized == 1);
     assert(manager.backend_count == 0U);
+    assert(manager.available_backends == 0U);
+    assert(manager.unavailable_backends == 0U);
+    assert(manager.dirty == 0);
 
     /* Initialize backends */
 
@@ -42,7 +45,7 @@ int main(void)
         ) == SYNTRA_STATUS_OK
     );
 
-    /* Register backends */
+    /* Register first backend */
 
     assert(
         hal_backend_manager_register(
@@ -50,6 +53,23 @@ int main(void)
             &backend1
         ) == SYNTRA_STATUS_OK
     );
+
+    assert(manager.backend_count == 1U);
+    assert(manager.update_count == 1U);
+    assert(manager.dirty == 1);
+
+    /* Update statistics */
+
+    assert(
+        hal_backend_manager_update(&manager)
+        == SYNTRA_STATUS_OK
+    );
+
+    assert(manager.available_backends == 1U);
+    assert(manager.unavailable_backends == 0U);
+    assert(manager.dirty == 0);
+
+    /* Register second backend */
 
     assert(
         hal_backend_manager_register(
@@ -60,6 +80,18 @@ int main(void)
 
     assert(manager.backend_count == 2U);
     assert(manager.update_count == 2U);
+    assert(manager.dirty == 1);
+
+    /* Update statistics again */
+
+    assert(
+        hal_backend_manager_update(&manager)
+        == SYNTRA_STATUS_OK
+    );
+
+    assert(manager.available_backends == 1U);
+    assert(manager.unavailable_backends == 1U);
+    assert(manager.dirty == 0);
 
     /* Find backend */
 
@@ -106,6 +138,18 @@ int main(void)
 
     assert(manager.backend_count == 1U);
     assert(manager.update_count == 3U);
+    assert(manager.dirty == 1);
+
+    /* Update after unregister */
+
+    assert(
+        hal_backend_manager_update(&manager)
+        == SYNTRA_STATUS_OK
+    );
+
+    assert(manager.available_backends == 0U);
+    assert(manager.unavailable_backends == 1U);
+    assert(manager.dirty == 0);
 
     /* Find removed backend */
 
@@ -138,6 +182,13 @@ int main(void)
     );
 
     assert(
+        hal_backend_manager_register(
+            &manager,
+            NULL
+        ) == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+
+    assert(
         hal_backend_manager_unregister(
             &manager,
             0U
@@ -153,10 +204,23 @@ int main(void)
     );
 
     assert(
+        hal_backend_manager_find(
+            &manager,
+            2U,
+            NULL
+        ) == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+
+    assert(
         hal_backend_manager_get_count(
             &manager,
             NULL
         ) == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+
+    assert(
+        hal_backend_manager_update(NULL)
+        == SYNTRA_STATUS_INVALID_ARGUMENT
     );
 
     /* Reset manager */
@@ -168,6 +232,9 @@ int main(void)
 
     assert(manager.initialized == 0);
     assert(manager.backend_count == 0U);
+    assert(manager.available_backends == 0U);
+    assert(manager.unavailable_backends == 0U);
+    assert(manager.dirty == 0);
 
     assert(
         hal_backend_manager_validate(&manager)
@@ -191,7 +258,7 @@ int main(void)
         == SYNTRA_STATUS_INVALID_ARGUMENT
     );
 
-    printf("HAL Backend Manager V1 tests passed.\n");
+    printf("HAL Backend Manager V2 tests passed.\n");
 
     return 0;
 }
