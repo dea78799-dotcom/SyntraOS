@@ -46,6 +46,7 @@ add_library(syntra_kernel STATIC
     kernel/hal/hal_platform.c
     kernel/hal/hal_backend.c
     kernel/hal/hal_backend_manager.c
+    kernel/hal/hal_device_discovery.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
