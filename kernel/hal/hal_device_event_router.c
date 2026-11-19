@@ -7,14 +7,7 @@
 
 /*
  * SyntraOS HAL Device Event Router
- * Version: 2.0.0
- *
- * Features:
- * - Multiple targets per event type
- * - V1-compatible registration API
- * - Delivery statistics
- * - Historical counters for removed targets
- * - Saturating counters
+ * Version: 2.0.1
  */
 
 static void counter_increment(unsigned int *counter)
@@ -87,9 +80,6 @@ static int event_is_valid(
     return 1;
 }
 
-/*
- * Retire an entry while preserving its historical statistics.
- */
 static void retire_entry(
     syntra_hal_device_event_router_t *router,
     syntra_hal_device_event_route_entry_t *entry
@@ -321,7 +311,8 @@ syntra_status_t hal_device_event_router_add_target(
 
         if (entry->registered == 0)
         {
-            int was_empty = router->target_counts[type_index] == 0U;
+            int was_empty =
+                router->target_counts[type_index] == 0U;
 
             entry->target_queue = target_queue;
             entry->routed_count = 0U;
@@ -418,7 +409,17 @@ syntra_status_t hal_device_event_router_register(
     syntra_hal_device_event_queue_t *target_queue
 )
 {
-    if (router == NULL)
+    /*
+     * Validate arguments BEFORE checking duplicate routes.
+     * This preserves the V1 API error contract.
+     */
+
+    if (router == NULL || target_queue == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (!event_type_is_valid(type))
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
@@ -426,11 +427,6 @@ syntra_status_t hal_device_event_router_register(
     if (!router_is_valid(router))
     {
         return SYNTRA_STATUS_ERROR;
-    }
-
-    if (!event_type_is_valid(type))
-    {
-        return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
 
     if (router->target_counts[(unsigned int)type] != 0U)
@@ -879,6 +875,7 @@ syntra_status_t hal_device_event_router_validate(
     }
 
     delivery_accounted = router->successful_deliveries;
+
     counter_add(
         &delivery_accounted,
         router->failed_deliveries
@@ -890,6 +887,7 @@ syntra_status_t hal_device_event_router_validate(
     }
 
     event_accounted = router->successful_routes;
+
     counter_add(&event_accounted, router->failed_routes);
     counter_add(&event_accounted, router->unhandled_events);
 
