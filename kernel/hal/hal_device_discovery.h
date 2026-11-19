@@ -24,6 +24,15 @@ typedef struct
 
 typedef struct
 {
+    unsigned int total_events;
+    unsigned int added_events;
+    unsigned int removed_events;
+    unsigned int reset_events;
+
+} syntra_hal_discovery_stats_t;
+
+typedef struct
+{
     syntra_hal_device_t *devices[
         SYNTRA_HAL_DEVICE_DISCOVERY_MAX_DEVICES
     ];
@@ -37,6 +46,10 @@ typedef struct
 
     unsigned int event_count;
     unsigned int event_sequence;
+
+    syntra_hal_discovery_stats_t stats;
+
+    unsigned int update_count;
 
     int initialized;
     int dirty;
@@ -81,6 +94,29 @@ syntra_status_t hal_device_discovery_get_event(
     const syntra_hal_device_discovery_t *discovery,
     unsigned int index,
     syntra_hal_discovery_event_t *result
+);
+
+syntra_status_t hal_device_discovery_find_event(
+    const syntra_hal_device_discovery_t *discovery,
+    unsigned int device_id,
+    unsigned int occurrence,
+    syntra_hal_discovery_event_t *result
+);
+
+syntra_status_t hal_device_discovery_get_event_by_type(
+    const syntra_hal_device_discovery_t *discovery,
+    syntra_hal_discovery_event_type_t type,
+    unsigned int occurrence,
+    syntra_hal_discovery_event_t *result
+);
+
+syntra_status_t hal_device_discovery_get_stats(
+    const syntra_hal_device_discovery_t *discovery,
+    syntra_hal_discovery_stats_t *result
+);
+
+syntra_status_t hal_device_discovery_update_stats(
+    syntra_hal_device_discovery_t *discovery
 );
 
 syntra_status_t hal_device_discovery_clear_events(
