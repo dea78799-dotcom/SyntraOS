@@ -30,16 +30,12 @@ int main(void)
     /* Initialize devices */
 
     assert(hal_device_init(
-        &device1,
-        1U,
-        "Timer",
+        &device1, 1U, "Timer",
         SYNTRA_HAL_DEVICE_TIMER
     ) == SYNTRA_STATUS_OK);
 
     assert(hal_device_init(
-        &device2,
-        2U,
-        "Generic",
+        &device2, 2U, "Generic",
         SYNTRA_HAL_DEVICE_TIMER
     ) == SYNTRA_STATUS_OK);
 
@@ -50,28 +46,24 @@ int main(void)
     ) == SYNTRA_STATUS_OK);
 
     assert(hal_device_discovery_add(
-        &discovery,
-        &device1
+        &discovery, &device1
     ) == SYNTRA_STATUS_OK);
 
     assert(hal_device_discovery_add(
-        &discovery,
-        &device2
+        &discovery, &device2
     ) == SYNTRA_STATUS_OK);
 
     /* Initialize scanner */
 
     assert(hal_device_scanner_init(
-        &scanner,
-        &discovery
+        &scanner, &discovery
     ) == SYNTRA_STATUS_OK);
 
     assert(scanner.initialized == 1);
     assert(scanner.dirty == 0);
 
     assert(hal_device_scanner_get_status(
-        &scanner,
-        &status
+        &scanner, &status
     ) == SYNTRA_STATUS_OK);
 
     assert(status == SYNTRA_HAL_SCAN_STATUS_IDLE);
@@ -79,8 +71,7 @@ int main(void)
     /* Initial statistics */
 
     assert(hal_device_scanner_get_statistics(
-        &scanner,
-        &statistics
+        &scanner, &statistics
     ) == SYNTRA_STATUS_OK);
 
     assert(statistics.total == 0U);
@@ -100,8 +91,7 @@ int main(void)
     assert(scanner.scanned_count == 2U);
 
     assert(hal_device_scanner_get_count(
-        &scanner,
-        &count
+        &scanner, &count
     ) == SYNTRA_STATUS_OK);
 
     assert(count == 2U);
@@ -109,9 +99,7 @@ int main(void)
     /* Check first result */
 
     assert(hal_device_scanner_get_result(
-        &scanner,
-        0U,
-        &result
+        &scanner, 0U, &result
     ) == SYNTRA_STATUS_OK);
 
     assert(result.device_id == 1U);
@@ -121,48 +109,40 @@ int main(void)
     /* Check second result */
 
     assert(hal_device_scanner_get_result(
-        &scanner,
-        1U,
-        &result
+        &scanner, 1U, &result
     ) == SYNTRA_STATUS_OK);
 
     assert(result.device_id == 2U);
     assert(result.type == SYNTRA_HAL_DEVICE_TIMER);
     assert(result.found == 1);
 
-    /* Check scan events */
+    /* Check events */
 
     assert(hal_device_scanner_get_event_count(
-        &scanner,
-        &count
+        &scanner, &count
     ) == SYNTRA_STATUS_OK);
 
     assert(count == 2U);
 
     assert(hal_device_scanner_get_event(
-        &scanner,
-        0U,
-        &event
+        &scanner, 0U, &event
     ) == SYNTRA_STATUS_OK);
 
     assert(event.sequence == 1U);
     assert(event.type == SYNTRA_HAL_SCAN_EVENT_STARTED);
 
     assert(hal_device_scanner_get_event(
-        &scanner,
-        1U,
-        &event
+        &scanner, 1U, &event
     ) == SYNTRA_STATUS_OK);
 
     assert(event.sequence == 2U);
     assert(event.type == SYNTRA_HAL_SCAN_EVENT_COMPLETED);
     assert(event.device_count == 2U);
 
-    /* Check statistics after first scan */
+    /* Statistics after first scan */
 
     assert(hal_device_scanner_get_statistics(
-        &scanner,
-        &statistics
+        &scanner, &statistics
     ) == SYNTRA_STATUS_OK);
 
     assert(statistics.total == 2U);
@@ -171,7 +151,7 @@ int main(void)
     assert(statistics.failed == 0U);
     assert(statistics.resets == 0U);
 
-    /* Check filtering: STARTED */
+    /* Filter STARTED */
 
     assert(hal_device_scanner_find_events_by_type(
         &scanner,
@@ -182,9 +162,10 @@ int main(void)
     ) == SYNTRA_STATUS_OK);
 
     assert(filtered_count == 1U);
-    assert(filtered_events[0].type == SYNTRA_HAL_SCAN_EVENT_STARTED);
+    assert(filtered_events[0].type ==
+        SYNTRA_HAL_SCAN_EVENT_STARTED);
 
-    /* Check filtering: COMPLETED */
+    /* Filter COMPLETED */
 
     assert(hal_device_scanner_find_events_by_type(
         &scanner,
@@ -195,9 +176,10 @@ int main(void)
     ) == SYNTRA_STATUS_OK);
 
     assert(filtered_count == 1U);
-    assert(filtered_events[0].type == SYNTRA_HAL_SCAN_EVENT_COMPLETED);
+    assert(filtered_events[0].type ==
+        SYNTRA_HAL_SCAN_EVENT_COMPLETED);
 
-    /* Check filtering: RESET */
+    /* Filter RESET */
 
     assert(hal_device_scanner_find_events_by_type(
         &scanner,
@@ -209,7 +191,7 @@ int main(void)
 
     assert(filtered_count == 0U);
 
-    /* Reset scanner */
+    /* Reset */
 
     assert(hal_device_scanner_reset(
         &scanner
@@ -220,25 +202,21 @@ int main(void)
     assert(scanner.status == SYNTRA_HAL_SCAN_STATUS_IDLE);
 
     assert(hal_device_scanner_get_event_count(
-        &scanner,
-        &count
+        &scanner, &count
     ) == SYNTRA_STATUS_OK);
 
     assert(count == 3U);
 
     assert(hal_device_scanner_get_event(
-        &scanner,
-        2U,
-        &event
+        &scanner, 2U, &event
     ) == SYNTRA_STATUS_OK);
 
     assert(event.type == SYNTRA_HAL_SCAN_EVENT_RESET);
 
-    /* Check statistics after reset */
+    /* Statistics after reset */
 
     assert(hal_device_scanner_get_statistics(
-        &scanner,
-        &statistics
+        &scanner, &statistics
     ) == SYNTRA_STATUS_OK);
 
     assert(statistics.total == 3U);
@@ -255,11 +233,10 @@ int main(void)
 
     assert(scanner.result_count == 2U);
 
-    /* Check updated statistics */
+    /* Updated statistics */
 
     assert(hal_device_scanner_get_statistics(
-        &scanner,
-        &statistics
+        &scanner, &statistics
     ) == SYNTRA_STATUS_OK);
 
     assert(statistics.total == 5U);
@@ -275,19 +252,16 @@ int main(void)
     ) == SYNTRA_STATUS_OK);
 
     assert(hal_device_scanner_get_event_count(
-        &scanner,
-        &count
+        &scanner, &count
     ) == SYNTRA_STATUS_OK);
 
     assert(count == 0U);
-
     assert(scanner.event_sequence == 0U);
 
-    /* Statistics should be cleared */
+    /* Statistics after clearing */
 
     assert(hal_device_scanner_get_statistics(
-        &scanner,
-        &statistics
+        &scanner, &statistics
     ) == SYNTRA_STATUS_OK);
 
     assert(statistics.total == 0U);
@@ -296,7 +270,7 @@ int main(void)
     assert(statistics.failed == 0U);
     assert(statistics.resets == 0U);
 
-    /* Fill event history and test capacity */
+    /* Fill history */
 
     for (i = 0U; i < 70U; i++)
     {
@@ -305,29 +279,28 @@ int main(void)
         ) == SYNTRA_STATUS_OK);
     }
 
-    assert(scanner.event_count == SYNTRA_HAL_SCANNER_MAX_EVENTS);
+    assert(scanner.event_count ==
+        SYNTRA_HAL_SCANNER_MAX_EVENTS);
+
+    /* Oldest retained event */
 
     assert(hal_device_scanner_get_event(
-        &scanner,
-        0U,
-        &event
+        &scanner, 0U, &event
     ) == SYNTRA_STATUS_OK);
-
-    /* Six old events are discarded; sequence starts at 7. */
 
     assert(event.sequence == 7U);
     assert(event.type == SYNTRA_HAL_SCAN_EVENT_RESET);
 
+    /* Latest retained event */
+
     assert(hal_device_scanner_get_event(
-        &scanner,
-        63U,
-        &event
+        &scanner, 63U, &event
     ) == SYNTRA_STATUS_OK);
 
     assert(event.sequence == 70U);
     assert(event.type == SYNTRA_HAL_SCAN_EVENT_RESET);
 
-    /* Filtering after event history overflow */
+    /* Filter retained RESET events */
 
     assert(hal_device_scanner_find_events_by_type(
         &scanner,
@@ -337,30 +310,33 @@ int main(void)
         &filtered_count
     ) == SYNTRA_STATUS_OK);
 
-    assert(filtered_count == SYNTRA_HAL_SCANNER_MAX_EVENTS);
+    assert(filtered_count ==
+        SYNTRA_HAL_SCANNER_MAX_EVENTS);
 
-    /* Check statistics after history overflow */
+    /* Statistics after history overflow */
 
     assert(hal_device_scanner_get_statistics(
-        &scanner,
-        &statistics
+        &scanner, &statistics
     ) == SYNTRA_STATUS_OK);
 
-    assert(statistics.total == SYNTRA_HAL_SCANNER_MAX_EVENTS);
+    assert(statistics.total ==
+        SYNTRA_HAL_SCANNER_MAX_EVENTS);
+
     assert(statistics.started == 0U);
     assert(statistics.completed == 0U);
     assert(statistics.failed == 0U);
-    assert(statistics.resets == SYNTRA_HAL_SCANNER_MAX_EVENTS);
 
-    /* Validate event history */
+    assert(statistics.resets ==
+        SYNTRA_HAL_SCANNER_MAX_EVENTS);
+
+    /* Validate history */
 
     assert(hal_device_scanner_validate(
         &scanner
     ) == SYNTRA_STATUS_OK);
 
     assert(hal_device_scanner_get_validation_report(
-        &scanner,
-        &validation_report
+        &scanner, &validation_report
     ) == SYNTRA_STATUS_OK);
 
     assert(validation_report.invalid_events == 0U);
@@ -376,70 +352,78 @@ int main(void)
         &scanner
     ) == SYNTRA_STATUS_OK);
 
-    assert(scanner.update_count > previous_update_count);
+    assert(scanner.update_count >
+        previous_update_count);
+
     assert(scanner.dirty == 0);
 
-    /* Invalid arguments */
+    /* NULL argument tests */
 
     assert(hal_device_scanner_init(
-        NULL,
-        &discovery
-    ) == SYNTRA_STATUS_ERROR);
+        NULL, &discovery
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    assert(hal_device_scanner_init(
+        &scanner, NULL
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
     assert(hal_device_scanner_reset(
         NULL
-    ) == SYNTRA_STATUS_ERROR);
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
     assert(hal_device_scanner_scan(
         NULL
-    ) == SYNTRA_STATUS_ERROR);
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
     assert(hal_device_scanner_get_result(
-        &scanner,
-        0U,
-        NULL
-    ) == SYNTRA_STATUS_ERROR);
+        &scanner, 0U, NULL
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
     assert(hal_device_scanner_get_count(
-        &scanner,
-        NULL
-    ) == SYNTRA_STATUS_ERROR);
+        &scanner, NULL
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
     assert(hal_device_scanner_get_status(
-        &scanner,
-        NULL
-    ) == SYNTRA_STATUS_ERROR);
+        &scanner, NULL
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
     assert(hal_device_scanner_get_event_count(
-        &scanner,
-        NULL
-    ) == SYNTRA_STATUS_ERROR);
+        &scanner, NULL
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
     assert(hal_device_scanner_get_event(
-        &scanner,
-        0U,
-        NULL
-    ) == SYNTRA_STATUS_ERROR);
-
-    assert(hal_device_scanner_get_event(
-        &scanner,
-        scanner.event_count,
-        &event
-    ) == SYNTRA_STATUS_ERROR);
+        &scanner, 0U, NULL
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
     assert(hal_device_scanner_clear_events(
         NULL
-    ) == SYNTRA_STATUS_ERROR);
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
     assert(hal_device_scanner_get_statistics(
-        &scanner,
-        NULL
-    ) == SYNTRA_STATUS_ERROR);
+        &scanner, NULL
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
     assert(hal_device_scanner_get_validation_report(
-        &scanner,
+        &scanner, NULL
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    assert(hal_device_scanner_update_statistics(
         NULL
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    assert(hal_device_scanner_validate(
+        NULL
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    /* Invalid index */
+
+    assert(hal_device_scanner_get_event(
+        &scanner, scanner.event_count, &event
     ) == SYNTRA_STATUS_ERROR);
+
+    /* NULL array with zero capacity */
+
+    filtered_count = 99U;
 
     assert(hal_device_scanner_find_events_by_type(
         &scanner,
@@ -447,7 +431,11 @@ int main(void)
         NULL,
         0U,
         &filtered_count
-    ) == SYNTRA_STATUS_ERROR);
+    ) == SYNTRA_STATUS_OK);
+
+    assert(filtered_count == 0U);
+
+    /* Invalid event type */
 
     assert(hal_device_scanner_find_events_by_type(
         &scanner,
@@ -455,15 +443,7 @@ int main(void)
         filtered_events,
         SYNTRA_HAL_SCANNER_MAX_EVENTS,
         &filtered_count
-    ) == SYNTRA_STATUS_ERROR);
-
-    assert(hal_device_scanner_update_statistics(
-        NULL
-    ) == SYNTRA_STATUS_ERROR);
-
-    assert(hal_device_scanner_validate(
-        NULL
-    ) == SYNTRA_STATUS_ERROR);
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
     return 0;
 }
