@@ -48,6 +48,7 @@ add_library(syntra_kernel STATIC
     kernel/hal/hal_backend_manager.c
     kernel/hal/hal_device_discovery.c
     kernel/hal/hal_device_scanner.c
+    kernel/hal/hal_device_event_manager.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -284,7 +285,7 @@ add_test(
     COMMAND hal_device_discovery_test
 )
 
-# HAL Device Scanner V2 Test
+# HAL Device Scanner V5 Test
 add_executable(hal_device_scanner_test
     tests/hal/hal_device_scanner_test.c
 )
@@ -293,6 +294,19 @@ target_link_libraries(
     PRIVATE syntra_kernel
 )
 add_test(
-    NAME HALDeviceScannerV2Test
+    NAME HALDeviceScannerV5Test
     COMMAND hal_device_scanner_test
+)
+
+# HAL Device Event Manager V1 Test
+add_executable(hal_device_event_manager_test
+    tests/hal/hal_device_event_manager_test.c
+)
+target_link_libraries(
+    hal_device_event_manager_test
+    PRIVATE syntra_kernel
+)
+add_test(
+    NAME HALDeviceEventManagerV1Test
+    COMMAND hal_device_event_manager_test
 )
