@@ -1,4 +1,3 @@
-
 #include "hal_device_manager.h"
 
 #include <limits.h>
@@ -225,6 +224,11 @@ syntra_status_t hal_device_manager_refresh(
     unsigned int errors = 0U;
 
     syntra_hal_device_t *device;
+
+    if (manager == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
 
     if (!manager_is_valid(manager))
     {
