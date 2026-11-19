@@ -29,6 +29,70 @@ static syntra_status_t manager_is_valid(
     return SYNTRA_STATUS_OK;
 }
 
+static syntra_status_t find_device(
+    syntra_hal_device_manager_t *manager,
+    unsigned int device_id,
+    syntra_hal_device_t **device
+)
+{
+    if (manager_is_valid(manager) != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    return hal_registry_find_by_id(
+        manager->registry,
+        device_id,
+        device
+    );
+}
+
+syntra_status_t hal_device_manager_record_event(
+    syntra_hal_device_manager_t *manager,
+    unsigned int device_id,
+    syntra_hal_event_type_t type
+)
+{
+    if (manager_is_valid(manager) != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    if (type < SYNTRA_HAL_EVENT_STARTED ||
+        type > SYNTRA_HAL_EVENT_ERROR)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    unsigned int index;
+
+    if (manager->event_count <
+        SYNTRA_HAL_MAX_DEVICE_EVENTS)
+    {
+        index = manager->event_count;
+        manager->event_count++;
+    }
+    else
+    {
+        for (unsigned int i = 1U;
+             i < SYNTRA_HAL_MAX_DEVICE_EVENTS;
+             i++)
+        {
+            manager->events[i - 1U] =
+                manager->events[i];
+        }
+
+        index = SYNTRA_HAL_MAX_DEVICE_EVENTS - 1U;
+    }
+
+    manager->events[index].device_id = device_id;
+    manager->events[index].type = type;
+    manager->events[index].sequence =
+        ++manager->next_event_sequence;
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t hal_device_manager_init(
     syntra_hal_device_manager_t *manager,
     syntra_hal_registry_t *registry
@@ -88,6 +152,12 @@ syntra_status_t hal_device_manager_validate(
         return status;
     }
 
+    if (manager->event_count >
+        SYNTRA_HAL_MAX_DEVICE_EVENTS)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
     for (unsigned int i = 0U;
          i < manager->registry->device_count;
          i++)
@@ -95,12 +165,8 @@ syntra_status_t hal_device_manager_validate(
         const syntra_hal_device_t *device =
             manager->registry->devices[i];
 
-        if (device == NULL)
-        {
-            return SYNTRA_STATUS_ERROR;
-        }
-
-        if (device->initialized != 1)
+        if (device == NULL ||
+            device->initialized != 1)
         {
             return SYNTRA_STATUS_ERROR;
         }
@@ -123,31 +189,38 @@ syntra_status_t hal_device_manager_start(
 {
     syntra_hal_device_t *device = NULL;
 
-    syntra_status_t status =
-        manager_is_valid(manager);
-
-    if (status != SYNTRA_STATUS_OK)
-    {
-        return status;
-    }
-
-    if (hal_registry_find_by_id(
-            manager->registry,
-            device_id,
-            &device
-        ) != SYNTRA_STATUS_OK)
+    if (manager_is_valid(manager) != SYNTRA_STATUS_OK)
     {
         return SYNTRA_STATUS_ERROR;
     }
 
-    status = hal_device_start(device);
-
-    if (status != SYNTRA_STATUS_OK)
+    if (find_device(manager, device_id, &device) !=
+        SYNTRA_STATUS_OK)
     {
-        return status;
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    if (hal_device_start(device) != SYNTRA_STATUS_OK)
+    {
+        (void)hal_device_manager_record_event(
+            manager,
+            device_id,
+            SYNTRA_HAL_EVENT_ERROR
+        );
+
+        return SYNTRA_STATUS_ERROR;
     }
 
     manager->dirty = 1;
+
+    if (hal_device_manager_record_event(
+            manager,
+            device_id,
+            SYNTRA_HAL_EVENT_STARTED
+        ) != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
 
     return hal_device_manager_refresh(manager);
 }
@@ -159,31 +232,38 @@ syntra_status_t hal_device_manager_stop(
 {
     syntra_hal_device_t *device = NULL;
 
-    syntra_status_t status =
-        manager_is_valid(manager);
-
-    if (status != SYNTRA_STATUS_OK)
-    {
-        return status;
-    }
-
-    if (hal_registry_find_by_id(
-            manager->registry,
-            device_id,
-            &device
-        ) != SYNTRA_STATUS_OK)
+    if (manager_is_valid(manager) != SYNTRA_STATUS_OK)
     {
         return SYNTRA_STATUS_ERROR;
     }
 
-    status = hal_device_stop(device);
-
-    if (status != SYNTRA_STATUS_OK)
+    if (find_device(manager, device_id, &device) !=
+        SYNTRA_STATUS_OK)
     {
-        return status;
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    if (hal_device_stop(device) != SYNTRA_STATUS_OK)
+    {
+        (void)hal_device_manager_record_event(
+            manager,
+            device_id,
+            SYNTRA_HAL_EVENT_ERROR
+        );
+
+        return SYNTRA_STATUS_ERROR;
     }
 
     manager->dirty = 1;
+
+    if (hal_device_manager_record_event(
+            manager,
+            device_id,
+            SYNTRA_HAL_EVENT_STOPPED
+        ) != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
 
     return hal_device_manager_refresh(manager);
 }
@@ -195,31 +275,38 @@ syntra_status_t hal_device_manager_restart(
 {
     syntra_hal_device_t *device = NULL;
 
-    syntra_status_t status =
-        manager_is_valid(manager);
-
-    if (status != SYNTRA_STATUS_OK)
-    {
-        return status;
-    }
-
-    if (hal_registry_find_by_id(
-            manager->registry,
-            device_id,
-            &device
-        ) != SYNTRA_STATUS_OK)
+    if (manager_is_valid(manager) != SYNTRA_STATUS_OK)
     {
         return SYNTRA_STATUS_ERROR;
     }
 
-    status = hal_device_restart(device);
-
-    if (status != SYNTRA_STATUS_OK)
+    if (find_device(manager, device_id, &device) !=
+        SYNTRA_STATUS_OK)
     {
-        return status;
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    if (hal_device_restart(device) != SYNTRA_STATUS_OK)
+    {
+        (void)hal_device_manager_record_event(
+            manager,
+            device_id,
+            SYNTRA_HAL_EVENT_ERROR
+        );
+
+        return SYNTRA_STATUS_ERROR;
     }
 
     manager->dirty = 1;
+
+    if (hal_device_manager_record_event(
+            manager,
+            device_id,
+            SYNTRA_HAL_EVENT_RESTARTED
+        ) != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
 
     return hal_device_manager_refresh(manager);
 }
@@ -320,6 +407,96 @@ syntra_status_t hal_device_manager_refresh(
 
     manager->update_count++;
     manager->dirty = 0;
+
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t hal_device_manager_get_event(
+    const syntra_hal_device_manager_t *manager,
+    unsigned int index,
+    syntra_hal_device_event_t *event
+)
+{
+    if (manager == NULL || event == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (manager_is_valid(manager) != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    if (index >= manager->event_count)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    *event = manager->events[index];
+
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t hal_device_manager_find_events(
+    const syntra_hal_device_manager_t *manager,
+    unsigned int device_id,
+    syntra_hal_device_event_t *events,
+    unsigned int capacity,
+    unsigned int *found
+)
+{
+    if (manager == NULL || found == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (capacity > 0U && events == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (manager_is_valid(manager) != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    unsigned int count = 0U;
+
+    for (unsigned int i = 0U;
+         i < manager->event_count;
+         i++)
+    {
+        if (manager->events[i].device_id == device_id)
+        {
+            if (count < capacity)
+            {
+                events[count] = manager->events[i];
+            }
+
+            count++;
+        }
+    }
+
+    *found = count;
+
+    return count > capacity
+        ? SYNTRA_STATUS_ERROR
+        : SYNTRA_STATUS_OK;
+}
+
+syntra_status_t hal_device_manager_clear_events(
+    syntra_hal_device_manager_t *manager
+)
+{
+    if (manager_is_valid(manager) != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    memset(manager->events, 0, sizeof(manager->events));
+
+    manager->event_count = 0U;
+    manager->next_event_sequence = 0U;
 
     return SYNTRA_STATUS_OK;
 }
