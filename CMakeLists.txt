@@ -352,3 +352,16 @@ add_test(
     NAME HALDeviceEventRouterV1Test
     COMMAND hal_device_event_router_test
 )
+
+# HAL Device Event Router V2 Test
+add_executable(hal_device_event_router_v2_test
+    tests/hal/hal_device_event_router_v2_test.c
+)
+target_link_libraries(
+    hal_device_event_router_v2_test
+    PRIVATE syntra_kernel
+)
+add_test(
+    NAME HALDeviceEventRouterV2Test
+    COMMAND hal_device_event_router_v2_test
+)
