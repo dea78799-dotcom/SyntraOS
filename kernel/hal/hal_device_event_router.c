@@ -829,6 +829,19 @@ syntra_status_t hal_device_event_router_validate(
     unsigned int event_accounted = 0U;
     unsigned int delivery_accounted = 0U;
 
+    /*
+     * NULL argument is an invalid caller argument,
+     * not an internal router-state error.
+     */
+    if (router == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    /*
+     * A non-NULL router with invalid internal state
+     * returns SYNTRA_STATUS_ERROR.
+     */
     if (!router_is_valid(router))
     {
         return SYNTRA_STATUS_ERROR;
