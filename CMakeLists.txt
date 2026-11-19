@@ -284,7 +284,7 @@ add_test(
     COMMAND hal_device_discovery_test
 )
 
-# HAL Device Scanner V1 Test
+# HAL Device Scanner V2 Test
 add_executable(hal_device_scanner_test
     tests/hal/hal_device_scanner_test.c
 )
@@ -293,6 +293,6 @@ target_link_libraries(
     PRIVATE syntra_kernel
 )
 add_test(
-    NAME HALDeviceScannerV1Test
+    NAME HALDeviceScannerV2Test
     COMMAND hal_device_scanner_test
 )
