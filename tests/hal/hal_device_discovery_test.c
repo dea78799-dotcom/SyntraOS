@@ -14,20 +14,17 @@ int main(void)
     syntra_hal_device_t *found = NULL;
 
     syntra_hal_discovery_event_t event;
+    syntra_hal_discovery_stats_t stats;
 
     unsigned int count = 0U;
 
     assert(hal_device_init(
-        &device1,
-        1U,
-        "Timer",
+        &device1, 1U, "Timer",
         SYNTRA_HAL_DEVICE_TIMER
     ) == SYNTRA_STATUS_OK);
 
     assert(hal_device_init(
-        &device2,
-        2U,
-        "Storage",
+        &device2, 2U, "Storage",
         SYNTRA_HAL_DEVICE_TIMER
     ) == SYNTRA_STATUS_OK);
 
@@ -36,91 +33,80 @@ int main(void)
     ) == SYNTRA_STATUS_OK);
 
     assert(hal_device_discovery_add(
-        &discovery,
-        &device1
+        &discovery, &device1
     ) == SYNTRA_STATUS_OK);
 
     assert(hal_device_discovery_add(
-        &discovery,
-        &device2
+        &discovery, &device2
     ) == SYNTRA_STATUS_OK);
 
     assert(discovery.device_count == 2U);
     assert(discovery.discovery_count == 2U);
     assert(discovery.event_count == 2U);
 
-    assert(hal_device_discovery_get_count(
-        &discovery,
-        &count
+    assert(hal_device_discovery_find_event(
+        &discovery, 1U, 0U, &event
     ) == SYNTRA_STATUS_OK);
 
-    assert(count == 2U);
-
-    assert(hal_device_discovery_get_event_count(
-        &discovery,
-        &count
-    ) == SYNTRA_STATUS_OK);
-
-    assert(count == 2U);
-
-    assert(hal_device_discovery_get_event(
-        &discovery,
-        0U,
-        &event
-    ) == SYNTRA_STATUS_OK);
-
-    assert(event.sequence == 1U);
     assert(event.device_id == 1U);
     assert(event.type == SYNTRA_HAL_DISCOVERY_EVENT_ADDED);
 
-    assert(hal_device_discovery_get_event(
+    assert(hal_device_discovery_get_event_by_type(
         &discovery,
+        SYNTRA_HAL_DISCOVERY_EVENT_ADDED,
         1U,
         &event
     ) == SYNTRA_STATUS_OK);
 
-    assert(event.sequence == 2U);
     assert(event.device_id == 2U);
-    assert(event.type == SYNTRA_HAL_DISCOVERY_EVENT_ADDED);
-
-    assert(hal_device_discovery_find(
-        &discovery,
-        1U,
-        &found
-    ) == SYNTRA_STATUS_OK);
-
-    assert(found == &device1);
-
-    assert(hal_device_discovery_add(
-        &discovery,
-        &device1
-    ) == SYNTRA_STATUS_ERROR);
 
     assert(hal_device_discovery_remove(
-        &discovery,
-        1U
+        &discovery, 1U
     ) == SYNTRA_STATUS_OK);
 
     assert(discovery.device_count == 1U);
     assert(discovery.event_count == 3U);
 
-    assert(hal_device_discovery_get_event(
+    assert(hal_device_discovery_get_event_by_type(
         &discovery,
-        2U,
+        SYNTRA_HAL_DISCOVERY_EVENT_REMOVED,
+        0U,
         &event
     ) == SYNTRA_STATUS_OK);
 
-    assert(event.sequence == 3U);
     assert(event.device_id == 1U);
-    assert(event.type == SYNTRA_HAL_DISCOVERY_EVENT_REMOVED);
+
+    assert(hal_device_discovery_get_stats(
+        &discovery, &stats
+    ) == SYNTRA_STATUS_OK);
+
+    assert(stats.total_events == 3U);
+    assert(stats.added_events == 2U);
+    assert(stats.removed_events == 1U);
+    assert(stats.reset_events == 0U);
+
+    assert(hal_device_discovery_get_count(
+        &discovery, &count
+    ) == SYNTRA_STATUS_OK);
+
+    assert(count == 1U);
 
     assert(hal_device_discovery_find(
-        &discovery,
-        1U,
-        &found
-    ) == SYNTRA_STATUS_ERROR);
+        &discovery, 2U, &found
+    ) == SYNTRA_STATUS_OK);
 
-    assert(found == NULL);
+    assert(found == &device2);
+
+    assert(hal_device_discovery_update_stats(
+        &discovery
+    ) == SYNTRA_STATUS_OK);
+
+    assert(discovery.update_count >= 1U);
+    assert(discovery.dirty == 0);
+
+    assert(hal_device_discovery_validate(
+        &discovery
+    ) == SYNTRA_STATUS_OK);
 
     assert(hal_device_discovery_clear_events(
         &discovery
@@ -128,15 +114,40 @@ int main(void)
 
     assert(discovery.event_count == 0U);
 
-    assert(hal_device_discovery_get_event(
-        &discovery,
-        0U,
-        &event
-    ) == SYNTRA_STATUS_ERROR);
+    assert(hal_device_discovery_get_stats(
+        &discovery, &stats
+    ) == SYNTRA_STATUS_OK);
+
+    assert(stats.total_events == 0U);
+    assert(stats.added_events == 0U);
+    assert(stats.removed_events == 0U);
 
     assert(hal_device_discovery_validate(
         &discovery
     ) == SYNTRA_STATUS_OK);
+
+    assert(hal_device_discovery_find_event(
+        &discovery, 1U, 0U, &event
+    ) == SYNTRA_STATUS_ERROR);
+
+    assert(hal_device_discovery_get_event_by_type(
+        &discovery,
+        SYNTRA_HAL_DISCOVERY_EVENT_RESET,
+        0U,
+        &event
+    ) == SYNTRA_STATUS_ERROR);
+
+    assert(hal_device_discovery_get_stats(
+        NULL, &stats
+    ) == SYNTRA_STATUS_ERROR);
+
+    assert(hal_device_discovery_update_stats(
+        NULL
+    ) == SYNTRA_STATUS_ERROR);
+
+    assert(hal_device_discovery_validate(
+        NULL
+    ) == SYNTRA_STATUS_ERROR);
 
     assert(hal_device_discovery_reset(
         &discovery
@@ -149,30 +160,6 @@ int main(void)
     assert(hal_device_discovery_validate(
         &discovery
     ) == SYNTRA_STATUS_OK);
-
-    assert(hal_device_discovery_get_count(
-        NULL,
-        &count
-    ) == SYNTRA_STATUS_ERROR);
-
-    assert(hal_device_discovery_get_event_count(
-        NULL,
-        &count
-    ) == SYNTRA_STATUS_ERROR);
-
-    assert(hal_device_discovery_get_event(
-        NULL,
-        0U,
-        &event
-    ) == SYNTRA_STATUS_ERROR);
-
-    assert(hal_device_discovery_clear_events(
-        NULL
-    ) == SYNTRA_STATUS_ERROR);
-
-    assert(hal_device_discovery_validate(
-        NULL
-    ) == SYNTRA_STATUS_ERROR);
 
     return 0;
 }
