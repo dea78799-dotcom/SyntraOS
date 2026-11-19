@@ -1,3 +1,4 @@
+
 #include "hal_device_manager.h"
 
 #include <limits.h>
@@ -225,6 +226,7 @@ syntra_status_t hal_device_manager_refresh(
 
     syntra_hal_device_t *device;
 
+    /* NULL argument validation */
     if (manager == NULL)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
