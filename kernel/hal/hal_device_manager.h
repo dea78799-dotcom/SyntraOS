@@ -7,7 +7,7 @@
 
 /*
  * SyntraOS HAL Device Manager
- * Version: 1.0.0
+ * Version: 2.0.0
  */
 
 typedef struct
@@ -18,7 +18,11 @@ typedef struct
     unsigned int online_devices;
     unsigned int offline_devices;
 
+    unsigned int error_devices;
+    unsigned int update_count;
+
     int initialized;
+    int dirty;
 
 } syntra_hal_device_manager_t;
 
@@ -61,6 +65,12 @@ syntra_status_t hal_device_manager_get_device(
 syntra_status_t hal_device_manager_get_info(
     const syntra_hal_device_manager_t *manager,
     syntra_hal_device_manager_t *info
+);
+
+/* Validation and synchronization */
+
+syntra_status_t hal_device_manager_validate(
+    const syntra_hal_device_manager_t *manager
 );
 
 syntra_status_t hal_device_manager_refresh(
