@@ -1,4 +1,3 @@
-
 #include "hal_device_manager.h"
 
 #include <limits.h>
@@ -226,7 +225,6 @@ syntra_status_t hal_device_manager_refresh(
 
     syntra_hal_device_t *device;
 
-    /* NULL argument validation */
     if (manager == NULL)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
@@ -291,6 +289,11 @@ syntra_status_t hal_device_manager_record_event(
 {
     unsigned int index;
     syntra_hal_device_t *device = NULL;
+
+    if (manager == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
 
     if (!manager_is_valid(manager))
     {
@@ -416,6 +419,11 @@ syntra_status_t hal_device_manager_clear_events(
     syntra_hal_device_manager_t *manager
 )
 {
+    if (manager == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
     if (!manager_is_valid(manager))
     {
         return SYNTRA_STATUS_ERROR;
@@ -486,6 +494,11 @@ syntra_status_t hal_device_manager_start(
     syntra_hal_device_t *device = NULL;
     syntra_status_t status;
 
+    if (manager == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
     if (!manager_is_valid(manager))
     {
         return SYNTRA_STATUS_ERROR;
@@ -520,6 +533,11 @@ syntra_status_t hal_device_manager_stop(
     syntra_hal_device_t *device = NULL;
     syntra_status_t status;
 
+    if (manager == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
     if (!manager_is_valid(manager))
     {
         return SYNTRA_STATUS_ERROR;
@@ -553,6 +571,11 @@ syntra_status_t hal_device_manager_restart(
 {
     syntra_hal_device_t *device = NULL;
     syntra_status_t status;
+
+    if (manager == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
 
     if (!manager_is_valid(manager))
     {
