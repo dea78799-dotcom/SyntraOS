@@ -34,7 +34,7 @@ static int manager_is_valid(
     }
 
     if (manager->registry->device_count >
-        SYNTRA_HAL_MAX_DEVICES)
+        SYNTRA_HAL_REGISTRY_MAX_DEVICES)
     {
         return 0;
     }
@@ -52,8 +52,8 @@ static int event_type_is_valid(
     syntra_hal_event_type_t type
 )
 {
-    return type >= SYNTRA_HAL_EVENT_STARTED &&
-           type < SYNTRA_HAL_EVENT_TYPE_COUNT;
+    return (int)type >= (int)SYNTRA_HAL_EVENT_STARTED &&
+           (unsigned int)type < SYNTRA_HAL_EVENT_TYPE_COUNT;
 }
 
 static void statistics_add_event(
@@ -161,7 +161,8 @@ syntra_status_t hal_device_manager_init(
         return SYNTRA_STATUS_ERROR;
     }
 
-    if (registry->device_count > SYNTRA_HAL_MAX_DEVICES)
+    if (registry->device_count >
+        SYNTRA_HAL_REGISTRY_MAX_DEVICES)
     {
         return SYNTRA_STATUS_ERROR;
     }
