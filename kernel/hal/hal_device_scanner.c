@@ -13,8 +13,9 @@ static syntra_status_t scanner_validate(
         return SYNTRA_STATUS_ERROR;
     }
 
-    if (!scanner->initialized ||
-        scanner->discovery == NULL)
+    if (scanner->initialized == 0 ||
+        scanner->discovery == NULL ||
+        scanner->discovery->initialized == 0)
     {
         return SYNTRA_STATUS_ERROR;
     }
@@ -72,7 +73,7 @@ syntra_status_t hal_device_scanner_scan(
     syntra_hal_device_scanner_t *scanner
 )
 {
-    unsigned int device_count = 0U;
+    unsigned int device_count;
     unsigned int i;
 
     if (scanner_validate(scanner) != SYNTRA_STATUS_OK)
@@ -84,16 +85,17 @@ syntra_status_t hal_device_scanner_scan(
     scanner->result_count = 0U;
     scanner->scanned_count = 0U;
 
-    if (hal_device_discovery_get_count(
-            scanner->discovery,
-            &device_count
-        ) != SYNTRA_STATUS_OK)
-    {
-        scanner->status = SYNTRA_HAL_SCAN_STATUS_FAILED;
-        return SYNTRA_STATUS_ERROR;
-    }
+    memset(
+        scanner->results,
+        0,
+        sizeof(scanner->results)
+    );
 
-    if (device_count > SYNTRA_HAL_SCANNER_MAX_RESULTS)
+    device_count = scanner->discovery->device_count;
+
+    if (device_count >
+        SYNTRA_HAL_DEVICE_DISCOVERY_MAX_DEVICES ||
+        device_count > SYNTRA_HAL_SCANNER_MAX_RESULTS)
     {
         scanner->status = SYNTRA_HAL_SCAN_STATUS_FAILED;
         return SYNTRA_STATUS_ERROR;
@@ -101,15 +103,12 @@ syntra_status_t hal_device_scanner_scan(
 
     for (i = 0U; i < device_count; i++)
     {
-        syntra_hal_device_t *device = NULL;
+        syntra_hal_device_t *device;
         syntra_hal_scan_result_t *result;
 
-        if (hal_device_discovery_get_device(
-                scanner->discovery,
-                i,
-                &device
-            ) != SYNTRA_STATUS_OK ||
-            device == NULL)
+        device = scanner->discovery->devices[i];
+
+        if (device == NULL || device->initialized == 0)
         {
             scanner->status = SYNTRA_HAL_SCAN_STATUS_FAILED;
             return SYNTRA_STATUS_ERROR;
