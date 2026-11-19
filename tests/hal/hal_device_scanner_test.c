@@ -1,7 +1,14 @@
+
 #include "hal_device_scanner.h"
 
 #include <assert.h>
 #include <stddef.h>
+
+/*
+ * SyntraOS
+ * HAL Device Scanner Test
+ * Version: 4
+ */
 
 int main(void)
 {
@@ -12,6 +19,10 @@ int main(void)
     syntra_hal_device_t device2;
 
     syntra_hal_scan_result_t result;
+    syntra_hal_scan_result_t query_results[
+        SYNTRA_HAL_SCANNER_MAX_RESULTS
+    ];
+
     syntra_hal_scan_status_t status;
     syntra_hal_scan_event_t event;
 
@@ -22,9 +33,13 @@ int main(void)
     syntra_hal_scan_event_statistics_t statistics;
     syntra_hal_scan_validation_report_t validation_report;
 
+    syntra_hal_scan_query_t query;
+    syntra_hal_scan_query_report_t query_report;
+
     unsigned int count = 0U;
     unsigned int filtered_count = 0U;
     unsigned int previous_update_count;
+    unsigned int previous_query_count;
     unsigned int i;
 
     /* Initialize devices */
@@ -245,6 +260,160 @@ int main(void)
     assert(statistics.failed == 0U);
     assert(statistics.resets == 1U);
 
+    /* ================================================
+     * V4: Find device by ID
+     * ================================================ */
+
+    assert(hal_device_scanner_find_by_device_id(
+        &scanner,
+        1U,
+        &result
+    ) == SYNTRA_STATUS_OK);
+
+    assert(result.device_id == 1U);
+    assert(result.type == SYNTRA_HAL_DEVICE_TIMER);
+    assert(result.found == 1);
+
+    assert(hal_device_scanner_find_by_device_id(
+        &scanner,
+        2U,
+        &result
+    ) == SYNTRA_STATUS_OK);
+
+    assert(result.device_id == 2U);
+    assert(result.found == 1);
+
+    /* Unknown device ID */
+
+    assert(hal_device_scanner_find_by_device_id(
+        &scanner,
+        999U,
+        &result
+    ) == SYNTRA_STATUS_ERROR);
+
+    /* ================================================
+     * V4: Query by device type
+     * ================================================ */
+
+    query.device_id = 0U;
+    query.type = SYNTRA_HAL_DEVICE_TIMER;
+    query.state = SYNTRA_HAL_DEVICE_OFFLINE;
+
+    query.match_device_id = 0;
+    query.match_type = 1;
+    query.match_state = 0;
+    query.match_found = 0;
+
+    assert(hal_device_scanner_query(
+        &scanner,
+        &query,
+        query_results,
+        SYNTRA_HAL_SCANNER_MAX_RESULTS,
+        &query_report
+    ) == SYNTRA_STATUS_OK);
+
+    assert(query_report.total_count == 2U);
+    assert(query_report.matched_count == 2U);
+
+    assert(query_results[0].type ==
+        SYNTRA_HAL_DEVICE_TIMER);
+
+    assert(query_results[1].type ==
+        SYNTRA_HAL_DEVICE_TIMER);
+
+    /* ================================================
+     * V4: Query by device ID
+     * ================================================ */
+
+    query.device_id = 1U;
+    query.match_device_id = 1;
+    query.match_type = 0;
+    query.match_state = 0;
+    query.match_found = 0;
+
+    assert(hal_device_scanner_query(
+        &scanner,
+        &query,
+        query_results,
+        SYNTRA_HAL_SCANNER_MAX_RESULTS,
+        &query_report
+    ) == SYNTRA_STATUS_OK);
+
+    assert(query_report.total_count == 1U);
+    assert(query_report.matched_count == 1U);
+    assert(query_results[0].device_id == 1U);
+
+    /* ================================================
+     * V4: Query by found status
+     * ================================================ */
+
+    query.match_device_id = 0;
+    query.match_found = 1;
+
+    assert(hal_device_scanner_query(
+        &scanner,
+        &query,
+        query_results,
+        SYNTRA_HAL_SCANNER_MAX_RESULTS,
+        &query_report
+    ) == SYNTRA_STATUS_OK);
+
+    assert(query_report.total_count == 2U);
+    assert(query_report.matched_count == 2U);
+
+    assert(query_results[0].found == 1);
+    assert(query_results[1].found == 1);
+
+    /* ================================================
+     * V4: Count matching results
+     * ================================================ */
+
+    query.match_device_id = 0;
+    query.match_type = 1;
+    query.match_state = 0;
+    query.match_found = 0;
+
+    assert(hal_device_scanner_count_matches(
+        &scanner,
+        &query,
+        &count
+    ) == SYNTRA_STATUS_OK);
+
+    assert(count == 2U);
+
+    /* Count by device ID */
+
+    query.device_id = 2U;
+    query.match_device_id = 1;
+    query.match_type = 0;
+
+    assert(hal_device_scanner_count_matches(
+        &scanner,
+        &query,
+        &count
+    ) == SYNTRA_STATUS_OK);
+
+    assert(count == 1U);
+
+    /* Count query should not change query history */
+
+    previous_query_count = scanner.query_count;
+
+    assert(hal_device_scanner_count_matches(
+        &scanner,
+        &query,
+        &count
+    ) == SYNTRA_STATUS_OK);
+
+    assert(scanner.query_count == previous_query_count);
+
+    /* ================================================
+     * V4: Query tracking
+     * ================================================ */
+
+    assert(scanner.query_count > 0U);
+    assert(scanner.last_query_count == 2U);
+
     /* Clear events */
 
     assert(hal_device_scanner_clear_events(
@@ -357,7 +526,9 @@ int main(void)
 
     assert(scanner.dirty == 0);
 
-    /* NULL argument tests */
+    /* ================================================
+     * NULL argument tests
+     * ================================================ */
 
     assert(hal_device_scanner_init(
         NULL, &discovery
@@ -415,7 +586,61 @@ int main(void)
         NULL
     ) == SYNTRA_STATUS_INVALID_ARGUMENT);
 
-    /* Invalid index */
+    /* V4 NULL argument tests */
+
+    assert(hal_device_scanner_find_by_device_id(
+        NULL, 1U, &result
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    assert(hal_device_scanner_find_by_device_id(
+        &scanner, 1U, NULL
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    assert(hal_device_scanner_query(
+        NULL,
+        &query,
+        query_results,
+        SYNTRA_HAL_SCANNER_MAX_RESULTS,
+        &query_report
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    assert(hal_device_scanner_query(
+        &scanner,
+        NULL,
+        query_results,
+        SYNTRA_HAL_SCANNER_MAX_RESULTS,
+        &query_report
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    assert(hal_device_scanner_query(
+        &scanner,
+        &query,
+        query_results,
+        SYNTRA_HAL_SCANNER_MAX_RESULTS,
+        NULL
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    assert(hal_device_scanner_count_matches(
+        NULL,
+        &query,
+        &count
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    assert(hal_device_scanner_count_matches(
+        &scanner,
+        NULL,
+        &count
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    assert(hal_device_scanner_count_matches(
+        &scanner,
+        &query,
+        NULL
+    ) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    /* ================================================
+     * Invalid index and invalid arguments
+     * ================================================ */
 
     assert(hal_device_scanner_get_event(
         &scanner, scanner.event_count, &event
