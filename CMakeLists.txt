@@ -49,6 +49,7 @@ add_library(syntra_kernel STATIC
     kernel/hal/hal_device_discovery.c
     kernel/hal/hal_device_scanner.c
     kernel/hal/hal_device_event_manager.c
+    kernel/hal/hal_device_event_queue.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -309,4 +310,17 @@ target_link_libraries(
 add_test(
     NAME HALDeviceEventManagerV1Test
     COMMAND hal_device_event_manager_test
+)
+
+# HAL Device Event Queue V1 Test
+add_executable(hal_device_event_queue_test
+    tests/hal/hal_device_event_queue_test.c
+)
+target_link_libraries(
+    hal_device_event_queue_test
+    PRIVATE syntra_kernel
+)
+add_test(
+    NAME HALDeviceEventQueueV1Test
+    COMMAND hal_device_event_queue_test
 )
