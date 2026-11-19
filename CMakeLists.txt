@@ -255,7 +255,7 @@ target_link_libraries(hal_lifecycle_test PRIVATE syntra_kernel)
 add_test(NAME HALLifecycleV1Test COMMAND hal_lifecycle_test)
 
 # ==================================================
-# HAL Device Manager V3 Test
+# HAL Device Manager V4 Test
 # ==================================================
 
 add_executable(hal_device_manager_test
@@ -263,4 +263,4 @@ add_executable(hal_device_manager_test
 )
 
 target_link_libraries(hal_device_manager_test PRIVATE syntra_kernel)
-add_test(NAME HALDeviceManagerV3Test COMMAND hal_device_manager_test)
+add_test(NAME HALDeviceManagerV4Test COMMAND hal_device_manager_test)
