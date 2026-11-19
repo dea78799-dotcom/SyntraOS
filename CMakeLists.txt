@@ -271,7 +271,7 @@ add_executable(hal_backend_manager_test
 target_link_libraries(hal_backend_manager_test PRIVATE syntra_kernel)
 add_test(NAME HALBackendManagerV4Test COMMAND hal_backend_manager_test)
 
-# HAL Device Discovery V1 Test
+# HAL Device Discovery V4 Test
 add_executable(hal_device_discovery_test
     tests/hal/hal_device_discovery_test.c
 )
@@ -280,6 +280,19 @@ target_link_libraries(
     PRIVATE syntra_kernel
 )
 add_test(
-    NAME HALDeviceDiscoveryV1Test
+    NAME HALDeviceDiscoveryV4Test
     COMMAND hal_device_discovery_test
+)
+
+# HAL Device Scanner V1 Test
+add_executable(hal_device_scanner_test
+    tests/hal/hal_device_scanner_test.c
+)
+target_link_libraries(
+    hal_device_scanner_test
+    PRIVATE syntra_kernel
+)
+add_test(
+    NAME HALDeviceScannerV1Test
+    COMMAND hal_device_scanner_test
 )
