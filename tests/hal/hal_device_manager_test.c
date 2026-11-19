@@ -205,7 +205,7 @@ int main(void)
 
     assert(manager.event_count == 5U);
 
-    /* V4: Total event statistics */
+    /* Total event statistics */
 
     assert(
         hal_device_manager_get_event_statistics(
@@ -220,7 +220,7 @@ int main(void)
     assert(statistics.errors == 1U);
     assert(statistics.total == 5U);
 
-    /* V4: Filter events by type */
+    /* Filter events by type */
 
     assert(
         hal_device_manager_find_events_by_type(
@@ -241,7 +241,7 @@ int main(void)
         );
     }
 
-    /* V4: Filter events by sequence */
+    /* Filter events by sequence */
 
     assert(
         hal_device_manager_find_events_by_sequence(
@@ -259,7 +259,7 @@ int main(void)
     assert(history[1].sequence == 3U);
     assert(history[2].sequence == 4U);
 
-    /* V4: Device event statistics */
+    /* Device event statistics */
 
     assert(
         hal_device_manager_get_device_event_statistics(
@@ -381,6 +381,29 @@ int main(void)
         == SYNTRA_STATUS_ERROR
     );
 
+    assert(
+        hal_device_manager_get_device(
+            &manager,
+            99U,
+            &found
+        ) == SYNTRA_STATUS_ERROR
+    );
+
+    /* V5: Reject events for unregistered devices */
+
+    assert(
+        hal_device_manager_record_event(
+            &manager,
+            99U,
+            SYNTRA_HAL_EVENT_STARTED
+        ) == SYNTRA_STATUS_ERROR
+    );
+
+    assert(
+        manager.event_count ==
+        SYNTRA_HAL_MAX_DEVICE_EVENTS
+    );
+
     /* Invalid event */
 
     assert(
@@ -457,6 +480,23 @@ int main(void)
         ) == SYNTRA_STATUS_INVALID_ARGUMENT
     );
 
+    /* V5: Invalid output arguments */
+
+    assert(
+        hal_device_manager_get_device(
+            &manager,
+            1U,
+            NULL
+        ) == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+
+    assert(
+        hal_device_manager_get_info(
+            &manager,
+            NULL
+        ) == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+
     /* Reset manager */
 
     assert(
@@ -467,7 +507,7 @@ int main(void)
     assert(manager.initialized == 0);
     assert(manager.event_count == 0U);
 
-    printf("HAL Device Manager V4: all tests passed.\n");
+    printf("HAL Device Manager V5: all tests passed.\n");
 
     return 0;
 }
