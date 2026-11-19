@@ -314,11 +314,11 @@ add_executable(hal_backend_test
 target_link_libraries(hal_backend_test PRIVATE syntra_kernel)
 add_test(NAME HALHardwareBackendV1Test COMMAND hal_backend_test)
 
-# HAL Backend Manager V2 Test
+# HAL Backend Manager V3 Test
 
 add_executable(hal_backend_manager_test
     tests/hal/hal_backend_manager_test.c
 )
 
 target_link_libraries(hal_backend_manager_test PRIVATE syntra_kernel)
-add_test(NAME HALBackendManagerV2Test COMMAND hal_backend_manager_test)
+add_test(NAME HALBackendManagerV3Test COMMAND hal_backend_manager_test)
