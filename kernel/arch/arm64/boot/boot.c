@@ -9,6 +9,7 @@
 #include "../exception.h"
 #include "../context.h"
 #include "../gic.h"
+#include "../mmu.h"
 #include "../timer.h"
 #include "../../../timer/timer.h"
 #include "../../../interrupt/interrupt.h"
@@ -76,6 +77,53 @@ static void syntra_uart_put_hex(uint64_t value)
     {
         syntra_uart_putc(digits[(value >> (unsigned int)shift) & 0x0fU]);
     }
+}
+
+
+static void syntra_boot_report_mmu_registers(void)
+{
+    syntra_arm64_mmu_registers_t registers;
+    syntra_status_t status = syntra_arm64_mmu_read_registers(&registers);
+
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("MMU register snapshot: NOT AVAILABLE\\n");
+        return;
+    }
+
+    syntra_uart_puts("MMU registers before SCTLR.M: ");
+    syntra_uart_puts("SCTLR_EL1=");
+    syntra_uart_put_hex(registers.sctlr_el1);
+    syntra_uart_puts(" MAIR_EL1=");
+    syntra_uart_put_hex(registers.mair_el1);
+    syntra_uart_puts(" TCR_EL1=");
+    syntra_uart_put_hex(registers.tcr_el1);
+    syntra_uart_puts(" TTBR0_EL1=");
+    syntra_uart_put_hex(registers.ttbr0_el1);
+    syntra_uart_puts("\\n");
+}
+
+/*
+ * Call only after the bootstrap page tables identity-map the complete live
+ * kernel image, active stack, DTB, UART and all discovered GIC MMIO windows.
+ * Kept separate from the current boot path until those mappings are verified.
+ */
+syntra_status_t syntra_arm64_boot_enable_mmu(uint64_t root_table_physical_address)
+{
+    syntra_status_t status =
+        syntra_arm64_mmu_enable(root_table_physical_address);
+
+    if (status == SYNTRA_STATUS_OK)
+    {
+        /* This marker is intentionally the first UART output after ISB. */
+        syntra_uart_puts("MMU enabled: PASS (after ISB)\\n");
+    }
+    else
+    {
+        syntra_uart_puts("MMU enable: FAIL\\n");
+    }
+
+    return status;
 }
 
 static syntra_status_t syntra_boot_report_interrupt_controller(
@@ -613,6 +661,7 @@ syntra_status_t syntra_arm64_boot_main(
 
 
     syntra_uart_init();
+    syntra_boot_report_mmu_registers();
     status = validate_dtb_and_discover_gic(dtb);
     if (status != SYNTRA_STATUS_OK)
     {

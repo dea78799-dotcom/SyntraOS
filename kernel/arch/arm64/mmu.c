@@ -20,6 +20,11 @@
 #define MMU_VA_MASK               ((1ULL << SYNTRA_ARM64_MMU_VA_BITS) - 1ULL)
 #define MMU_PA_LIMIT              (1ULL << SYNTRA_ARM64_MMU_PA_BITS)
 
+#define MMU_MAIR_VALUE 0x00000000000000FFULL
+#define MMU_TCR_VALUE  (25ULL | (1ULL << 8U) | (1ULL << 10U) | \
+                        (3ULL << 12U) | (5ULL << 32U))
+#define MMU_SCTLR_M    (1ULL << 0U)
+
 static int physical_address_is_valid(uint64_t address)
 {
     return (address & (SYNTRA_ARM64_MMU_PAGE_SIZE - 1ULL)) == 0ULL &&
@@ -123,6 +128,152 @@ syntra_status_t syntra_arm64_mmu_get_table_indices(
     indices[3] = (uint16_t)(virtual_address & 0xFFFU);
 
     return SYNTRA_STATUS_OK;
+}
+
+
+syntra_status_t syntra_arm64_mmu_walk(
+    uint64_t root_table_physical_address,
+    uint64_t virtual_address,
+    syntra_arm64_mmu_table_resolver_t resolver,
+    void *context,
+    syntra_arm64_mmu_translation_t *translation
+)
+{
+    uint16_t indices[4];
+    const uint64_t *table;
+    uint64_t descriptor;
+    uint64_t table_address;
+    unsigned int level;
+
+    if (resolver == NULL || translation == NULL ||
+        !physical_address_is_valid(root_table_physical_address))
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (syntra_arm64_mmu_get_table_indices(virtual_address, indices) !=
+        SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    table = resolver(root_table_physical_address, context);
+    if (table == NULL)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    for (level = 0U; level < 3U; ++level)
+    {
+        descriptor = table[indices[level]];
+        if ((descriptor & MMU_DESCRIPTOR_VALID) == 0ULL)
+        {
+            return SYNTRA_STATUS_ERROR;
+        }
+
+        if (level < 2U)
+        {
+            if ((descriptor & MMU_DESCRIPTOR_TABLE_PAGE) == 0ULL)
+            {
+                return SYNTRA_STATUS_NOT_IMPLEMENTED;
+            }
+
+            table_address = descriptor & SYNTRA_ARM64_MMU_PA_MASK;
+            if (!physical_address_is_valid(table_address))
+            {
+                return SYNTRA_STATUS_ERROR;
+            }
+
+            table = resolver(table_address, context);
+            if (table == NULL)
+            {
+                return SYNTRA_STATUS_ERROR;
+            }
+        }
+        else
+        {
+            uint64_t page_base;
+
+            if ((descriptor & MMU_DESCRIPTOR_TABLE_PAGE) == 0ULL)
+            {
+                return SYNTRA_STATUS_ERROR;
+            }
+
+            page_base = descriptor & SYNTRA_ARM64_MMU_PA_MASK;
+            translation->physical_address =
+                page_base + (uint64_t)indices[3];
+            translation->page_descriptor = descriptor;
+            translation->level = 3U;
+            return SYNTRA_STATUS_OK;
+        }
+    }
+
+    return SYNTRA_STATUS_ERROR;
+}
+
+syntra_status_t syntra_arm64_mmu_read_registers(
+    syntra_arm64_mmu_registers_t *registers
+)
+{
+    if (registers == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+#if defined(__aarch64__)
+    __asm__ volatile("mrs %0, sctlr_el1" : "=r"(registers->sctlr_el1));
+    __asm__ volatile("mrs %0, mair_el1" : "=r"(registers->mair_el1));
+    __asm__ volatile("mrs %0, tcr_el1" : "=r"(registers->tcr_el1));
+    __asm__ volatile("mrs %0, ttbr0_el1" : "=r"(registers->ttbr0_el1));
+    return SYNTRA_STATUS_OK;
+#else
+    registers->sctlr_el1 = 0ULL;
+    registers->mair_el1 = 0ULL;
+    registers->tcr_el1 = 0ULL;
+    registers->ttbr0_el1 = 0ULL;
+    return SYNTRA_STATUS_NOT_IMPLEMENTED;
+#endif
+}
+
+syntra_status_t syntra_arm64_mmu_enable(uint64_t root_table_physical_address)
+{
+#if defined(__aarch64__)
+    syntra_arm64_mmu_registers_t registers;
+    uint64_t sctlr;
+
+    if (!physical_address_is_valid(root_table_physical_address))
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (syntra_arm64_mmu_read_registers(&registers) != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    if ((registers.sctlr_el1 & MMU_SCTLR_M) != 0ULL)
+    {
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+    }
+
+    __asm__ volatile("msr mair_el1, %0" :: "r"(MMU_MAIR_VALUE) : "memory");
+    __asm__ volatile("msr tcr_el1, %0" :: "r"(MMU_TCR_VALUE) : "memory");
+    __asm__ volatile("msr ttbr0_el1, %0"
+                     :: "r"(root_table_physical_address) : "memory");
+    __asm__ volatile("dsb sy" ::: "memory");
+    __asm__ volatile("tlbi vmalle1" ::: "memory");
+    __asm__ volatile("dsb sy" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+
+    __asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
+    sctlr |= MMU_SCTLR_M;
+    __asm__ volatile("msr sctlr_el1, %0" :: "r"(sctlr) : "memory");
+    __asm__ volatile("isb" ::: "memory");
+    return SYNTRA_STATUS_OK;
+#else
+    (void)root_table_physical_address;
+    return SYNTRA_STATUS_NOT_IMPLEMENTED;
+#endif
 }
 
 syntra_status_t syntra_arm64_mmu_validate_mapping_range(

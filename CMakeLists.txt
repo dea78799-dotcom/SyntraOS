@@ -444,3 +444,14 @@ target_include_directories(mmu_descriptor_test PRIVATE
     kernel/arch/arm64
 )
 add_test(NAME ARM64MMUDescriptorTest COMMAND mmu_descriptor_test)
+
+# ARM64 MMU descriptor, software-walker, and register interface tests
+add_executable(arm64_mmu_test
+    tests/arm64/mmu_test.c
+    kernel/arch/arm64/mmu.c
+)
+target_include_directories(arm64_mmu_test PRIVATE
+    kernel/arch/arm64
+    kernel/core
+)
+add_test(NAME ARM64MMUTest COMMAND arm64_mmu_test)

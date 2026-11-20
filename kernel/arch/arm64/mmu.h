@@ -21,6 +21,27 @@
 #define SYNTRA_ARM64_MMU_PA_BITS         48U
 #define SYNTRA_ARM64_MMU_PA_MASK         0x0000FFFFFFFFF000ULL
 
+typedef struct
+{
+    uint64_t sctlr_el1;
+    uint64_t mair_el1;
+    uint64_t tcr_el1;
+    uint64_t ttbr0_el1;
+} syntra_arm64_mmu_registers_t;
+
+typedef struct
+{
+    uint64_t physical_address;
+    uint64_t page_descriptor;
+    uint8_t level;
+} syntra_arm64_mmu_translation_t;
+
+/* Resolve a physical page-table address to a readable 512-entry table. */
+typedef const uint64_t *(*syntra_arm64_mmu_table_resolver_t)(
+    uint64_t table_physical_address,
+    void *context
+);
+
 typedef enum
 {
     SYNTRA_ARM64_MMU_MEMORY_NORMAL = 0,
@@ -59,6 +80,30 @@ syntra_status_t syntra_arm64_mmu_get_table_indices(
     uint64_t virtual_address,
     uint16_t indices[4]
 );
+
+/*
+ * Walk a 3-level, 4 KiB-granule translation table without touching hardware.
+ * Block descriptors at levels 1/2 are deliberately not implemented yet.
+ */
+syntra_status_t syntra_arm64_mmu_walk(
+    uint64_t root_table_physical_address,
+    uint64_t virtual_address,
+    syntra_arm64_mmu_table_resolver_t resolver,
+    void *context,
+    syntra_arm64_mmu_translation_t *translation
+);
+
+/* Read SCTLR_EL1, MAIR_EL1, TCR_EL1 and TTBR0_EL1 on an AArch64 CPU. */
+syntra_status_t syntra_arm64_mmu_read_registers(
+    syntra_arm64_mmu_registers_t *registers
+);
+
+/*
+ * Enable stage-1 EL1 translation using a prebuilt identity-mapped root table.
+ * The caller must map all live code/data/stack/DTB and MMIO before calling.
+ * This sets M only; it does not allocate tables or enable caches.
+ */
+syntra_status_t syntra_arm64_mmu_enable(uint64_t root_table_physical_address);
 
 /* Validate a page-aligned VA-to-PA mapping range without creating tables. */
 syntra_status_t syntra_arm64_mmu_validate_mapping_range(
