@@ -275,6 +275,26 @@ syntra_status_t syntra_arm64_boot_main(
         return status;
     }
 
+    {
+        syntra_arm64_gic_probe_result_t probe;
+
+        status = syntra_arm64_gic_probe(&probe);
+        if (status != SYNTRA_STATUS_OK)
+        {
+            syntra_uart_puts("SyntraOS boot failed: GICv3 read-only probe\n");
+            return status;
+        }
+
+        syntra_uart_puts("GICv3 read-only probe: PASS\n");
+        syntra_uart_puts("GICD_TYPER=");
+        syntra_uart_put_hex((uint64_t)probe.distributor_typer);
+        syntra_uart_puts(" GICD_IIDR=");
+        syntra_uart_put_hex((uint64_t)probe.distributor_iidr);
+        syntra_uart_puts("\nGICR_TYPER=");
+        syntra_uart_put_hex(probe.redistributor_typer);
+        syntra_uart_puts("\nGIC control registers unchanged; IRQs remain disabled\n");
+    }
+
     status = syntra_arm64_svc_vector_test();
     if (status != SYNTRA_STATUS_OK)
     {
