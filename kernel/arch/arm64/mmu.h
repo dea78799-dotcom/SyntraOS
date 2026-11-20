@@ -54,10 +54,17 @@ syntra_status_t syntra_arm64_mmu_make_page_descriptor(
     uint64_t *descriptor
 );
 
-/* Return the four 9-bit indices used by a 39-bit, 4 KiB translation. */
+/* Return three 9-bit table indices and the 12-bit page offset. */
 syntra_status_t syntra_arm64_mmu_get_table_indices(
     uint64_t virtual_address,
     uint16_t indices[4]
+);
+
+/* Validate a page-aligned VA-to-PA mapping range without creating tables. */
+syntra_status_t syntra_arm64_mmu_validate_mapping_range(
+    uint64_t virtual_address,
+    uint64_t physical_address,
+    uint64_t size
 );
 
 #endif
