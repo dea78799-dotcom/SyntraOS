@@ -117,10 +117,14 @@ syntra_arm64_exception_entry:
     str x9, [sp, #280]
 
     /*
-     * Keep the captured frame on the exception stack for diagnosis.
+     * Pass the saved frame to the C diagnostic handler.
+     * The handler copies the frame into a stable kernel snapshot.
      * Do not ERET or enable IRQs until a real dispatcher and return path
      * are implemented and validated.
      */
+    mov x0, sp
+    bl syntra_arm64_exception_handle
+
 .Lexception_halt:
     wfe
     b .Lexception_halt
