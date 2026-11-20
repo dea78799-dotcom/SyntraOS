@@ -139,8 +139,8 @@ static syntra_status_t reserve_ram_range(
     syntra_memory_region_type_t type
 )
 {
-    syntra_memory_region_t region;
     uintptr_t end;
+    uintptr_t cursor;
 
     if (size == 0U || base > UINTPTR_MAX - size)
     {
@@ -148,24 +148,74 @@ static syntra_status_t reserve_ram_range(
     }
 
     end = base + size;
+    cursor = base;
 
-    if (syntra_memory_region_find(base, &region) != SYNTRA_STATUS_OK)
+    /*
+     * Walk the current map rather than assuming one reservation fits inside
+     * one RAM region. This also makes overlapping DTB/header reservations
+     * idempotent: already-reserved portions are skipped, while every RAM
+     * intersection is carved out independently.
+     */
+    while (cursor < end)
     {
-        return SYNTRA_STATUS_OK;
+        syntra_memory_region_t region;
+        syntra_status_t status =
+            syntra_memory_region_find(cursor, &region);
+
+        if (status != SYNTRA_STATUS_OK)
+        {
+            size_t index;
+            uintptr_t next_base = UINTPTR_MAX;
+            int found_next = 0;
+
+            for (index = 0U; index < syntra_memory_region_count(); ++index)
+            {
+                syntra_memory_region_t candidate;
+
+                if (syntra_memory_region_get(index, &candidate) !=
+                    SYNTRA_STATUS_OK)
+                {
+                    return SYNTRA_STATUS_ERROR;
+                }
+
+                if (candidate.base > cursor &&
+                    candidate.base < next_base)
+                {
+                    next_base = candidate.base;
+                    found_next = 1;
+                }
+            }
+
+            if (!found_next || next_base >= end)
+            {
+                break;
+            }
+
+            cursor = next_base;
+            continue;
+        }
+
+        {
+            uintptr_t region_end = region.base + region.size;
+            uintptr_t segment_end = region_end < end ? region_end : end;
+
+            if (region.type == SYNTRA_MEMORY_REGION_RAM)
+            {
+                status = syntra_memory_region_reserve(
+                    cursor,
+                    (size_t)(segment_end - cursor),
+                    type);
+                if (status != SYNTRA_STATUS_OK)
+                {
+                    return status;
+                }
+            }
+
+            cursor = segment_end;
+        }
     }
 
-    if (region.type != SYNTRA_MEMORY_REGION_RAM)
-    {
-        uintptr_t region_end = region.base + region.size;
-        return end <= region_end ? SYNTRA_STATUS_OK : SYNTRA_STATUS_ERROR;
-    }
-
-    if (end > region.base + region.size)
-    {
-        return SYNTRA_STATUS_ERROR;
-    }
-
-    return syntra_memory_region_reserve(base, size, type);
+    return SYNTRA_STATUS_OK;
 }
 
 static syntra_status_t apply_header_reservations(const syntra_fdt_t *fdt)
