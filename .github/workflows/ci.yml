@@ -239,8 +239,16 @@ jobs:
       - name: Boot ARM64 ELF in QEMU
         run: bash tools/arm64/run_qemu.sh build/arm64/syntraos_arm64.elf
 
-      - name: Verify QEMU RAM framebuffer desktop path
+      - name: Verify QEMU RAM framebuffer desktop pixels
         run: bash tools/arm64/run_qemu_gui_test.sh build/arm64/syntraos_arm64.elf
+
+      - name: Upload SyntraOS desktop screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: syntraos-desktop-preview-${{ github.sha }}
+          path: build/arm64/syntraos-desktop.ppm
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload ARM64 QEMU test image
         uses: actions/upload-artifact@v4

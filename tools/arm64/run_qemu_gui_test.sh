@@ -3,7 +3,8 @@ set -euo pipefail
 
 ELF_PATH="${1:-build/arm64/syntraos_arm64.elf}"
 QEMU_BIN="${QEMU_BIN:-qemu-system-aarch64}"
-TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-15}"
+TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-30}"
+SCREENSHOT_PATH="${SCREENSHOT_PATH:-build/arm64/syntraos-desktop.ppm}"
 
 if [[ ! -f "$ELF_PATH" ]]; then
     echo "FAIL: ARM64 ELF not found: $ELF_PATH" >&2
@@ -17,13 +18,35 @@ command -v timeout >/dev/null 2>&1 || {
     echo "FAIL: timeout command is required" >&2
     exit 1
 }
+command -v python3 >/dev/null 2>&1 || {
+    echo "FAIL: python3 is required for screenshot verification" >&2
+    exit 1
+}
 
-LOG_FILE="$(mktemp)"
-trap 'rm -f "$LOG_FILE"' EXIT
+TMP_DIR="$(mktemp -d)"
+MONITOR_SOCKET="$TMP_DIR/qemu-monitor.sock"
+SERIAL_LOG="$TMP_DIR/serial.log"
+QEMU_PID=""
 
-echo "Running SyntraOS with QEMU ramfb attached; timeout=${TIMEOUT_SECONDS}s"
-set +e
-timeout "${TIMEOUT_SECONDS}s" "$QEMU_BIN" \
+cleanup() {
+    if [[ -n "$QEMU_PID" ]] && kill -0 "$QEMU_PID" 2>/dev/null; then
+        kill "$QEMU_PID" 2>/dev/null || true
+        wait "$QEMU_PID" 2>/dev/null || true
+    fi
+    if [[ -f "$SERIAL_LOG" ]]; then
+        if [[ "${KEEP_QEMU_LOG:-0}" == "1" ]]; then
+            cat "$SERIAL_LOG"
+        fi
+    fi
+    rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
+
+mkdir -p "$(dirname "$SCREENSHOT_PATH")"
+rm -f "$SCREENSHOT_PATH"
+
+echo "Starting QEMU ramfb desktop screenshot test; timeout=${TIMEOUT_SECONDS}s"
+timeout --signal=TERM --kill-after=2 "${TIMEOUT_SECONDS}s" "$QEMU_BIN" \
     -machine virt,gic-version=3,virtualization=off,secure=off \
     -cpu cortex-a57 \
     -m 512M \
@@ -31,24 +54,40 @@ timeout "${TIMEOUT_SECONDS}s" "$QEMU_BIN" \
     -kernel "$ELF_PATH" \
     -device ramfb \
     -display none \
-    -serial stdio \
-    -monitor none \
+    -serial "file:$SERIAL_LOG" \
+    -monitor "unix:$MONITOR_SOCKET,server=on,wait=off" \
     -no-reboot \
-    -no-shutdown >"$LOG_FILE" 2>&1
-QEMU_STATUS=$?
-set -e
+    -no-shutdown &
+QEMU_PID=$!
 
-cat "$LOG_FILE"
+BOOT_READY=0
+for _ in $(seq 1 300); do
+    if grep -Fq "QEMU ramfb: READY 640x480 XRGB8888" "$SERIAL_LOG" 2>/dev/null; then
+        BOOT_READY=1
+        break
+    fi
+    if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+        echo "FAIL: QEMU exited before ramfb became ready." >&2
+        cat "$SERIAL_LOG" 2>/dev/null || true
+        exit 1
+    fi
+    sleep 0.1
+done
 
-if grep -Fq "QEMU ramfb: READY 640x480 XRGB8888" "$LOG_FILE" &&
-   grep -Fq "SyntraOS boot OK" "$LOG_FILE"; then
-    echo "PASS: QEMU ramfb accepted the framebuffer configuration and SyntraOS completed boot."
-    exit 0
+if [[ "$BOOT_READY" -ne 1 ]]; then
+    echo "FAIL: QEMU ramfb did not become ready within 30 seconds." >&2
+    cat "$SERIAL_LOG" 2>/dev/null || true
+    exit 1
 fi
 
-if [[ "$QEMU_STATUS" -eq 124 ]]; then
-    echo "FAIL: QEMU timed out after ${TIMEOUT_SECONDS}s without the ramfb success marker." >&2
-else
-    echo "FAIL: QEMU exited with status $QEMU_STATUS without the ramfb success marker." >&2
+python3 tools/arm64/verify_qemu_screenshot.py \
+    "$MONITOR_SOCKET" "$SCREENSHOT_PATH"
+
+if ! grep -Fq "SyntraOS boot OK" "$SERIAL_LOG"; then
+    echo "FAIL: SyntraOS did not complete its boot sequence." >&2
+    cat "$SERIAL_LOG" 2>/dev/null || true
+    exit 1
 fi
-exit 1
+
+echo "PASS: QEMU screenshot confirms the 640x480 SyntraOS desktop pixels."
+echo "Screenshot: $SCREENSHOT_PATH"
