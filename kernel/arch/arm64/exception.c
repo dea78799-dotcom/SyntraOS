@@ -88,6 +88,17 @@ syntra_status_t syntra_arm64_exception_handle(
     last_exception_info.vector_index =
         (syntra_arm64_vector_index_t)context->vector_index;
 
+    if (context->vector_index == SYNTRA_ARM64_VECTOR_CURRENT_SPX_SYNC
+        && last_exception_info.exception_class == SYNTRA_ARM64_EXCEPTION_SVC_AARCH64
+        && (context->esr_el1 & 0xFFFFU)
+            == SYNTRA_ARM64_EXCEPTION_TEST_SVC_IMMEDIATE)
+    {
+        ((syntra_arm64_exception_context_t *)context)->reserved =
+            SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC;
+        last_exception_context.reserved =
+            SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC;
+    }
+
     last_exception_valid = 1;
 
     return SYNTRA_STATUS_OK;
