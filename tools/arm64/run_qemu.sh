@@ -39,10 +39,11 @@ set -e
 cat "$LOG_FILE"
 
 if grep -Fq "SyntraOS boot OK" "$LOG_FILE" &&
+   grep -Eq "FDT physical memory regions: 0x0*[1-9a-fA-F][0-9a-fA-F]*" "$LOG_FILE" &&
    grep -Fq "PASS: ARM64 Generic Timer IRQ delivered 3 ticks" "$LOG_FILE" &&
    grep -Fq "PASS: ARM64 Scheduler switched between two threads" "$LOG_FILE" &&
    grep -Eq "Scheduler trace: AB(AB)+" "$LOG_FILE"; then
-    echo "PASS: UART PL011 confirmed boot, timer IRQ delivery, and ARM64 thread switching."
+    echo "PASS: UART PL011 confirmed FDT memory discovery, boot, timer IRQ delivery, and ARM64 thread switching."
     exit 0
 fi
 
