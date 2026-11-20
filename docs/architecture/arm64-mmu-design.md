@@ -27,6 +27,7 @@ are available and validated.
 - The existing memory module exposes a 4 KiB fixed-block pool and allocation diagnostics.
 - The FDT parser can discover device register ranges, but this does not make those ranges
   safely accessible through the CPU address space.
+- The FDT parser does not yet expose a validated RAM/reserved-memory map for the MMU subsystem.
 
 These facts are not proof that the current image has booted on QEMU or physical hardware.
 
@@ -35,30 +36,24 @@ These facts are not proof that the current image has booted on QEMU or physical 
 The current `.github/workflows/ci.yml` has two relevant jobs:
 
 - Host Debug and Release builds plus their unit tests.
-- ARM64 cross-compilation followed by ELF existence and ELF architecture checks.
+- ARM64 cross-compilation, ELF architecture verification, and a QEMU boot smoke test.
 
-The workflow does not install or invoke QEMU, does not launch the ARM64 ELF, and does not
-capture a serial-console boot result. Therefore, a green workflow currently proves host
-tests and ARM64 compilation/linking only. It does not prove the kernel enters at the
-expected EL, that the MMU starts disabled, or that the image boots.
+The ARM64 job installs QEMU and GDB, starts the ELF on `virt` with a Cortex-A57 CPU and
+GICv3, and checks the return status at a GDB breakpoint after
+`syntra_arm64_boot_main`. The test succeeds only when the boot function returns
+`SYNTRA_STATUS_OK`.
 
-The ARM64 toolchain targets generic AArch64 bare-metal compilation with `-march=armv8-a`.
-It does not define a board-specific CPU model or a boot firmware contract.
+The test currently validates boot-stage execution and FDT/GIC discovery under this
+emulated configuration. It does not prove MMU activation, actual GIC MMIO access,
+interrupt delivery, or physical-device boot. The QEMU test also does not yet validate
+the DTB's full RAM map against linker reservations.
 
-The CI workflow now also installs QEMU and GDB, boots the bare-metal ELF on
-`virt` with a Cortex-A57 CPU and GICv3, and uses a GDB breakpoint immediately after
-`syntra_arm64_boot_main` returns. The smoke test passes only when the boot function
-returns `SYNTRA_STATUS_OK`.
+The ARM64 toolchain targets generic AArch64 bare-metal compilation with
+`-march=armv8-a`; the QEMU test selects Cortex-A57 explicitly.
 
-For QEMU `virt`, the DTB placement depends on the image boot mode. QEMU documents that
-ELF/bare-metal boot places the DTB at the start of RAM (`0x40000000`), while a non-ELF
-Linux kernel image receives the DTB address in `x0`. SyntraOS currently builds an ELF,
-so its fixed bare-metal DTB address is consistent with this selected mode. The entry
-path must be revisited if the boot mode changes.
-
-This QEMU smoke test proves entry into the C boot stage and successful FDT/GIC
-configuration discovery under the selected emulated platform. It does not prove MMU
-activation, GIC register access, interrupt delivery, or physical-device boot.
+The entry assembly supplies the DTB pointer as `0x40000000`, matching the current QEMU
+ELF/bare-metal boot setup. This is a platform-and-loader assumption, not a general
+ARM64 boot contract, and must change if the loader or boot mode changes.
 
 
 ## 3. Boot contract required before enabling translation
