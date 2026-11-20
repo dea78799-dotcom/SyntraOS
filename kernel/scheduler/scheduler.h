@@ -32,6 +32,11 @@ typedef struct
     uintptr_t stack_base;
     size_t stack_size;
 
+    /* User threads keep an independent EL0 stack; stack_* remains EL1. */
+    uintptr_t user_stack_base;
+    size_t user_stack_size;
+    uint8_t is_user_thread;
+
     /* Architecture layer stores the saved ARM64 exception frame here. */
     void *cpu_context;
 } syntra_thread_t;
@@ -52,6 +57,22 @@ syntra_status_t scheduler_create_thread(
     void *argument,
     void *stack,
     size_t stack_size
+);
+
+/*
+ * Register a prepared User Mode thread. cpu_context must be a validated
+ * architecture frame built on kernel_stack; this API never enters EL0.
+ */
+syntra_status_t scheduler_create_user_thread(
+    unsigned int thread_id,
+    unsigned int priority,
+    syntra_thread_entry_t entry,
+    void *argument,
+    void *kernel_stack,
+    size_t kernel_stack_size,
+    void *user_stack,
+    size_t user_stack_size,
+    void *cpu_context
 );
 
 /* Select and mark the next READY thread using round-robin order. */

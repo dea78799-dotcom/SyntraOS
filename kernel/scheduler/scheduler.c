@@ -19,6 +19,30 @@ static int scheduler_find_slot(unsigned int thread_id)
     return -1;
 }
 
+static int scheduler_ranges_overlap(
+    uintptr_t first_base, size_t first_size,
+    uintptr_t second_base, size_t second_size)
+{
+    if (first_size == 0U || second_size == 0U) return 0;
+    return first_base < second_base + second_size &&
+        second_base < first_base + first_size;
+}
+
+static int scheduler_stack_range_conflicts(
+    uintptr_t base, size_t size)
+{
+    for (unsigned int i = 0U; i < thread_count; ++i)
+    {
+        const syntra_thread_t *thread = &threads[i];
+        if (scheduler_ranges_overlap(base, size,
+                thread->stack_base, thread->stack_size) ||
+            scheduler_ranges_overlap(base, size,
+                thread->user_stack_base, thread->user_stack_size))
+            return 1;
+    }
+    return 0;
+}
+
 static syntra_status_t scheduler_insert_thread(
     unsigned int thread_id,
     unsigned int priority,
@@ -51,6 +75,9 @@ static syntra_status_t scheduler_insert_thread(
     thread->argument = argument;
     thread->stack_base = (uintptr_t)stack;
     thread->stack_size = stack_size;
+    thread->user_stack_base = 0U;
+    thread->user_stack_size = 0U;
+    thread->is_user_thread = 0U;
     thread->cpu_context = NULL;
     ++thread_count;
 
@@ -77,6 +104,9 @@ syntra_status_t scheduler_init(void)
         threads[i].argument = NULL;
         threads[i].stack_base = 0U;
         threads[i].stack_size = 0U;
+        threads[i].user_stack_base = 0U;
+        threads[i].user_stack_size = 0U;
+        threads[i].is_user_thread = 0U;
         threads[i].cpu_context = NULL;
     }
 
@@ -118,6 +148,56 @@ syntra_status_t scheduler_create_thread(
 
     return scheduler_insert_thread(
         thread_id, priority, entry, argument, stack, stack_size);
+}
+
+
+syntra_status_t scheduler_create_user_thread(
+    unsigned int thread_id,
+    unsigned int priority,
+    syntra_thread_entry_t entry,
+    void *argument,
+    void *kernel_stack,
+    size_t kernel_stack_size,
+    void *user_stack,
+    size_t user_stack_size,
+    void *cpu_context)
+{
+    uintptr_t kernel_base = (uintptr_t)kernel_stack;
+    uintptr_t user_base = (uintptr_t)user_stack;
+    syntra_status_t status;
+
+    if (entry == NULL || kernel_stack == NULL || user_stack == NULL ||
+        cpu_context == NULL ||
+        kernel_stack_size < SYNTRA_THREAD_MIN_STACK_SIZE ||
+        user_stack_size < SYNTRA_THREAD_MIN_STACK_SIZE ||
+        (kernel_base & (SYNTRA_THREAD_STACK_ALIGNMENT - 1U)) != 0U ||
+        (user_base & (SYNTRA_THREAD_STACK_ALIGNMENT - 1U)) != 0U ||
+        kernel_base > UINTPTR_MAX - kernel_stack_size ||
+        user_base > UINTPTR_MAX - user_stack_size ||
+        scheduler_ranges_overlap(kernel_base, kernel_stack_size,
+            user_base, user_stack_size))
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    if (!scheduler_initialized)
+        return SYNTRA_STATUS_ERROR;
+    if (scheduler_stack_range_conflicts(kernel_base, kernel_stack_size) ||
+        scheduler_stack_range_conflicts(user_base, user_stack_size))
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    status = scheduler_insert_thread(
+        thread_id, priority, entry, argument,
+        kernel_stack, kernel_stack_size);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    {
+        syntra_thread_t *thread = scheduler_get_thread(thread_id);
+        if (thread == NULL) return SYNTRA_STATUS_ERROR;
+        thread->user_stack_base = user_base;
+        thread->user_stack_size = user_stack_size;
+        thread->is_user_thread = 1U;
+        thread->cpu_context = cpu_context;
+    }
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_thread_t *scheduler_get_next_ready(void)
@@ -311,6 +391,30 @@ syntra_status_t scheduler_validate(void)
                 return SYNTRA_STATUS_ERROR;
             }
         }
+
+        if (thread->is_user_thread > 1U)
+            return SYNTRA_STATUS_ERROR;
+
+        if (thread->is_user_thread != 0U)
+        {
+            if (thread->entry == NULL || thread->cpu_context == NULL ||
+                thread->stack_base == 0U ||
+                thread->stack_size < SYNTRA_THREAD_MIN_STACK_SIZE ||
+                thread->user_stack_base == 0U ||
+                thread->user_stack_size < SYNTRA_THREAD_MIN_STACK_SIZE ||
+                (thread->user_stack_base &
+                    (SYNTRA_THREAD_STACK_ALIGNMENT - 1U)) != 0U ||
+                thread->stack_base > UINTPTR_MAX - thread->stack_size ||
+                thread->user_stack_base >
+                    UINTPTR_MAX - thread->user_stack_size ||
+                scheduler_ranges_overlap(
+                    thread->stack_base, thread->stack_size,
+                    thread->user_stack_base, thread->user_stack_size))
+                return SYNTRA_STATUS_ERROR;
+        }
+        else if (thread->user_stack_base != 0U ||
+                 thread->user_stack_size != 0U)
+            return SYNTRA_STATUS_ERROR;
 
         if (thread->entry != NULL)
         {

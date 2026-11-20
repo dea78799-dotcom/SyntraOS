@@ -91,6 +91,61 @@ int main(void)
     check("Scheduler invariants",
         scheduler_validate() == SYNTRA_STATUS_OK);
 
+
+    {
+        static _Alignas(16) unsigned char user_kernel_stack[2048];
+        static _Alignas(16) unsigned char user_stack[2048];
+        static _Alignas(16) unsigned char user_kernel_stack_2[2048];
+        static _Alignas(16) unsigned char user_stack_2[2048];
+        static _Alignas(16) unsigned char fake_context[320];
+        syntra_thread_t *user_thread;
+
+        check("Create user thread with separate stacks and prepared context",
+            scheduler_create_user_thread(
+                4U, 1U, dummy_thread, NULL,
+                user_kernel_stack, sizeof(user_kernel_stack),
+                user_stack, sizeof(user_stack),
+                fake_context) == SYNTRA_STATUS_OK);
+
+        user_thread = scheduler_get_thread(4U);
+        check("Store kernel stack and user stack independently",
+            user_thread != NULL &&
+            user_thread->stack_base == (uintptr_t)user_kernel_stack &&
+            user_thread->stack_size == sizeof(user_kernel_stack) &&
+            user_thread->user_stack_base == (uintptr_t)user_stack &&
+            user_thread->user_stack_size == sizeof(user_stack));
+
+        check("Mark user thread and preserve prepared CPU context",
+            user_thread != NULL && user_thread->is_user_thread == 1U &&
+            user_thread->cpu_context == fake_context);
+
+        check("Reject overlapping kernel and user stacks",
+            scheduler_create_user_thread(
+                5U, 1U, dummy_thread, NULL,
+                user_kernel_stack, sizeof(user_kernel_stack),
+                user_kernel_stack, sizeof(user_kernel_stack),
+                fake_context) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+        check("Reject user stack overlapping an existing thread stack",
+            scheduler_create_user_thread(
+                5U, 1U, dummy_thread, NULL,
+                user_kernel_stack_2, sizeof(user_kernel_stack_2),
+                stack_a, sizeof(stack_a),
+                fake_context) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+        check("Reject user thread without a prepared context",
+            scheduler_create_user_thread(
+                5U, 1U, dummy_thread, NULL,
+                user_kernel_stack_2, sizeof(user_kernel_stack_2),
+                user_stack_2, sizeof(user_stack_2),
+                NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+        check("Scheduler validates user stack metadata",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+        check("User thread remains READY until explicitly scheduled",
+            user_thread != NULL && user_thread->state == THREAD_READY);
+    }
+
     printf("\n=================================\n");
     printf(" Total failures: %d\n", failures);
     printf("=================================\n");
