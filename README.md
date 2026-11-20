@@ -57,6 +57,10 @@ independent modules.
 
 See ARCHITECTURE.md for technical details.
 
+## Run SyntraOS in QEMU
+
+The ARM64 CI workflow validates the kernel in QEMU and publishes the tested ELF as a downloadable workflow artifact. See [the Android/Termux QEMU guide](docs/testing/qemu_android_termux.md) for running the console build on an Android device.
+
 ## Safety
 
 All initial development and testing will use

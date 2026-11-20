@@ -238,3 +238,11 @@ jobs:
 
       - name: Boot ARM64 ELF in QEMU
         run: bash tools/arm64/run_qemu.sh build/arm64/syntraos_arm64.elf
+
+      - name: Upload ARM64 QEMU test image
+        uses: actions/upload-artifact@v4
+        with:
+          name: syntraos-arm64-qemu-${{ github.sha }}
+          path: build/arm64/syntraos_arm64.elf
+          if-no-files-found: error
+          retention-days: 14
