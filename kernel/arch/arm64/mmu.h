@@ -103,7 +103,8 @@ syntra_status_t syntra_arm64_mmu_read_registers(
  * The caller must map all live code/data/stack/DTB and MMIO before calling.
  * This sets M only; it does not allocate tables or enable caches.
  */
-syntra_status_t syntra_arm64_mmu_enable(uint64_t root_table_physical_address);
+syntra_status_t syntra_arm64_mmu_prepare(uint64_t root_table_physical_address);
+syntra_status_t syntra_arm64_mmu_enable(void);
 
 /* Validate a page-aligned VA-to-PA mapping range without creating tables. */
 syntra_status_t syntra_arm64_mmu_validate_mapping_range(

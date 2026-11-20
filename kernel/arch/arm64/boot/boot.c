@@ -80,18 +80,18 @@ static void syntra_uart_put_hex(uint64_t value)
 }
 
 
-static void syntra_boot_report_mmu_registers(void)
+static void syntra_boot_report_mmu_registers(const char *prefix)
 {
     syntra_arm64_mmu_registers_t registers;
     syntra_status_t status = syntra_arm64_mmu_read_registers(&registers);
 
     if (status != SYNTRA_STATUS_OK)
     {
-        syntra_uart_puts("MMU register snapshot: NOT AVAILABLE\\n");
+        syntra_uart_puts("MMU register snapshot: NOT AVAILABLE\n");
         return;
     }
 
-    syntra_uart_puts("MMU registers before SCTLR.M: ");
+    syntra_uart_puts(prefix);
     syntra_uart_puts("SCTLR_EL1=");
     syntra_uart_put_hex(registers.sctlr_el1);
     syntra_uart_puts(" MAIR_EL1=");
@@ -100,7 +100,7 @@ static void syntra_boot_report_mmu_registers(void)
     syntra_uart_put_hex(registers.tcr_el1);
     syntra_uart_puts(" TTBR0_EL1=");
     syntra_uart_put_hex(registers.ttbr0_el1);
-    syntra_uart_puts("\\n");
+    syntra_uart_puts("\n");
 }
 
 /*
@@ -110,17 +110,41 @@ static void syntra_boot_report_mmu_registers(void)
  */
 syntra_status_t syntra_arm64_boot_enable_mmu(uint64_t root_table_physical_address)
 {
+    syntra_arm64_mmu_registers_t registers;
     syntra_status_t status =
-        syntra_arm64_mmu_enable(root_table_physical_address);
+        syntra_arm64_mmu_prepare(root_table_physical_address);
 
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("MMU prepare: FAIL\n");
+        return status;
+    }
+
+    status = syntra_arm64_mmu_read_registers(&registers);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("MMU register readback: FAIL\n");
+        return status;
+    }
+
+    syntra_uart_puts("MMU registers before SCTLR.M: ");
+    syntra_uart_puts("MAIR_EL1=");
+    syntra_uart_put_hex(registers.mair_el1);
+    syntra_uart_puts(" TCR_EL1=");
+    syntra_uart_put_hex(registers.tcr_el1);
+    syntra_uart_puts(" TTBR0_EL1=");
+    syntra_uart_put_hex(registers.ttbr0_el1);
+    syntra_uart_puts("\n");
+
+    status = syntra_arm64_mmu_enable();
     if (status == SYNTRA_STATUS_OK)
     {
-        /* This marker is intentionally the first UART output after ISB. */
-        syntra_uart_puts("MMU enabled: PASS (after ISB)\\n");
+        /* First UART marker after the enable routine's final ISB. */
+        syntra_uart_puts("MMU enabled: PASS (after ISB)\n");
     }
     else
     {
-        syntra_uart_puts("MMU enable: FAIL\\n");
+        syntra_uart_puts("MMU enable: FAIL\n");
     }
 
     return status;
@@ -661,7 +685,7 @@ syntra_status_t syntra_arm64_boot_main(
 
 
     syntra_uart_init();
-    syntra_boot_report_mmu_registers();
+    syntra_boot_report_mmu_registers("MMU registers at boot: ");
     status = validate_dtb_and_discover_gic(dtb);
     if (status != SYNTRA_STATUS_OK)
     {

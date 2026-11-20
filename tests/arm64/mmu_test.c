@@ -108,8 +108,9 @@ static void test_register_api_is_host_safe(void)
         SYNTRA_STATUS_NOT_IMPLEMENTED);
     assert(syntra_arm64_mmu_read_registers(NULL) ==
         SYNTRA_STATUS_INVALID_ARGUMENT);
-    assert(syntra_arm64_mmu_enable(ROOT_PA) ==
+    assert(syntra_arm64_mmu_prepare(ROOT_PA) ==
         SYNTRA_STATUS_NOT_IMPLEMENTED);
+    assert(syntra_arm64_mmu_enable() == SYNTRA_STATUS_NOT_IMPLEMENTED);
 }
 
 int main(void)

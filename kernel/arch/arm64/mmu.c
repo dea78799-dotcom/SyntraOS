@@ -235,11 +235,10 @@ syntra_status_t syntra_arm64_mmu_read_registers(
 #endif
 }
 
-syntra_status_t syntra_arm64_mmu_enable(uint64_t root_table_physical_address)
+syntra_status_t syntra_arm64_mmu_prepare(uint64_t root_table_physical_address)
 {
 #if defined(__aarch64__)
     syntra_arm64_mmu_registers_t registers;
-    uint64_t sctlr;
 
     if (!physical_address_is_valid(root_table_physical_address))
     {
@@ -264,14 +263,44 @@ syntra_status_t syntra_arm64_mmu_enable(uint64_t root_table_physical_address)
     __asm__ volatile("tlbi vmalle1" ::: "memory");
     __asm__ volatile("dsb sy" ::: "memory");
     __asm__ volatile("isb" ::: "memory");
+    return SYNTRA_STATUS_OK;
+#else
+    (void)root_table_physical_address;
+    return SYNTRA_STATUS_NOT_IMPLEMENTED;
+#endif
+}
 
+syntra_status_t syntra_arm64_mmu_enable(void)
+{
+#if defined(__aarch64__)
+    syntra_arm64_mmu_registers_t registers;
+    uint64_t sctlr;
+
+    if (syntra_arm64_mmu_read_registers(&registers) != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    if ((registers.sctlr_el1 & MMU_SCTLR_M) != 0ULL)
+    {
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+    }
+
+    if ((registers.ttbr0_el1 & SYNTRA_ARM64_MMU_PA_MASK) == 0ULL ||
+        registers.mair_el1 != MMU_MAIR_VALUE ||
+        registers.tcr_el1 != MMU_TCR_VALUE)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    __asm__ volatile("dsb sy" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
     __asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
     sctlr |= MMU_SCTLR_M;
     __asm__ volatile("msr sctlr_el1, %0" :: "r"(sctlr) : "memory");
     __asm__ volatile("isb" ::: "memory");
     return SYNTRA_STATUS_OK;
 #else
-    (void)root_table_physical_address;
     return SYNTRA_STATUS_NOT_IMPLEMENTED;
 #endif
 }
