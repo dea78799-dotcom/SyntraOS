@@ -63,12 +63,13 @@ static void append_property(
     }
 }
 
-static void build_test_fdt(void)
+static void build_test_fdt(int use_gic_v2)
 {
     static const uint8_t address_cells[] = {0U, 0U, 0U, 2U};
     static const uint8_t size_cells[] = {0U, 0U, 0U, 2U};
-    static const uint8_t compatible[] = "arm,gic-v3";
-    static const uint8_t reg[] = {
+    static const uint8_t compatible_v3[] = "arm,gic-v3";
+    static const uint8_t compatible_v2[] = "arm,gic-400";
+    static const uint8_t reg_v3[] = {
         /* GIC distributor: 0x08000000, size 0x00010000. */
         0U, 0U, 0U, 0U, 0x08U, 0U, 0U, 0U,
         0U, 0U, 0U, 0U, 0U, 1U, 0U, 0U,
@@ -76,6 +77,21 @@ static void build_test_fdt(void)
         0U, 0U, 0U, 0U, 0x08U, 0x0aU, 0U, 0U,
         0U, 0U, 0U, 0U, 0U, 0xf6U, 0U, 0U
     };
+    static const uint8_t reg_v2[] = {
+        /* GIC distributor: 0x08000000, size 0x00010000. */
+        0U, 0U, 0U, 0U, 0x08U, 0U, 0U, 0U,
+        0U, 0U, 0U, 0U, 0U, 1U, 0U, 0U,
+        /* GIC CPU interface: 0x08010000, size 0x00001000. */
+        0U, 0U, 0U, 0U, 0x08U, 1U, 0U, 0U,
+        0U, 0U, 0U, 0U, 0U, 0x10U, 0U, 0U
+    };
+    const uint8_t *compatible = use_gic_v2
+        ? compatible_v2 : compatible_v3;
+    const uint8_t *reg = use_gic_v2 ? reg_v2 : reg_v3;
+    uint32_t compatible_size = use_gic_v2
+        ? (uint32_t)sizeof(compatible_v2)
+        : (uint32_t)sizeof(compatible_v3);
+    uint32_t reg_size = (uint32_t)sizeof(reg_v3);
     static const char strings[] =
         "#address-cells\0#size-cells\0compatible\0reg\0";
     size_t cursor;
@@ -103,8 +119,8 @@ static void build_test_fdt(void)
     append_u32(&cursor, 1U);
     append_string(&cursor, "intc");
     append_property(&cursor, compatible_name,
-                    compatible, sizeof(compatible));
-    append_property(&cursor, reg_name, reg, sizeof(reg));
+                    compatible, compatible_size);
+    append_property(&cursor, reg_name, reg, reg_size);
     append_u32(&cursor, 2U);
     append_u32(&cursor, 2U);
     append_u32(&cursor, 9U);
@@ -140,7 +156,7 @@ static void test_fdt_and_gic_discovery(void)
     uintptr_t base;
     size_t size;
 
-    build_test_fdt();
+    build_test_fdt(0);
 
     assert(syntra_fdt_open(blob, sizeof(blob), &fdt) == SYNTRA_STATUS_OK);
     assert(syntra_fdt_find_compatible(
@@ -166,6 +182,25 @@ static void test_fdt_and_gic_discovery(void)
     assert(info.config.redistributor_base == (uintptr_t)0x080A0000U);
 }
 
+
+static void test_gic_v2_discovery(void)
+{
+    syntra_fdt_t fdt;
+    syntra_arm64_gic_info_t info;
+
+    build_test_fdt(1);
+    assert(syntra_fdt_open(blob, sizeof(blob), &fdt) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_gic_discover(&fdt) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_gic_get_info(&info) == SYNTRA_STATUS_OK);
+    assert(info.configured == 1);
+    assert(info.initialized == 0);
+    assert(info.hardware_access_enabled == 0);
+    assert(info.config.version == SYNTRA_ARM64_GIC_VERSION_2);
+    assert(info.config.distributor_base == (uintptr_t)0x08000000U);
+    assert(info.config.cpu_interface_base == (uintptr_t)0x08010000U);
+    assert(info.config.cpu_interface_size == (size_t)0x1000U);
+}
+
 static void test_rejects_bad_magic(void)
 {
     syntra_fdt_t fdt;
@@ -178,7 +213,7 @@ static void test_rejects_overlapping_blocks(void)
 {
     syntra_fdt_t fdt;
 
-    build_test_fdt();
+    build_test_fdt(0);
     write_be32(blob + 12U, (uint32_t)structure_offset);
     assert(syntra_fdt_open(blob, sizeof(blob), &fdt) == SYNTRA_STATUS_ERROR);
 }
@@ -186,6 +221,7 @@ static void test_rejects_overlapping_blocks(void)
 int main(void)
 {
     test_fdt_and_gic_discovery();
+    test_gic_v2_discovery();
     test_rejects_bad_magic();
     test_rejects_overlapping_blocks();
     puts("FDT/GIC discovery tests passed");
