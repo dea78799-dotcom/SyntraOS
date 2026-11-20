@@ -105,7 +105,7 @@ jobs:
       - name: Configure ARM64
         run: |
           cmake -S cmake/arm64 -B build/arm64 -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/aarch64-linux-gnu.cmake
+            -DCMAKE_TOOLCHAIN_FILE="${GITHUB_WORKSPACE}/cmake/toolchains/aarch64-linux-gnu.cmake"
 
       - name: Build ARM64 ELF
         run: cmake --build build/arm64 --verbose
