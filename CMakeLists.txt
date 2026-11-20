@@ -473,6 +473,23 @@ target_include_directories(arm64_mmu_test PRIVATE
 )
 add_test(NAME ARM64MMUTest COMMAND arm64_mmu_test)
 
+
+# ARM64 Page Table Builder backed by the physical page allocator
+add_executable(arm64_page_table_allocator_integration_test
+    tests/arm64/page_table_allocator_integration_test.c
+    kernel/arch/arm64/mmu.c
+    kernel/arch/arm64/page_table_builder.c
+    kernel/memory/page_allocator.c
+    kernel/memory/memory_region.c
+)
+target_include_directories(arm64_page_table_allocator_integration_test PRIVATE
+    kernel/arch/arm64
+    kernel/memory
+    kernel/core
+)
+add_test(NAME ARM64PageTableAllocatorIntegrationTest
+    COMMAND arm64_page_table_allocator_integration_test)
+
 # ARM64 Page Table Builder tests
 add_executable(arm64_page_table_builder_test
     tests/arm64/page_table_builder_test.c
