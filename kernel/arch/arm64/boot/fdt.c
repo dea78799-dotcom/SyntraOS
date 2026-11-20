@@ -630,7 +630,6 @@ syntra_status_t syntra_fdt_get_reg_count(
 )
 {
     syntra_fdt_node_t parent;
-    const uint8_t *reg_data;
     uint32_t reg_size;
     uint32_t address_cells;
     uint32_t size_cells;
