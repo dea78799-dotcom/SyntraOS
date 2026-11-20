@@ -16,6 +16,14 @@ typedef struct
 {
     uintptr_t kernel_start;
     uintptr_t kernel_end;
+    uintptr_t text_start;
+    uintptr_t text_end;
+    uintptr_t rodata_start;
+    uintptr_t rodata_end;
+    uintptr_t data_start;
+    uintptr_t data_end;
+    uintptr_t bss_start;
+    uintptr_t bss_end;
     uintptr_t stack_bottom;
     uintptr_t stack_top;
     uintptr_t dtb_start;

@@ -6,6 +6,17 @@
 static syntra_arm64_boot_memory_metadata_t boot_memory_metadata;
 static int boot_memory_metadata_valid;
 
+static int page_aligned_range_inside_kernel(
+    uintptr_t start, uintptr_t end,
+    uintptr_t kernel_start, uintptr_t kernel_end)
+{
+    const uintptr_t page_mask = 0xFFFU;
+    return start <= end &&
+        (start & page_mask) == 0U &&
+        (end & page_mask) == 0U &&
+        start >= kernel_start && end <= kernel_end;
+}
+
 syntra_status_t syntra_arm64_boot_memory_metadata_set(
     const syntra_arm64_boot_memory_metadata_t *metadata
 )
@@ -13,6 +24,20 @@ syntra_status_t syntra_arm64_boot_memory_metadata_set(
     if (metadata == NULL ||
         metadata->kernel_start == 0U ||
         metadata->kernel_end <= metadata->kernel_start ||
+        !page_aligned_range_inside_kernel(metadata->text_start, metadata->text_end,
+            metadata->kernel_start, metadata->kernel_end) ||
+        !page_aligned_range_inside_kernel(metadata->rodata_start, metadata->rodata_end,
+            metadata->kernel_start, metadata->kernel_end) ||
+        !page_aligned_range_inside_kernel(metadata->data_start, metadata->data_end,
+            metadata->kernel_start, metadata->kernel_end) ||
+        !page_aligned_range_inside_kernel(metadata->bss_start, metadata->bss_end,
+            metadata->kernel_start, metadata->kernel_end) ||
+        !page_aligned_range_inside_kernel(metadata->stack_bottom, metadata->stack_top,
+            metadata->kernel_start, metadata->kernel_end) ||
+        metadata->text_end > metadata->rodata_start ||
+        metadata->rodata_end > metadata->data_start ||
+        metadata->data_end > metadata->bss_start ||
+        metadata->bss_end > metadata->stack_bottom ||
         metadata->stack_bottom == 0U ||
         metadata->stack_top <= metadata->stack_bottom ||
         metadata->dtb_start == 0U ||

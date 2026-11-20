@@ -35,6 +35,14 @@
 
 extern char __kernel_start[];
 extern char __kernel_end[];
+extern char __text_start[];
+extern char __text_end[];
+extern char __rodata_start[];
+extern char __rodata_end[];
+extern char __data_start[];
+extern char __data_end[];
+extern char __bss_start[];
+extern char __bss_end[];
 extern char __stack_bottom[];
 extern char __stack_top[];
 
@@ -301,6 +309,14 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
 
         metadata.kernel_start = (uintptr_t)__kernel_start;
         metadata.kernel_end = (uintptr_t)__kernel_end;
+        metadata.text_start = (uintptr_t)__text_start;
+        metadata.text_end = (uintptr_t)__text_end;
+        metadata.rodata_start = (uintptr_t)__rodata_start;
+        metadata.rodata_end = (uintptr_t)__rodata_end;
+        metadata.data_start = (uintptr_t)__data_start;
+        metadata.data_end = (uintptr_t)__data_end;
+        metadata.bss_start = (uintptr_t)__bss_start;
+        metadata.bss_end = (uintptr_t)__bss_end;
         metadata.stack_bottom = (uintptr_t)__stack_bottom;
         metadata.stack_top = (uintptr_t)__stack_top;
         metadata.dtb_start = (uintptr_t)dtb;
