@@ -27,6 +27,7 @@ timeout "${TIMEOUT_SECONDS}s" "$QEMU_BIN" \
     -machine virt,gic-version=3,virtualization=off,secure=off \
     -cpu cortex-a57 \
     -m 512M \
+    -nic none \
     -kernel "$ELF_PATH" \
     -display none \
     -serial stdio \
