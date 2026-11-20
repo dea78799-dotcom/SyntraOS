@@ -33,6 +33,20 @@ static void test_table_descriptor(void)
         0x40000000ULL, NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
 }
 
+static void test_block_descriptor(void)
+{
+    uint64_t descriptor = 0ULL;
+    assert(syntra_arm64_mmu_make_block_descriptor(0x80000000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL, SYNTRA_ARM64_MMU_ACCESS_READ_WRITE,
+        0, &descriptor) == SYNTRA_STATUS_OK);
+    assert((descriptor & DESC_VALID) != 0ULL);
+    assert((descriptor & DESC_TYPE) == 0ULL);
+    assert((descriptor & SYNTRA_ARM64_MMU_PA_MASK) == 0x80000000ULL);
+    assert(syntra_arm64_mmu_make_block_descriptor(0x80001000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL, SYNTRA_ARM64_MMU_ACCESS_READ_WRITE,
+        0, &descriptor) == SYNTRA_STATUS_INVALID_ARGUMENT);
+}
+
 static void test_normal_page_descriptors(void)
 {
     uint64_t descriptor = 0U;
@@ -177,6 +191,7 @@ static void test_mapping_range_validation(void)
 int main(void)
 {
     test_table_descriptor();
+    test_block_descriptor();
     test_normal_page_descriptors();
     test_device_page_descriptor();
     test_invalid_page_arguments();

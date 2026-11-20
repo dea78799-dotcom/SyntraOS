@@ -96,6 +96,41 @@ static void test_device_mapping_and_invalid_inputs(void)
 }
 
 
+static void test_block_mapping(void)
+{
+    syntra_arm64_page_table_t pt;
+    syntra_arm64_mmu_translation_t tr;
+    reset();
+    assert(syntra_arm64_page_table_init(&pt, alloc_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_map(&pt, 0x40000000ULL, 0x80000000ULL,
+        SYNTRA_ARM64_MMU_BLOCK_SIZE, SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(used == 2U); /* root + L2; no L3 table needed */
+    assert(syntra_arm64_mmu_walk(pt.root_physical_address, 0x40001234ULL,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL, &tr) == SYNTRA_STATUS_OK);
+    assert(tr.level == 2U && tr.page_size == SYNTRA_ARM64_MMU_BLOCK_SIZE);
+    assert(tr.physical_address == 0x80001234ULL);
+    assert(syntra_arm64_page_table_verify(&pt, 0x40000000ULL, 0x80000000ULL,
+        SYNTRA_ARM64_MMU_BLOCK_SIZE, SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_map(&pt, 0x40001000ULL, 0x90001000ULL,
+        0x1000ULL, SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_ERROR);
+}
+
+static void test_block_page_conflict(void)
+{
+    syntra_arm64_page_table_t pt;
+    reset();
+    assert(syntra_arm64_page_table_init(&pt, alloc_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_map(&pt, 0x60001000ULL, 0x70001000ULL,
+        0x1000ULL, SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_map(&pt, 0x60000000ULL, 0x80000000ULL,
+        SYNTRA_ARM64_MMU_BLOCK_SIZE, SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_ERROR);
+}
+
 static void test_partial_overlap_preflight(void)
 {
     syntra_arm64_page_table_t pt;
@@ -112,6 +147,8 @@ static void test_partial_overlap_preflight(void)
 int main(void)
 {
     test_build_and_walk_verify();
+    test_block_mapping();
+    test_block_page_conflict();
     test_partial_overlap_preflight();
     test_device_mapping_and_invalid_inputs();
     puts("ARM64 page-table builder tests passed");

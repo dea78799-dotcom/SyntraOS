@@ -83,6 +83,22 @@ syntra_status_t syntra_arm64_mmu_make_page_descriptor(
     return SYNTRA_STATUS_OK;
 }
 
+syntra_status_t syntra_arm64_mmu_make_block_descriptor(
+    uint64_t physical_address, syntra_arm64_mmu_memory_type_t memory_type,
+    syntra_arm64_mmu_access_t access, int executable, uint64_t *descriptor)
+{
+    syntra_status_t status;
+    if (descriptor == NULL ||
+        (physical_address & (SYNTRA_ARM64_MMU_BLOCK_SIZE - 1ULL)) != 0ULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    status = syntra_arm64_mmu_make_page_descriptor(
+        physical_address, memory_type, access, executable, descriptor);
+    if (status != SYNTRA_STATUS_OK) return status;
+    /* L2 block descriptor: valid=1, bit[1]=0, output base aligned to 2 MiB. */
+    *descriptor &= ~DESC_TYPE;
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_arm64_mmu_get_table_indices(
     uint64_t virtual_address, uint16_t indices[4])
 {

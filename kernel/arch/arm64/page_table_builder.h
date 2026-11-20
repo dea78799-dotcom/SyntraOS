@@ -24,7 +24,7 @@ syntra_status_t syntra_arm64_page_table_init(
     syntra_arm64_pt_resolve_fn resolve,
     void *context);
 
-/* Maps 4-KiB pages only; block mappings and MMU activation are not supported. */
+/* Maps aligned 2-MiB L2 blocks where possible, otherwise 4-KiB pages. */
 syntra_status_t syntra_arm64_page_table_map(
     syntra_arm64_page_table_t *table,
     uint64_t virtual_address,

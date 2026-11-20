@@ -111,6 +111,28 @@ static syntra_status_t ensure_child(
 }
 
 
+/* Preflight a 2-MiB L2 slot; any existing block or table is a conflict. */
+static syntra_status_t block_slot_is_unmapped(
+    syntra_arm64_page_table_t *builder, uint64_t va)
+{
+    uint16_t indices[4];
+    uint64_t *l1, *l2;
+    uint64_t descriptor;
+    if (syntra_arm64_mmu_get_table_indices(va, indices) != SYNTRA_STATUS_OK)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    l1 = get_table(builder, builder->root_physical_address);
+    if (l1 == NULL) return SYNTRA_STATUS_ERROR;
+    descriptor = l1[indices[0]];
+    if ((descriptor & DESC_VALID) == 0ULL) return SYNTRA_STATUS_OK;
+    if ((descriptor & DESC_TYPE) == 0ULL ||
+        (descriptor & ~(DESC_ADDR | 3ULL)) != 0ULL)
+        return SYNTRA_STATUS_ERROR;
+    l2 = get_table(builder, descriptor & DESC_ADDR);
+    if (l2 == NULL) return SYNTRA_STATUS_ERROR;
+    return (l2[indices[1]] & DESC_VALID) == 0ULL
+        ? SYNTRA_STATUS_OK : SYNTRA_STATUS_ERROR;
+}
+
 /* Preflight existing hierarchy so overlaps never cause partial range maps. */
 static syntra_status_t page_is_unmapped(
     syntra_arm64_page_table_t *builder, uint64_t va)
@@ -161,14 +183,29 @@ syntra_status_t syntra_arm64_page_table_map(
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
     end = va + size;
-    /* Check the whole range before changing any descriptors. */
+    /* Preflight whole range, using 2-MiB slot checks for block chunks. */
     {
-        uint64_t check_va = va;
+        uint64_t check_va = va, check_pa = pa;
         while (check_va < end)
         {
-            syntra_status_t check_status = page_is_unmapped(table, check_va);
-            if (check_status != SYNTRA_STATUS_OK) return check_status;
-            check_va += SYNTRA_ARM64_MMU_PAGE_SIZE;
+            syntra_status_t check_status;
+            uint64_t remaining = end - check_va;
+            if ((check_va & (SYNTRA_ARM64_MMU_BLOCK_SIZE - 1ULL)) == 0ULL &&
+                (check_pa & (SYNTRA_ARM64_MMU_BLOCK_SIZE - 1ULL)) == 0ULL &&
+                remaining >= SYNTRA_ARM64_MMU_BLOCK_SIZE)
+            {
+                check_status = block_slot_is_unmapped(table, check_va);
+                if (check_status != SYNTRA_STATUS_OK) return check_status;
+                check_va += SYNTRA_ARM64_MMU_BLOCK_SIZE;
+                check_pa += SYNTRA_ARM64_MMU_BLOCK_SIZE;
+            }
+            else
+            {
+                check_status = page_is_unmapped(table, check_va);
+                if (check_status != SYNTRA_STATUS_OK) return check_status;
+                check_va += SYNTRA_ARM64_MMU_PAGE_SIZE;
+                check_pa += SYNTRA_ARM64_MMU_PAGE_SIZE;
+            }
         }
     }
     while (va < end)
@@ -176,28 +213,41 @@ syntra_status_t syntra_arm64_page_table_map(
         uint16_t indices[4];
         uint64_t *l1, *l2, *l3, descriptor;
         syntra_status_t status;
-
-        status = syntra_arm64_mmu_make_page_descriptor(
-            pa, type, access, executable, &descriptor);
-        if (status != SYNTRA_STATUS_OK) return status;
+        uint64_t remaining = end - va;
 
         status = syntra_arm64_mmu_get_table_indices(va, indices);
         if (status != SYNTRA_STATUS_OK) return status;
-
         l1 = get_table(table, table->root_physical_address);
         if (l1 == NULL) return SYNTRA_STATUS_ERROR;
-
         status = ensure_child(table, l1, indices[0], &l2);
         if (status != SYNTRA_STATUS_OK) return status;
-        status = ensure_child(table, l2, indices[1], &l3);
-        if (status != SYNTRA_STATUS_OK) return status;
 
-        if ((l3[indices[2]] & DESC_VALID) != 0ULL)
-            return SYNTRA_STATUS_ERROR;
-
-        l3[indices[2]] = descriptor;
-        va += SYNTRA_ARM64_MMU_PAGE_SIZE;
-        pa += SYNTRA_ARM64_MMU_PAGE_SIZE;
+        if ((va & (SYNTRA_ARM64_MMU_BLOCK_SIZE - 1ULL)) == 0ULL &&
+            (pa & (SYNTRA_ARM64_MMU_BLOCK_SIZE - 1ULL)) == 0ULL &&
+            remaining >= SYNTRA_ARM64_MMU_BLOCK_SIZE)
+        {
+            if ((l2[indices[1]] & DESC_VALID) != 0ULL)
+                return SYNTRA_STATUS_ERROR;
+            status = syntra_arm64_mmu_make_block_descriptor(
+                pa, type, access, executable, &descriptor);
+            if (status != SYNTRA_STATUS_OK) return status;
+            l2[indices[1]] = descriptor;
+            va += SYNTRA_ARM64_MMU_BLOCK_SIZE;
+            pa += SYNTRA_ARM64_MMU_BLOCK_SIZE;
+        }
+        else
+        {
+            status = ensure_child(table, l2, indices[1], &l3);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_arm64_mmu_make_page_descriptor(
+                pa, type, access, executable, &descriptor);
+            if (status != SYNTRA_STATUS_OK) return status;
+            if ((l3[indices[2]] & DESC_VALID) != 0ULL)
+                return SYNTRA_STATUS_ERROR;
+            l3[indices[2]] = descriptor;
+            va += SYNTRA_ARM64_MMU_PAGE_SIZE;
+            pa += SYNTRA_ARM64_MMU_PAGE_SIZE;
+        }
     }
 
     return SYNTRA_STATUS_OK;
@@ -231,7 +281,7 @@ syntra_status_t syntra_arm64_page_table_verify(
             return SYNTRA_STATUS_ERROR;
 
         if (translation.physical_address != pa ||
-            translation.page_size != SYNTRA_ARM64_MMU_PAGE_SIZE ||
+            translation.page_size < SYNTRA_ARM64_MMU_PAGE_SIZE ||
             translation.memory_type != (uint8_t)type ||
             translation.privileged_read == 0U ||
             translation.privileged_write != (uint8_t)(

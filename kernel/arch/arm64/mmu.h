@@ -6,6 +6,7 @@
 
 #define SYNTRA_ARM64_MMU_PAGE_SHIFT 12U
 #define SYNTRA_ARM64_MMU_PAGE_SIZE (1ULL << SYNTRA_ARM64_MMU_PAGE_SHIFT)
+#define SYNTRA_ARM64_MMU_BLOCK_SIZE (1ULL << 21U)
 #define SYNTRA_ARM64_MMU_TABLE_ENTRIES 512U
 #define SYNTRA_ARM64_MMU_VA_BITS 39U
 #define SYNTRA_ARM64_MMU_PA_BITS 48U
@@ -58,6 +59,9 @@ typedef const uint64_t *(*syntra_arm64_mmu_table_resolver_t)(
 syntra_status_t syntra_arm64_mmu_make_table_descriptor(
     uint64_t table_physical_address, uint64_t *descriptor);
 syntra_status_t syntra_arm64_mmu_make_page_descriptor(
+    uint64_t physical_address, syntra_arm64_mmu_memory_type_t memory_type,
+    syntra_arm64_mmu_access_t access, int executable, uint64_t *descriptor);
+syntra_status_t syntra_arm64_mmu_make_block_descriptor(
     uint64_t physical_address, syntra_arm64_mmu_memory_type_t memory_type,
     syntra_arm64_mmu_access_t access, int executable, uint64_t *descriptor);
 
