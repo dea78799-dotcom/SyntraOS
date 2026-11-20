@@ -66,15 +66,15 @@ GDB_OUTPUT="$(timeout 15s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "hbreak *0x10000000" \
     -ex 'break syntra_arm64_exception_handle_and_select if *(unsigned long*)($x0+288)==8 && ((*(unsigned long*)($x0+272)>>26)&0x3f)==0x15' \
     -ex "continue" \
-    -ex 'printf "EL0_ENTRY_STOP PC=%#lx\\n", $pc' \
+    -ex 'printf "EL0_ENTRY_STOP PC=%#lx\n", $pc' \
     -ex "continue" \
-    -ex 'printf "EL0_SVC_STOP vector=%lu ESR=%#lx ELR=%#lx FAR=%#lx SPSR=%#lx SVC_IMM=%#lx\\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+280), *(unsigned long*)($x0+264), (*(unsigned long*)($x0+272)&0xffff)' \
+    -ex 'printf "EL0_SVC_STOP vector=%lu ESR=%#lx ELR=%#lx FAR=%#lx SPSR=%#lx SVC_IMM=%#lx\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+280), *(unsigned long*)($x0+264), (*(unsigned long*)($x0+272)&0xffff)' \
     -ex "detach" 2>&1)" || { \
-        printf '%s\\n' "$GDB_OUTPUT" >&2; \
+        printf '%s\n' "$GDB_OUTPUT" >&2; \
         echo "GDB diagnostic breakpoint did not complete (timeout or remote error)." >&2; \
         echo "Continuing with UART smoke-test checks." >&2; \
     }
-printf '%s\\n' "$GDB_OUTPUT"
+printf '%s\n' "$GDB_OUTPUT"
 
 echo "Waiting for EL0 UART completion markers..."
 for _ in $(seq 1 100); do
