@@ -25,6 +25,7 @@ add_library(syntra_kernel STATIC
     kernel/arch/arm64/exception.c
     kernel/arch/arm64/registers.c
     kernel/arch/arm64/mmu.c
+    kernel/arch/arm64/context.c
 
     kernel/scheduler/scheduler.c
     kernel/memory/memory.c
@@ -417,6 +418,13 @@ target_include_directories(fdt_gic_test PRIVATE
     kernel/arch/arm64
 )
 add_test(NAME ARM64FDTGICDiscoveryTest COMMAND fdt_gic_test)
+
+# ARM64 initial thread context frame tests
+add_executable(arm64_context_test
+    tests/arm64/context_test.c
+)
+target_link_libraries(arm64_context_test PRIVATE syntra_kernel)
+add_test(NAME ARM64ContextFrameTest COMMAND arm64_context_test)
 
 # ARM64 MMU descriptor construction tests
 add_executable(mmu_descriptor_test
