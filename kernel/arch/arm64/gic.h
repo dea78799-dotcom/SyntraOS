@@ -60,9 +60,9 @@ syntra_status_t syntra_arm64_gic_configure(
 syntra_status_t syntra_arm64_gic_discover(const syntra_fdt_t *fdt);
 
 /*
- * Hardware initialization is deliberately unavailable until
- * DTB discovery, MMIO mapping, and the selected GIC version
- * have been validated on the target platform.
+ * Hardware initialization remains unavailable until MMIO mapping,
+ * memory attributes, and the selected GIC register layout have been
+ * validated on the target platform.
  */
 syntra_status_t syntra_arm64_gic_init(void);
 
