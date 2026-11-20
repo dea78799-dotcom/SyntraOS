@@ -2,10 +2,11 @@
  * SyntraOS ARM64 Exception Vector Table
  * Version: 1.1.0
  *
- * EL1 vector table with a common register-context capture entry.
+ * EL1 vector table with a common register-context capture and restore path.
  *
- * IRQ dispatch and exception return are intentionally deferred until
- * the GIC and a complete interrupt/exception policy are implemented.
+ * The common entry saves x0-x30 and architectural return state, calls the
+ * C exception/scheduler bridge, then restores either the interrupted frame
+ * or the selected thread's saved frame before ERET.
  */
 
 .section .text.vectors, "ax"
@@ -227,10 +228,9 @@ syntra_arm64_exception_entry:
     str x9, [sp, #280]
 
     /*
-     * Pass the saved frame to the C diagnostic handler.
-     * IRQ/FIQ/SError are identified but not dispatched yet.
-     * Do not ERET or enable IRQs until a complete controller and return
-     * path are implemented and validated.
+     * Pass the saved frame to the exception and scheduler bridge.
+     * The bridge may return a different valid frame when a thread switch
+     * is required. IRQ/FIQ/SError policy remains owned by the C layer.
      */
     mov x0, sp
     bl syntra_arm64_exception_handle_and_select

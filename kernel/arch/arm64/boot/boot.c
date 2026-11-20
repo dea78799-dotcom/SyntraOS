@@ -356,6 +356,8 @@ static volatile unsigned int scheduler_test_completed;
 static volatile unsigned int scheduler_test_last_worker;
 static volatile unsigned int scheduler_test_switches;
 static volatile unsigned int scheduler_test_worker_slices[2];
+static volatile char scheduler_test_trace[16];
+static volatile unsigned int scheduler_test_trace_length;
 
 static void syntra_scheduler_test_worker(void *argument)
 {
@@ -374,6 +376,19 @@ static void syntra_scheduler_test_worker(void *argument)
                 scheduler_test_last_worker != worker_id)
                 scheduler_test_switches++;
             scheduler_test_last_worker = worker_id;
+
+            /* Keep trace updates atomic with respect to timer preemption. */
+            __asm__ volatile("msr daifset, #2" ::: "memory");
+            if (scheduler_test_trace_length <
+                (unsigned int)sizeof(scheduler_test_trace))
+            {
+                scheduler_test_trace[scheduler_test_trace_length] =
+                    worker_id == SYNTRA_SCHEDULER_TEST_WORKER_A_ID
+                        ? 'A' : 'B';
+                scheduler_test_trace_length++;
+            }
+            __asm__ volatile("msr daifclr, #2" ::: "memory");
+            __asm__ volatile("isb" ::: "memory");
         }
     }
 
@@ -393,6 +408,9 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
     scheduler_test_switches = 0U;
     scheduler_test_worker_slices[0] = 0U;
     scheduler_test_worker_slices[1] = 0U;
+    scheduler_test_trace_length = 0U;
+    for (unsigned int i = 0U; i < sizeof(scheduler_test_trace); ++i)
+        scheduler_test_trace[i] = '\0';
 
     status = scheduler_init();
     if (status != SYNTRA_STATUS_OK) return status;
@@ -460,12 +478,26 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
         scheduler_test_worker_slices[0] == 0U ||
         scheduler_test_worker_slices[1] == 0U ||
         scheduler_test_switches < 2U ||
+        scheduler_test_trace_length < 4U ||
         scheduler_validate() != SYNTRA_STATUS_OK)
     {
         syntra_uart_puts("FAIL: ARM64 Scheduler context switch validation\n");
         return SYNTRA_STATUS_ERROR;
     }
 
+    for (unsigned int i = 1U; i < scheduler_test_trace_length; ++i)
+    {
+        if (scheduler_test_trace[i] == scheduler_test_trace[i - 1U])
+        {
+            syntra_uart_puts("FAIL: ARM64 Scheduler trace did not alternate\n");
+            return SYNTRA_STATUS_ERROR;
+        }
+    }
+
+    syntra_uart_puts("Scheduler trace: ");
+    for (unsigned int i = 0U; i < scheduler_test_trace_length; ++i)
+        syntra_uart_putc(scheduler_test_trace[i]);
+    syntra_uart_puts("\n");
     syntra_uart_puts("PASS: ARM64 Scheduler switched between two threads\n");
     return SYNTRA_STATUS_OK;
 }

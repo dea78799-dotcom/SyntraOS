@@ -40,7 +40,8 @@ cat "$LOG_FILE"
 
 if grep -Fq "SyntraOS boot OK" "$LOG_FILE" &&
    grep -Fq "PASS: ARM64 Generic Timer IRQ delivered 3 ticks" "$LOG_FILE" &&
-   grep -Fq "PASS: ARM64 Scheduler switched between two threads" "$LOG_FILE"; then
+   grep -Fq "PASS: ARM64 Scheduler switched between two threads" "$LOG_FILE" &&
+   grep -Eq "Scheduler trace: AB(AB)+" "$LOG_FILE"; then
     echo "PASS: UART PL011 confirmed boot, timer IRQ delivery, and ARM64 thread switching."
     exit 0
 fi

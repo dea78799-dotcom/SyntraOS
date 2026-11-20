@@ -19,7 +19,7 @@
 #define SYNTRA_ARM64_SCHEDULER_START_SVC_IMMEDIATE 0x43U
 
 /*
- * Exception frame layout shared by future vector-entry assembly and C.
+ * Exception frame layout shared by the ARM64 vector-entry assembly and C.
  *
  * registers[0..30] map to x0..x30 in ascending order.
  * sp_el0 stores the EL0 stack pointer at exception entry.
@@ -174,8 +174,8 @@ syntra_status_t syntra_arm64_exception_decode(
 
 /*
  * Capture and decode a context produced by the ARM64 vector entry.
- * The current policy is diagnostic-only: the assembly entry halts after
- * this function returns. It does not resume the interrupted execution.
+ * The architecture bridge handles validated IRQ/SVC paths and may select
+ * a different saved context for round-robin thread switching.
  */
 syntra_status_t syntra_arm64_exception_handle(
     const syntra_arm64_exception_context_t *context
