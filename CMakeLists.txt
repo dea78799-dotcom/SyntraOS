@@ -566,7 +566,7 @@ target_include_directories(arm64_page_table_builder_test PRIVATE
 )
 add_test(NAME ARM64PageTableBuilderTest COMMAND arm64_page_table_builder_test)
 
-/* Explicit EL1/EL0 permission audit: kernel isolation and user code execute. */
+# Explicit EL1/EL0 permission audit: kernel isolation and user code execute.
 add_executable(arm64_el0_permission_audit_test
     tests/arm64/el0_permission_audit_test.c
     kernel/arch/arm64/mmu.c
