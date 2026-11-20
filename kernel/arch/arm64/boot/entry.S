@@ -4,7 +4,7 @@
 
 /*
  * SyntraOS ARM64 Kernel Entry
- * Version: 1.0.0
+ * Version: 1.1.0
  *
  * Initial bare-metal entry for QEMU virt.
  */
@@ -13,17 +13,24 @@ _start:
     /* Mask IRQ, FIQ, SError and Debug exceptions. */
     msr daifset, #0xf
 
-    /* Read the initial exception level. */
+    /* This entry currently supports EL1 only. */
     mrs x19, CurrentEL
-
-    /* EL0 is not supported by this entry point. */
-    lsr x20, x19, #2
-    cbz x20, .Lhalt
+    cmp x19, #0x4
+    b.ne .Lhalt
 
     /* Set the initial stack pointer. */
     adrp x2, __stack_top
     add x2, x2, :lo12:__stack_top
     mov sp, x2
+
+    /*
+     * Install the EL1 exception vector table before entering C.
+     * The table is 2 KiB aligned in vectors.S.
+     */
+    adrp x2, syntra_arm64_vectors
+    add x2, x2, :lo12:syntra_arm64_vectors
+    msr vbar_el1, x2
+    isb
 
     /* Clear the BSS section. */
     adrp x2, __bss_start
@@ -50,6 +57,7 @@ _start:
     bl syntra_arm64_boot_main
 
 .Lhalt:
+    msr daifset, #0xf
     wfe
     b .Lhalt
 
