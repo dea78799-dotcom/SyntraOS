@@ -63,6 +63,8 @@ syntra_status_t syntra_arm64_exception_handle(
     last_exception_context.spsr_el1 = context->spsr_el1;
     last_exception_context.esr_el1 = context->esr_el1;
     last_exception_context.far_el1 = context->far_el1;
+    last_exception_context.vector_index = context->vector_index;
+    last_exception_context.reserved = context->reserved;
 
     syntra_status_t status = syntra_arm64_exception_decode(
         context->esr_el1,
@@ -76,6 +78,14 @@ syntra_status_t syntra_arm64_exception_handle(
     {
         return status;
     }
+
+    if (context->vector_index >= 16U)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    last_exception_info.vector_index =
+        (syntra_arm64_vector_index_t)context->vector_index;
 
     last_exception_valid = 1;
 
