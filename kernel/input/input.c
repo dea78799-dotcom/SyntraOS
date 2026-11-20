@@ -2,7 +2,6 @@
 
 #include <limits.h>
 #include <stddef.h>
-#include <string.h>
 
 static uint32_t clamp_pointer(int64_t value, uint32_t limit)
 {
@@ -43,14 +42,31 @@ syntra_status_t syntra_input_init(
     uint32_t width,
     uint32_t height)
 {
+    unsigned int index;
+
     if (state == NULL || width == 0U || height == 0U)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
-    memset(state, 0, sizeof(*state));
+    /* Freestanding-safe initialization: do not depend on libc memset. */
+    for (index = 0U; index < 4U; ++index)
+        state->keys[index] = 0U;
+
     state->width = width;
     state->height = height;
     state->pointer_x = width / 2U;
     state->pointer_y = height / 2U;
+    state->buttons = 0U;
+    state->wheel_x = 0;
+    state->wheel_y = 0;
+    state->abs_x_min = 0;
+    state->abs_x_max = 0;
+    state->abs_y_min = 0;
+    state->abs_y_max = 0;
+    state->abs_range_configured = 0;
+    state->event_count = 0U;
+    state->frame_sequence = 0U;
+    state->key_repeat_count = 0U;
+    state->rejected_event_count = 0U;
     state->initialized = 1;
     return SYNTRA_STATUS_OK;
 }
