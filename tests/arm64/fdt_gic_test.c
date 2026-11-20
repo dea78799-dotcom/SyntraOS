@@ -159,12 +159,16 @@ static void test_fdt_and_gic_discovery(void)
     syntra_arm64_gic_info_t info;
     uintptr_t base;
     size_t size;
+    size_t reg_count;
 
     build_test_fdt(0);
 
     assert(syntra_fdt_open(blob, sizeof(blob), &fdt) == SYNTRA_STATUS_OK);
     assert(syntra_fdt_find_compatible(
         &fdt, "arm,gic-v3", &node) == SYNTRA_STATUS_OK);
+    assert(syntra_fdt_get_reg_count(
+        &fdt, &node, &reg_count) == SYNTRA_STATUS_OK);
+    assert(reg_count == 2U);
 
     assert(syntra_fdt_get_reg(
         &fdt, &node, 0U, &base, &size) == SYNTRA_STATUS_OK);
@@ -227,6 +231,9 @@ static void test_rejects_invalid_reg_index_and_truncation(void)
 
     assert(syntra_fdt_get_reg(
         &fdt, &node, 2U, &base, &size) == SYNTRA_STATUS_ERROR);
+    assert(syntra_fdt_get_reg_count(
+        &fdt, &node, &reg_count) == SYNTRA_STATUS_OK);
+    assert(reg_count == 2U);
     assert(syntra_fdt_open(blob, 20U, &fdt) == SYNTRA_STATUS_INVALID_ARGUMENT);
 }
 
@@ -254,6 +261,8 @@ static void test_rejects_invalid_cell_properties(void)
         &fdt, "arm,gic-v3", &node) == SYNTRA_STATUS_OK);
     assert(syntra_fdt_get_reg(
         &fdt, &node, 0U, &base, &size) == SYNTRA_STATUS_ERROR);
+    assert(syntra_fdt_get_reg_count(
+        &fdt, &node, &reg_count) == SYNTRA_STATUS_ERROR);
 }
 
 static void test_rejects_malformed_reg_tuple(void)
