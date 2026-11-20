@@ -15,11 +15,13 @@ static syntra_status_t append_region(syntra_arm64_mmu_mapping_plan_t *p,uint64_t
  uint64_t end,ae;if(!range_end(base,size,&end))return SYNTRA_STATUS_INVALID_ARGUMENT;
  if(outward){base=align_down(base);if(!align_up(end,&ae))return SYNTRA_STATUS_INVALID_ARGUMENT;end=ae;}
  else {if(!align_up(base,&base))return SYNTRA_STATUS_INVALID_ARGUMENT;end=align_down(end);}
- if(end<=base)return SYNTRA_STATUS_OK;return append(p,base,end-base,type,access,exec);
+ if(end<=base) return SYNTRA_STATUS_OK;
+ return append(p,base,end-base,type,access,exec);
 }
 static syntra_status_t append_section(syntra_arm64_mmu_mapping_plan_t *p,uint64_t s,uint64_t e,syntra_arm64_mmu_access_t a,int x,uint64_t ks,uint64_t ke){
  if(s>e||(s&PAGE_MASK)||(e&PAGE_MASK)||s<ks||e>ke)return SYNTRA_STATUS_INVALID_ARGUMENT;
- if(s==e)return SYNTRA_STATUS_OK;return append(p,s,e-s,SYNTRA_ARM64_MMU_MEMORY_NORMAL,a,x);
+ if(s==e) return SYNTRA_STATUS_OK;
+ return append(p,s,e-s,SYNTRA_ARM64_MMU_MEMORY_NORMAL,a,x);
 }
 syntra_status_t syntra_arm64_mmu_mapping_plan_build(const syntra_arm64_boot_memory_metadata_t *m,const syntra_memory_region_t *r,size_t n,const syntra_arm64_gic_config_t *g,uintptr_t ub,size_t us,syntra_arm64_mmu_mapping_plan_t *p){
  syntra_status_t st;size_t i;uint64_t end;

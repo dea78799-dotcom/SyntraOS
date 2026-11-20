@@ -45,8 +45,10 @@ if grep -Fq "SyntraOS boot OK" "$LOG_FILE" &&
    grep -Eq "Physical page allocator: PASS free=0x0*[1-9a-fA-F][0-9a-fA-F]* total=0x0*[1-9a-fA-F][0-9a-fA-F]*" "$LOG_FILE" &&
    grep -Fq "PASS: ARM64 Generic Timer IRQ delivered 3 ticks" "$LOG_FILE" &&
    grep -Fq "PASS: ARM64 Scheduler switched between two threads" "$LOG_FILE" &&
-   grep -Eq "Scheduler trace: AB(AB)+" "$LOG_FILE"; then
-    echo "PASS: UART PL011 confirmed FDT memory discovery, boot, timer IRQ delivery, and ARM64 thread switching."
+   grep -Eq "Scheduler trace: AB(AB)+" "$LOG_FILE" &&
+   grep -Eq "MMU identity mapping audit: PASS entries=0x0*[1-9a-fA-F][0-9a-fA-F]* root=0x0*[1-9a-fA-F][0-9a-fA-F]*" "$LOG_FILE" &&
+   grep -Fq "SCTLR_EL1.M remains disabled; activation deferred" "$LOG_FILE"; then
+    echo "PASS: UART PL011 confirmed FDT discovery, boot, timer IRQs, thread switching, and MMU mapping audit (MMU still disabled)."
     exit 0
 fi
 
