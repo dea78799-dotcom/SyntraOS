@@ -624,13 +624,13 @@ static syntra_status_t fdt_get_cell_count(
 }
 
 syntra_status_t syntra_fdt_get_reg_count(
-    const uint8_t *reg_data;
     const syntra_fdt_t *fdt,
     const syntra_fdt_node_t *node,
     size_t *reg_count
 )
 {
     syntra_fdt_node_t parent;
+    const uint8_t *reg_data;
     uint32_t reg_size;
     uint32_t address_cells;
     uint32_t size_cells;
