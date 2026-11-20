@@ -69,8 +69,12 @@ static void build_test_fdt(void)
     static const uint8_t size_cells[] = {0U, 0U, 0U, 2U};
     static const uint8_t compatible[] = "arm,gic-v3";
     static const uint8_t reg[] = {
-        0U, 0U, 0U, 0x08U, 0U, 0U, 1U, 0U,
-        0U, 0U, 0x0aU, 0U, 0U, 0xf6U, 0U, 0U
+        /* GIC distributor: 0x08000000, size 0x00010000. */
+        0U, 0U, 0U, 0U, 0x08U, 0U, 0U, 0U,
+        0U, 0U, 0U, 0U, 0U, 1U, 0U, 0U,
+        /* GIC redistributor: 0x080A0000, size 0x00F60000. */
+        0U, 0U, 0U, 0U, 0x08U, 0x0aU, 0U, 0U,
+        0U, 0U, 0U, 0U, 0U, 0xf6U, 0U, 0U
     };
     static const char strings[] =
         "#address-cells\0#size-cells\0compatible\0reg\0";
