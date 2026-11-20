@@ -3,6 +3,7 @@
 
 #include "../../core/status.h"
 #include "fdt.h"
+#include "../gic.h"
 
 /*
  * SyntraOS ARM64 Boot Stage
@@ -13,7 +14,7 @@
 #define SYNTRA_ARM64_DTB_LIMIT    0x00200000ULL
 #define SYNTRA_ARM64_EL1_VALUE    0x4ULL
 
-static int validate_dtb(const void *dtb)
+static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
 {
     syntra_fdt_t fdt;
     syntra_fdt_iterator_t iterator;
@@ -29,7 +30,7 @@ static int validate_dtb(const void *dtb)
 
     if (status != SYNTRA_STATUS_OK)
     {
-        return 0;
+        return status;
     }
 
     syntra_fdt_iterator_init(&iterator);
@@ -45,7 +46,7 @@ static int validate_dtb(const void *dtb)
 
         if (status != SYNTRA_STATUS_OK)
         {
-            return 0;
+            return SYNTRA_STATUS_ERROR;
         }
 
         if (token.type == SYNTRA_FDT_TOKEN_END)
@@ -55,7 +56,12 @@ static int validate_dtb(const void *dtb)
         }
     }
 
-    return found_end;
+    if (!found_end)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    return syntra_arm64_gic_discover(&fdt);
 }
 
 syntra_status_t syntra_arm64_boot_main(
@@ -77,15 +83,5 @@ syntra_status_t syntra_arm64_boot_main(
 
     dtb = (const void *)(uintptr_t)dtb_address;
 
-    if (!validate_dtb(dtb))
-    {
-        return SYNTRA_STATUS_ERROR;
-    }
-
-    /*
-     * The FDT header and complete structure token stream are validated.
-     * Device discovery and hardware initialization remain separate stages.
-     */
-
-    return SYNTRA_STATUS_OK;
+    return validate_dtb_and_discover_gic(dtb);
 }
