@@ -109,6 +109,15 @@ add_executable(memory_region_test
 target_include_directories(memory_region_test PRIVATE kernel/memory kernel/core)
 add_test(NAME MemoryRegionManagerTest COMMAND memory_region_test)
 
+# Physical Page Allocator V1 Test
+add_executable(page_allocator_test
+    tests/memory/page_allocator_test.c
+    kernel/memory/page_allocator.c
+    kernel/memory/memory_region.c
+)
+target_include_directories(page_allocator_test PRIVATE kernel/memory kernel/core)
+add_test(NAME PhysicalPageAllocatorV1Test COMMAND page_allocator_test)
+
 # Memory Test
 add_executable(memory_test
     tests/memory/memory_test.c

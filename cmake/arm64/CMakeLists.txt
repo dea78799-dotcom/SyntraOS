@@ -35,6 +35,7 @@ add_executable(syntraos_arm64
     "${SYNTRAOS_ARM64_DIR}/boot/fdt.c"
     "${SYNTRAOS_ARM64_DIR}/boot/memory_map.c"
     "${SYNTRAOS_ROOT}/kernel/memory/memory_region.c"
+    "${SYNTRAOS_ROOT}/kernel/memory/page_allocator.c"
 
     "${SYNTRAOS_ARM64_DIR}/arch.c"
     "${SYNTRAOS_ARM64_DIR}/exception.c"
@@ -56,6 +57,7 @@ set_target_properties(syntraos_arm64 PROPERTIES
 
 target_include_directories(syntraos_arm64 PRIVATE
     "${SYNTRAOS_ROOT}/kernel/core"
+    "${SYNTRAOS_ROOT}/kernel/memory"
     "${SYNTRAOS_ROOT}/kernel/scheduler"
     "${SYNTRAOS_ROOT}/kernel/timer"
     "${SYNTRAOS_ROOT}/kernel/interrupt"
