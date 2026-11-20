@@ -30,6 +30,22 @@ are available and validated.
 
 These facts are not proof that the current image has booted on QEMU or physical hardware.
 
+### CI and boot-test audit
+
+The current `.github/workflows/ci.yml` has two relevant jobs:
+
+- Host Debug and Release builds plus their unit tests.
+- ARM64 cross-compilation followed by ELF existence and ELF architecture checks.
+
+The workflow does not install or invoke QEMU, does not launch the ARM64 ELF, and does not
+capture a serial-console boot result. Therefore, a green workflow currently proves host
+tests and ARM64 compilation/linking only. It does not prove the kernel enters at the
+expected EL, that the MMU starts disabled, or that the image boots.
+
+The ARM64 toolchain targets generic AArch64 bare-metal compilation with `-march=armv8-a`.
+It does not define a board-specific CPU model or a boot firmware contract.
+
+
 ## 3. Boot contract required before enabling translation
 
 The ARM64 entry path must eventually document and validate all of the following:
