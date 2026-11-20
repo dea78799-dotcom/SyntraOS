@@ -12,6 +12,7 @@
 #include "../mmu.h"
 #include "../page_table_builder.h"
 #include "../mmu_mapping_plan.h"
+#include "../../../gui/ramfb.h"
 
 /* Optional QEMU fw_cfg MMIO window, discovered from the supplied FDT. */
 static uintptr_t syntra_fw_cfg_base;
@@ -1070,6 +1071,24 @@ syntra_status_t syntra_arm64_boot_main(
     {
         syntra_uart_puts("SyntraOS boot failed: MMU mapping audit\n");
         return status;
+    }
+
+    if (syntra_fw_cfg_base != 0U)
+    {
+        status = syntra_ramfb_init(syntra_fw_cfg_base, syntra_fw_cfg_size);
+        if (status == SYNTRA_STATUS_OK)
+        {
+            syntra_uart_puts("QEMU ramfb: READY 640x480 XRGB8888\n");
+        }
+        else if (status == SYNTRA_STATUS_NOT_IMPLEMENTED)
+        {
+            syntra_uart_puts("QEMU ramfb: NOT PRESENT; UART boot retained\n");
+        }
+        else
+        {
+            /* Optional display failure must never invalidate the working kernel. */
+            syntra_uart_puts("QEMU ramfb: UNAVAILABLE; UART boot retained\n");
+        }
     }
 
     syntra_uart_puts("SyntraOS boot OK\n");

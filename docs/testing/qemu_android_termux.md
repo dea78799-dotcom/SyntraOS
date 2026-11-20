@@ -63,3 +63,30 @@ The terminal is the virtual machine's serial console. You should see the same fa
 - The tested machine profile is `virt` + GICv3 + Cortex-A57. Keep it aligned with `tools/arm64/run_qemu.sh` and the CI workflow.
 - Do not flash this ELF to the phone or replace Android boot files. It is intended to run inside QEMU only.
 - If QEMU reports an unsupported option or missing binary, check `qemu-system-aarch64 --version` and the installed Termux package before changing kernel code.
+
+
+## 5. Optional graphical desktop preview (QEMU with ramfb)
+
+The repository also provides a separate graphical test script. It enables QEMU's RAM framebuffer device and leaves the original headless UART test unchanged.
+
+On a desktop Linux host with a QEMU display backend installed:
+
+```sh
+bash tools/arm64/run_qemu_gui.sh build/arm64/syntraos_arm64.elf
+```
+
+The script defaults to GTK. To select another QEMU display backend, set `QEMU_DISPLAY`, for example `QEMU_DISPLAY=sdl`. This preview currently draws a static SyntraOS desktop; pointer input, keyboard input, windows, and applications are not implemented yet.
+
+On Android/Termux, the headless QEMU package may not include GTK, SDL, or VNC support. Check available backends with:
+
+```sh
+qemu-system-aarch64 -display help
+```
+
+If the installed QEMU supports VNC, try:
+
+```sh
+QEMU_DISPLAY=vnc=:1 bash tools/arm64/run_qemu_gui.sh ~/syntraos-test/syntraos_arm64.elf
+```
+
+Then connect a VNC viewer on the same device to `127.0.0.1:5901`. If VNC is not listed by `-display help`, this QEMU package cannot show the graphical preview; the UART test remains available. Do not change the kernel boot profile to work around a missing display backend.

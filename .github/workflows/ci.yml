@@ -239,6 +239,9 @@ jobs:
       - name: Boot ARM64 ELF in QEMU
         run: bash tools/arm64/run_qemu.sh build/arm64/syntraos_arm64.elf
 
+      - name: Verify QEMU RAM framebuffer desktop path
+        run: bash tools/arm64/run_qemu_gui_test.sh build/arm64/syntraos_arm64.elf
+
       - name: Upload ARM64 QEMU test image
         uses: actions/upload-artifact@v4
         with:
