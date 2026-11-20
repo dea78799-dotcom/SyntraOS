@@ -64,6 +64,17 @@ GDB_OUTPUT="$(timeout 30s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "set confirm off" \
     -ex "target remote 127.0.0.1:$GDB_PORT" \
     -ex "hbreak *0x10000000" \
+    -ex "commands 1" \
+    -ex "silent" \
+    -ex "printf \\"EL0_ENTRY_STOP PC=%#lx\\\\n\\", \\$pc" \
+    -ex "disable 1" \
+    -ex "hbreak syntra_arm64_exception_entry" \
+    -ex "commands 2" \
+    -ex "silent" \
+    -ex "printf \\"EL0_EXCEPTION_ENTRY vector=%ld PC=%#lx\\\\n\\", \\$x0, \\$pc" \
+    -ex "end" \
+    -ex "continue" \
+    -ex "end" \
     -ex "continue" \
     -ex "detach" 2>&1)" || {
         printf '%s\n' "$GDB_OUTPUT" >&2
@@ -93,8 +104,14 @@ if ! grep -Fq 'PASS: ARM64 Scheduler switched between two threads' "$UART_LOG"; 
     exit 1
 fi
 
-if ! grep -Fq '0x0000000010000000' <<<"$GDB_OUTPUT"; then
-    echo "GDB did not report a stop at EL0 virtual entry 0x10000000." >&2
+if ! grep -Fq 'EL0_ENTRY_STOP PC=' <<<"$GDB_OUTPUT"; then
+    echo "GDB did not confirm the EL0 entry breakpoint." >&2
+    exit 1
+fi
+
+if ! grep -Fq 'EL0_EXCEPTION_ENTRY vector=8' <<<"$GDB_OUTPUT"; then
+    echo "GDB did not observe the EL0 synchronous exception vector (expected vector 8)." >&2
+    echo "This distinguishes an EL0 execution problem from an SVC/exception-handler problem." >&2
     exit 1
 fi
 
