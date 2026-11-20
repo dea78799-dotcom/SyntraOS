@@ -397,3 +397,14 @@ add_test(
     NAME HALDeviceEventRouterV4Test
     COMMAND hal_device_event_router_v4_test
 )
+
+# ARM64 Device Tree and GIC discovery test
+add_executable(fdt_gic_test
+    tests/arm64/fdt_gic_test.c
+    kernel/arch/arm64/boot/fdt.c
+    kernel/arch/arm64/gic.c
+)
+target_include_directories(fdt_gic_test PRIVATE
+    kernel/arch/arm64
+)
+add_test(NAME ARM64FDTGICDiscoveryTest COMMAND fdt_gic_test)
