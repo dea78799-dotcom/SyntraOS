@@ -21,9 +21,19 @@
 #define MMU_PA_LIMIT              (1ULL << SYNTRA_ARM64_MMU_PA_BITS)
 
 #define MMU_MAIR_VALUE 0x00000000000000FFULL
-#define MMU_TCR_VALUE  (25ULL | (1ULL << 8U) | (1ULL << 10U) | \
-                        (3ULL << 12U) | (5ULL << 32U))
+#define MMU_TCR_T0SZ       25ULL
+#define MMU_TCR_EPD0       (0ULL << 7U)
+#define MMU_TCR_IRGN0_WBWA (1ULL << 8U)
+#define MMU_TCR_ORGN0_WBWA (1ULL << 10U)
+#define MMU_TCR_SH0_INNER  (3ULL << 12U)
+#define MMU_TCR_TG0_4K     (0ULL << 14U)
+#define MMU_TCR_IPS_SHIFT  32U
+#define MMU_TCR_IPS_MASK   (7ULL << MMU_TCR_IPS_SHIFT)
+#define MMU_ID_AA64MMFR0_PARANGE_MASK 0xFULL
+#define MMU_ID_AA64MMFR0_PARANGE_48_BITS 5ULL
 #define MMU_SCTLR_M    (1ULL << 0U)
+
+static uint64_t mmu_configured_tcr_value;
 
 static int physical_address_is_valid(uint64_t address)
 {
@@ -225,12 +235,15 @@ syntra_status_t syntra_arm64_mmu_read_registers(
     __asm__ volatile("mrs %0, mair_el1" : "=r"(registers->mair_el1));
     __asm__ volatile("mrs %0, tcr_el1" : "=r"(registers->tcr_el1));
     __asm__ volatile("mrs %0, ttbr0_el1" : "=r"(registers->ttbr0_el1));
+    __asm__ volatile("mrs %0, id_aa64mmfr0_el1"
+                     : "=r"(registers->id_aa64mmfr0_el1));
     return SYNTRA_STATUS_OK;
 #else
     registers->sctlr_el1 = 0ULL;
     registers->mair_el1 = 0ULL;
     registers->tcr_el1 = 0ULL;
     registers->ttbr0_el1 = 0ULL;
+    registers->id_aa64mmfr0_el1 = 0ULL;
     return SYNTRA_STATUS_NOT_IMPLEMENTED;
 #endif
 }
@@ -239,6 +252,8 @@ syntra_status_t syntra_arm64_mmu_prepare(uint64_t root_table_physical_address)
 {
 #if defined(__aarch64__)
     syntra_arm64_mmu_registers_t registers;
+    uint64_t parange;
+    uint64_t tcr_value;
 
     if (!physical_address_is_valid(root_table_physical_address))
     {
@@ -255,14 +270,37 @@ syntra_status_t syntra_arm64_mmu_prepare(uint64_t root_table_physical_address)
         return SYNTRA_STATUS_PERMISSION_DENIED;
     }
 
+    parange = registers.id_aa64mmfr0_el1 &
+              MMU_ID_AA64MMFR0_PARANGE_MASK;
+    if (parange > MMU_ID_AA64MMFR0_PARANGE_48_BITS)
+    {
+        /* Descriptor helpers currently support at most 48-bit PA. */
+        parange = MMU_ID_AA64MMFR0_PARANGE_48_BITS;
+    }
+
+    tcr_value = MMU_TCR_T0SZ |
+                MMU_TCR_EPD0 |
+                MMU_TCR_IRGN0_WBWA |
+                MMU_TCR_ORGN0_WBWA |
+                MMU_TCR_SH0_INNER |
+                MMU_TCR_TG0_4K |
+                (parange << MMU_TCR_IPS_SHIFT);
+
     __asm__ volatile("msr mair_el1, %0" :: "r"(MMU_MAIR_VALUE) : "memory");
-    __asm__ volatile("msr tcr_el1, %0" :: "r"(MMU_TCR_VALUE) : "memory");
+    __asm__ volatile("msr tcr_el1, %0" :: "r"(tcr_value) : "memory");
+    __asm__ volatile("dsb ish" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+    __asm__ volatile("dsb ish" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
     __asm__ volatile("msr ttbr0_el1, %0"
                      :: "r"(root_table_physical_address) : "memory");
-    __asm__ volatile("dsb sy" ::: "memory");
-    __asm__ volatile("tlbi vmalle1" ::: "memory");
-    __asm__ volatile("dsb sy" ::: "memory");
+    __asm__ volatile("dsb ish" ::: "memory");
     __asm__ volatile("isb" ::: "memory");
+    __asm__ volatile("dsb ish" ::: "memory");
+    __asm__ volatile("tlbi vmalle1" ::: "memory");
+    __asm__ volatile("dsb ish" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+    mmu_configured_tcr_value = tcr_value;
     return SYNTRA_STATUS_OK;
 #else
     (void)root_table_physical_address;
@@ -288,16 +326,18 @@ syntra_status_t syntra_arm64_mmu_enable(void)
 
     if ((registers.ttbr0_el1 & SYNTRA_ARM64_MMU_PA_MASK) == 0ULL ||
         registers.mair_el1 != MMU_MAIR_VALUE ||
-        registers.tcr_el1 != MMU_TCR_VALUE)
+        mmu_configured_tcr_value == 0ULL ||
+        registers.tcr_el1 != mmu_configured_tcr_value)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
 
-    __asm__ volatile("dsb sy" ::: "memory");
+    __asm__ volatile("dsb ish" ::: "memory");
     __asm__ volatile("isb" ::: "memory");
     __asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
     sctlr |= MMU_SCTLR_M;
     __asm__ volatile("msr sctlr_el1, %0" :: "r"(sctlr) : "memory");
+    __asm__ volatile("dsb ish" ::: "memory");
     __asm__ volatile("isb" ::: "memory");
     return SYNTRA_STATUS_OK;
 #else

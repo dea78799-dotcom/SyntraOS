@@ -27,6 +27,7 @@ typedef struct
     uint64_t mair_el1;
     uint64_t tcr_el1;
     uint64_t ttbr0_el1;
+    uint64_t id_aa64mmfr0_el1;
 } syntra_arm64_mmu_registers_t;
 
 typedef struct
@@ -93,7 +94,7 @@ syntra_status_t syntra_arm64_mmu_walk(
     syntra_arm64_mmu_translation_t *translation
 );
 
-/* Read SCTLR_EL1, MAIR_EL1, TCR_EL1 and TTBR0_EL1 on an AArch64 CPU. */
+/* Read EL1 MMU registers and ID_AA64MMFR0_EL1 on an AArch64 CPU. */
 syntra_status_t syntra_arm64_mmu_read_registers(
     syntra_arm64_mmu_registers_t *registers
 );
