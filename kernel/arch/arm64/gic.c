@@ -96,6 +96,59 @@ syntra_status_t syntra_arm64_gic_init(void)
     return SYNTRA_STATUS_NOT_IMPLEMENTED;
 }
 
+/*
+ * Read only architected identification registers after validating the
+ * Device-Tree-provided MMIO windows. No GIC control register is written.
+ */
+syntra_status_t syntra_arm64_gic_probe(
+    syntra_arm64_gic_probe_result_t *result
+)
+{
+    volatile const uint32_t *distributor;
+    volatile const uint64_t *redistributor;
+    uintptr_t distributor_base;
+    uintptr_t redistributor_base;
+
+    if (result == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (!gic_configured ||
+        gic_config.version != SYNTRA_ARM64_GIC_VERSION_3)
+    {
+        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+    }
+
+    /* GICD_TYPER at 0x004, GICD_IIDR at 0x008. */
+    if (gic_config.distributor_size < 0x00CU ||
+        gic_config.redistributor_size < 0x010U)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    distributor_base = gic_config.distributor_base;
+    redistributor_base = gic_config.redistributor_base;
+
+    if ((distributor_base & 0x3U) != 0U ||
+        (redistributor_base & 0x7U) != 0U)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    distributor = (volatile const uint32_t *)distributor_base;
+    redistributor = (volatile const uint64_t *)redistributor_base;
+
+    __asm__ volatile("dmb sy" ::: "memory");
+    result->distributor_typer = distributor[0x004U / sizeof(uint32_t)];
+    result->distributor_iidr = distributor[0x008U / sizeof(uint32_t)];
+    result->redistributor_typer =
+        redistributor[0x008U / sizeof(uint64_t)];
+    __asm__ volatile("dmb sy" ::: "memory");
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_arm64_gic_acknowledge(
     uint32_t *interrupt_id
 )
