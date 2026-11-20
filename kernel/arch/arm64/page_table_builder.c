@@ -292,8 +292,17 @@ syntra_status_t syntra_arm64_page_table_verify(
             translation.user_execute != 0U)
             return SYNTRA_STATUS_ERROR;
 
-        va += SYNTRA_ARM64_MMU_PAGE_SIZE;
-        pa += SYNTRA_ARM64_MMU_PAGE_SIZE;
+        {
+            uint64_t step = translation.page_size -
+                (va & (translation.page_size - 1ULL));
+            uint64_t remaining = end - va;
+            if (step > remaining) step = remaining;
+            if (step == 0ULL ||
+                (step & (SYNTRA_ARM64_MMU_PAGE_SIZE - 1ULL)) != 0ULL)
+                return SYNTRA_STATUS_ERROR;
+            va += step;
+            pa += step;
+        }
     }
 
     return SYNTRA_STATUS_OK;

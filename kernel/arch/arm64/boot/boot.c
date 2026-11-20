@@ -10,6 +10,8 @@
 #include "../context.h"
 #include "../gic.h"
 #include "../mmu.h"
+#include "../page_table_builder.h"
+#include "../mmu_mapping_plan.h"
 #include "../timer.h"
 #include "../../../timer/timer.h"
 #include "../../../interrupt/interrupt.h"
@@ -727,6 +729,110 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
     return SYNTRA_STATUS_OK;
 }
 
+static syntra_status_t syntra_boot_page_table_allocate(
+    void *context, uint64_t *physical_address)
+{
+    uintptr_t page;
+    syntra_status_t status;
+    (void)context;
+    if (physical_address == NULL) return SYNTRA_STATUS_INVALID_ARGUMENT;
+    status = syntra_page_alloc(&page);
+    if (status == SYNTRA_STATUS_OK) *physical_address = (uint64_t)page;
+    return status;
+}
+
+static uint64_t *syntra_boot_page_table_resolve(
+    uint64_t physical_address, void *context)
+{
+    (void)context;
+    if (physical_address > (uint64_t)UINTPTR_MAX ||
+        (physical_address & (SYNTRA_ARM64_MMU_PAGE_SIZE - 1ULL)) != 0ULL)
+        return NULL;
+    return (uint64_t *)(uintptr_t)physical_address;
+}
+
+/* Build and audit the identity mappings, but leave SCTLR_EL1.M disabled. */
+static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
+{
+    syntra_arm64_boot_memory_metadata_t metadata;
+    syntra_arm64_gic_info_t gic_info;
+    syntra_arm64_mmu_mapping_plan_t plan;
+    syntra_arm64_page_table_t page_table;
+    syntra_memory_region_t regions[SYNTRA_MEMORY_REGION_MAX];
+    size_t region_count = syntra_memory_region_count();
+    size_t index;
+    syntra_status_t status;
+
+    if (region_count == 0U || region_count > SYNTRA_MEMORY_REGION_MAX)
+        return SYNTRA_STATUS_ERROR;
+
+    status = syntra_arm64_boot_memory_metadata_get(&metadata);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_arm64_gic_get_info(&gic_info);
+    if (status != SYNTRA_STATUS_OK || !gic_info.configured)
+        return SYNTRA_STATUS_ERROR;
+
+    for (index = 0U; index < region_count; ++index)
+    {
+        status = syntra_memory_region_get(index, &regions[index]);
+        if (status != SYNTRA_STATUS_OK) return status;
+    }
+
+    status = syntra_arm64_mmu_mapping_plan_build(
+        &metadata, regions, region_count, &gic_info.config,
+        SYNTRA_PL011_BASE, 0x1000U, &plan);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("MMU mapping plan: FAIL\n");
+        return status;
+    }
+
+    status = syntra_arm64_page_table_init(
+        &page_table, syntra_boot_page_table_allocate,
+        syntra_boot_page_table_resolve, NULL);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    for (index = 0U; index < plan.count; ++index)
+    {
+        const syntra_arm64_mmu_mapping_t *mapping = &plan.mappings[index];
+        status = syntra_arm64_page_table_map(
+            &page_table, mapping->virtual_address,
+            mapping->physical_address, mapping->size,
+            mapping->memory_type, mapping->access, mapping->executable);
+        if (status != SYNTRA_STATUS_OK)
+        {
+            syntra_uart_puts("MMU page-table map failed index=");
+            syntra_uart_put_hex((uint64_t)index);
+            syntra_uart_puts("\n");
+            return status;
+        }
+    }
+
+    for (index = 0U; index < plan.count; ++index)
+    {
+        const syntra_arm64_mmu_mapping_t *mapping = &plan.mappings[index];
+        status = syntra_arm64_page_table_verify(
+            &page_table, mapping->virtual_address,
+            mapping->physical_address, mapping->size,
+            mapping->memory_type, mapping->access, mapping->executable);
+        if (status != SYNTRA_STATUS_OK)
+        {
+            syntra_uart_puts("MMU software-walker verification failed index=");
+            syntra_uart_put_hex((uint64_t)index);
+            syntra_uart_puts("\n");
+            return status;
+        }
+    }
+
+    syntra_uart_puts("MMU identity mapping audit: PASS entries=");
+    syntra_uart_put_hex((uint64_t)plan.count);
+    syntra_uart_puts(" root=");
+    syntra_uart_put_hex(page_table.root_physical_address);
+    syntra_uart_puts("\n");
+    syntra_uart_puts("SCTLR_EL1.M remains disabled; activation deferred\n");
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_arm64_boot_main(
     uint64_t dtb_address,
     uint64_t current_el
@@ -795,6 +901,13 @@ syntra_status_t syntra_arm64_boot_main(
     if (status != SYNTRA_STATUS_OK)
     {
         syntra_uart_puts("SyntraOS boot failed: ARM64 Scheduler context switch test\n");
+        return status;
+    }
+
+    status = syntra_arm64_boot_mmu_mapping_audit();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("SyntraOS boot failed: MMU mapping audit\n");
         return status;
     }
 
