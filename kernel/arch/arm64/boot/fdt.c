@@ -478,3 +478,172 @@ syntra_status_t syntra_fdt_get_property(
         }
     }
 }
+
+static syntra_status_t fdt_get_parent_node(
+    const syntra_fdt_t *fdt,
+    const syntra_fdt_node_t *child,
+    syntra_fdt_node_t *parent
+)
+{
+    syntra_fdt_iterator_t iterator;
+    syntra_fdt_token_t token;
+    syntra_fdt_node_t candidate;
+    int candidate_valid = 0;
+    syntra_status_t status;
+
+    if (fdt == NULL || child == NULL || parent == NULL ||
+        child->depth == 0U)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    syntra_fdt_iterator_init(&iterator);
+
+    while ((status = syntra_fdt_next(fdt, &iterator, &token)) ==
+           SYNTRA_STATUS_OK)
+    {
+        if (token.type == SYNTRA_FDT_TOKEN_BEGIN_NODE)
+        {
+            if (token.depth + 1U == child->depth)
+            {
+                candidate.begin_offset = token.offset;
+                candidate.depth = token.depth;
+                candidate_valid = 1;
+            }
+            else if (token.depth == child->depth &&
+                     token.offset == child->begin_offset &&
+                     candidate_valid)
+            {
+                *parent = candidate;
+                return SYNTRA_STATUS_OK;
+            }
+        }
+    }
+
+    return SYNTRA_STATUS_ERROR;
+}
+
+static int fdt_read_cells(
+    const uint8_t *data,
+    uint32_t cell_count,
+    uint64_t *value
+)
+{
+    uint64_t result = 0U;
+    uint32_t index;
+
+    if (data == NULL || value == NULL ||
+        cell_count == 0U || cell_count > 2U)
+    {
+        return 0;
+    }
+
+    for (index = 0U; index < cell_count; ++index)
+    {
+        result = (result << 32) | fdt_read_be32(data + index * 4U);
+    }
+
+    *value = result;
+    return 1;
+}
+
+static uint32_t fdt_get_cell_count(
+    const syntra_fdt_t *fdt,
+    const syntra_fdt_node_t *node,
+    const char *property_name,
+    uint32_t default_value
+)
+{
+    const uint8_t *data;
+    uint32_t data_size;
+
+    if (syntra_fdt_get_property(
+            fdt, node, property_name, &data, &data_size) != SYNTRA_STATUS_OK)
+    {
+        return default_value;
+    }
+
+    if (data_size != 4U)
+    {
+        return 0U;
+    }
+
+    return fdt_read_be32(data);
+}
+
+syntra_status_t syntra_fdt_get_reg(
+    const syntra_fdt_t *fdt,
+    const syntra_fdt_node_t *node,
+    uint32_t reg_index,
+    uintptr_t *base,
+    size_t *size
+)
+{
+    syntra_fdt_node_t parent;
+    const uint8_t *reg_data;
+    uint32_t reg_size;
+    uint32_t address_cells;
+    uint32_t size_cells;
+    size_t tuple_size;
+    size_t offset;
+    uint64_t address;
+    uint64_t region_size;
+
+    if (fdt == NULL || node == NULL || base == NULL || size == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (fdt_get_parent_node(fdt, node, &parent) != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    address_cells = fdt_get_cell_count(
+        fdt, &parent, "#address-cells", 2U);
+    size_cells = fdt_get_cell_count(
+        fdt, &parent, "#size-cells", 1U);
+
+    if (address_cells == 0U || address_cells > 2U ||
+        size_cells == 0U || size_cells > 2U)
+    {
+        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+    }
+
+    if (syntra_fdt_get_property(
+            fdt, node, "reg", &reg_data, &reg_size) != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    tuple_size = ((size_t)address_cells + size_cells) * 4U;
+    if (tuple_size == 0U || reg_size == 0U ||
+        (size_t)reg_size % tuple_size != 0U ||
+        (size_t)reg_index >= (size_t)reg_size / tuple_size)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    offset = (size_t)reg_index * tuple_size;
+
+    if (!fdt_read_cells(reg_data + offset, address_cells, &address) ||
+        !fdt_read_cells(
+            reg_data + offset + (size_t)address_cells * 4U,
+            size_cells,
+            &region_size))
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    if (address > (uint64_t)UINTPTR_MAX ||
+        region_size > (uint64_t)SIZE_MAX ||
+        address == 0U || region_size == 0U ||
+        address > (uint64_t)UINTPTR_MAX - (uintptr_t)region_size)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    *base = (uintptr_t)address;
+    *size = (size_t)region_size;
+    return SYNTRA_STATUS_OK;
+}
