@@ -54,6 +54,6 @@ int main(void)
         syntra_arm64_register_decode_current_el(0U, NULL) ==
             SYNTRA_STATUS_INVALID_ARGUMENT);
 
-    printf("\\nARM64 register decoder failures: %u\\n", failures);
+    printf("\nARM64 register decoder failures: %u\n", failures);
     return failures == 0U ? 0 : 1;
 }

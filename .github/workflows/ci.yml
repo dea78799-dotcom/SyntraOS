@@ -116,7 +116,7 @@ jobs:
       - name: Restore APT package archive cache
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/syntraos-apt/archives
+          path: ${{ runner.temp }}/syntraos-apt/archives/*.deb
           key: ${{ runner.os }}-${{ runner.arch }}-syntraos-apt-${{ hashFiles('.github/workflows/ci.yml') }}
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-syntraos-apt-
