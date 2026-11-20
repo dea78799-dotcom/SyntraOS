@@ -136,4 +136,4 @@ jobs:
             | grep -q "AArch64"
 
       - name: Boot ARM64 ELF in QEMU
-        run: bash tools/arm64/qemu_boot_test.sh build/arm64/syntraos_arm64.elf
+        run: bash tools/arm64/run_qemu.sh build/arm64/syntraos_arm64.elf
