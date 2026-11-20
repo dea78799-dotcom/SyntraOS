@@ -1,0 +1,65 @@
+name: Compile GitHub Agentic Workflows
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  workflows: write
+
+concurrency:
+  group: gh-aw-compile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    name: Compile and propose generated workflow locks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install GitHub Agentic Workflows extension
+        run: gh extension install github/gh-aw
+
+      - name: Compile Markdown workflows
+        run: gh aw compile
+
+      - name: Create pull request for generated lock files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git add .github/workflows/*.lock.yml
+
+          if git diff --cached --quiet; then
+            echo "No generated workflow lock changes."
+            exit 0
+          fi
+
+          branch="automation/gh-aw-lock-${GITHUB_RUN_ID}"
+          git switch -c "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "ci: compile GitHub Agentic Workflow locks"
+          git push origin "$branch"
+
+          gh pr create \
+            --repo "$GH_REPO" \
+            --base main \
+            --head "$branch" \
+            --title "ci: compile GitHub Agentic Workflow locks" \
+            --body "Generated lock files from the reviewed Agentic Workflow Markdown sources. Please review and merge this PR to activate the agentic workflow."
