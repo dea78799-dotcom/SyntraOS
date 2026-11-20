@@ -83,7 +83,7 @@ static void build_test_fdt(int use_gic_v2)
         0U, 0U, 0U, 0U, 0U, 1U, 0U, 0U,
         /* GIC CPU interface: 0x08010000, size 0x00001000. */
         0U, 0U, 0U, 0U, 0x08U, 1U, 0U, 0U,
-        0U, 0U, 0U, 0U, 0U, 0x10U, 0U, 0U
+        0U, 0U, 0U, 0U, 0U, 0U, 0x10U, 0U
     };
     const uint8_t *compatible = use_gic_v2
         ? compatible_v2 : compatible_v3;
