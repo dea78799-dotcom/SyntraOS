@@ -39,6 +39,13 @@ typedef struct
 
 typedef struct
 {
+    uint32_t distributor_typer;
+    uint32_t distributor_iidr;
+    uint64_t redistributor_typer;
+} syntra_arm64_gic_probe_result_t;
+
+typedef struct
+{
     syntra_arm64_gic_config_t config;
     int configured;
     int initialized;
@@ -65,6 +72,14 @@ syntra_status_t syntra_arm64_gic_discover(const syntra_fdt_t *fdt);
  * validated on the target platform.
  */
 syntra_status_t syntra_arm64_gic_init(void);
+
+/*
+ * Read-only GICv3 register probe. This function never writes MMIO and
+ * does not enable the Distributor, Redistributor, CPU interface, or IRQs.
+ */
+syntra_status_t syntra_arm64_gic_probe(
+    syntra_arm64_gic_probe_result_t *result
+);
 
 /* Interrupt acknowledge and end-of-interrupt interface. */
 syntra_status_t syntra_arm64_gic_acknowledge(
