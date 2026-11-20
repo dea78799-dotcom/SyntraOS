@@ -89,7 +89,7 @@ static void test_l1_one_gib_block(void)
     root[ix[0]]=0x80000000ULL|DESC_VALID|DESC_AF| (3ULL<<DESC_SH_SHIFT);
     assert(syntra_arm64_mmu_walk(ROOT_PA,va,resolve,NULL,&out)==SYNTRA_STATUS_OK);
     assert(out.level==1U && out.page_size==(1ULL<<30U));
-    assert(out.physical_address==0x845678123ULL);
+    assert(out.physical_address==0x85678123ULL);
 }
 static void test_l2_two_mib_block(void)
 {
