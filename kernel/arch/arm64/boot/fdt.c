@@ -493,7 +493,7 @@ syntra_status_t syntra_fdt_get_property(
         if (status != SYNTRA_STATUS_OK)
         {
             return status == SYNTRA_STATUS_NOT_IMPLEMENTED
-                ? SYNTRA_STATUS_ERROR
+                ? SYNTRA_STATUS_NOT_IMPLEMENTED
                 : status;
         }
 
@@ -511,7 +511,7 @@ syntra_status_t syntra_fdt_get_property(
                  (token.type == SYNTRA_FDT_TOKEN_END_NODE &&
                   token.depth == node->depth))
         {
-            return SYNTRA_STATUS_ERROR;
+            return SYNTRA_STATUS_NOT_IMPLEMENTED;
         }
     }
 }
@@ -584,28 +584,43 @@ static int fdt_read_cells(
     return 1;
 }
 
-static uint32_t fdt_get_cell_count(
+static syntra_status_t fdt_get_cell_count(
     const syntra_fdt_t *fdt,
     const syntra_fdt_node_t *node,
     const char *property_name,
-    uint32_t default_value
+    uint32_t default_value,
+    uint32_t *cell_count
 )
 {
     const uint8_t *data;
     uint32_t data_size;
+    syntra_status_t status;
 
-    if (syntra_fdt_get_property(
-            fdt, node, property_name, &data, &data_size) != SYNTRA_STATUS_OK)
+    if (cell_count == NULL)
     {
-        return default_value;
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    status = syntra_fdt_get_property(
+        fdt, node, property_name, &data, &data_size);
+    if (status == SYNTRA_STATUS_NOT_IMPLEMENTED)
+    {
+        *cell_count = default_value;
+        return SYNTRA_STATUS_OK;
+    }
+
+    if (status != SYNTRA_STATUS_OK)
+    {
+        return status;
     }
 
     if (data_size != 4U)
     {
-        return 0U;
+        return SYNTRA_STATUS_ERROR;
     }
 
-    return fdt_read_be32(data);
+    *cell_count = fdt_read_be32(data);
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t syntra_fdt_get_reg(
@@ -636,10 +651,23 @@ syntra_status_t syntra_fdt_get_reg(
         return SYNTRA_STATUS_ERROR;
     }
 
-    address_cells = fdt_get_cell_count(
-        fdt, &parent, "#address-cells", 2U);
-    size_cells = fdt_get_cell_count(
-        fdt, &parent, "#size-cells", 1U);
+    {
+        syntra_status_t status;
+
+        status = fdt_get_cell_count(
+            fdt, &parent, "#address-cells", 2U, &address_cells);
+        if (status != SYNTRA_STATUS_OK)
+        {
+            return status;
+        }
+
+        status = fdt_get_cell_count(
+            fdt, &parent, "#size-cells", 1U, &size_cells);
+        if (status != SYNTRA_STATUS_OK)
+        {
+            return status;
+        }
+    }
 
     if (address_cells == 0U || address_cells > 2U ||
         size_cells == 0U || size_cells > 2U)
