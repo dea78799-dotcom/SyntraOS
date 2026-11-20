@@ -174,10 +174,20 @@ static void test_rejects_bad_magic(void)
     assert(syntra_fdt_open(blob, sizeof(blob), &fdt) == SYNTRA_STATUS_ERROR);
 }
 
+static void test_rejects_overlapping_blocks(void)
+{
+    syntra_fdt_t fdt;
+
+    build_test_fdt();
+    write_be32(blob + 12U, (uint32_t)structure_offset);
+    assert(syntra_fdt_open(blob, sizeof(blob), &fdt) == SYNTRA_STATUS_ERROR);
+}
+
 int main(void)
 {
     test_fdt_and_gic_discovery();
     test_rejects_bad_magic();
+    test_rejects_overlapping_blocks();
     puts("FDT/GIC discovery tests passed");
     return 0;
 }
