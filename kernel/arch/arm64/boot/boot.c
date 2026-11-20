@@ -556,6 +556,65 @@ static syntra_status_t syntra_arm64_svc_vector_test(void)
     return SYNTRA_STATUS_OK;
 }
 
+/* Reuse the initialized GIC and timer to validate a fresh IRQ after MMU-on. */
+static syntra_status_t syntra_arm64_post_mmu_timer_irq_test(void)
+{
+    uint64_t start;
+    uint64_t timeout_ticks;
+    uint64_t initial_ticks;
+    syntra_status_t status;
+
+    initial_ticks = timer_get_ticks();
+    start = syntra_arm64_timer_read_counter();
+    timeout_ticks = syntra_arm64_timer_read_frequency() * 2U;
+
+    status = interrupt_enable(30U);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = syntra_arm64_timer_enable();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        (void)interrupt_disable(30U);
+        return status;
+    }
+
+    __asm__ volatile("dsb sy" ::: "memory");
+    __asm__ volatile("msr daifclr, #2" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+
+    while ((timer_get_ticks() - initial_ticks) < 3ULL)
+    {
+        uint64_t now = syntra_arm64_timer_read_counter();
+        if ((now - start) > timeout_ticks)
+        {
+            __asm__ volatile("msr daifset, #2" ::: "memory");
+            __asm__ volatile("isb" ::: "memory");
+            (void)syntra_arm64_timer_disable();
+            (void)interrupt_disable(30U);
+            syntra_uart_puts("Post-MMU Generic Timer IRQ: FAIL timeout\n");
+            return SYNTRA_STATUS_ERROR;
+        }
+    }
+
+    __asm__ volatile("msr daifset, #2" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+
+    status = syntra_arm64_timer_disable();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        (void)interrupt_disable(30U);
+        return status;
+    }
+    status = interrupt_disable(30U);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    if ((timer_get_ticks() - initial_ticks) < 3ULL)
+        return SYNTRA_STATUS_ERROR;
+
+    syntra_uart_puts("Post-MMU Generic Timer IRQ: PASS ticks=3+\\n");
+    return SYNTRA_STATUS_OK;
+}
+
 
 #define SYNTRA_SCHEDULER_TEST_STACK_SIZE 8192U
 #define SYNTRA_SCHEDULER_TEST_BOOT_ID 1U
@@ -888,6 +947,13 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
         return status;
     }
     syntra_uart_puts("Post-MMU SVC/ERET validation: PASS\n");
+
+    status = syntra_arm64_post_mmu_timer_irq_test();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("Post-MMU Timer IRQ validation: FAIL\n");
+        return status;
+    }
     return SYNTRA_STATUS_OK;
 }
 
