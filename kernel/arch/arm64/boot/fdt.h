@@ -17,6 +17,8 @@ typedef struct
     size_t structure_size;
     const uint8_t *strings;
     size_t strings_size;
+    const uint8_t *reserve_map;
+    size_t reserve_map_size;
 } syntra_fdt_t;
 
 typedef enum
@@ -89,6 +91,20 @@ syntra_status_t syntra_fdt_get_property(
     const char *property_name,
     const uint8_t **data,
     uint32_t *data_size
+);
+
+/* Count validated FDT header reservation-map entries (terminator excluded). */
+syntra_status_t syntra_fdt_get_reservation_count(
+    const syntra_fdt_t *fdt,
+    size_t *reservation_count
+);
+
+/* Retrieve one 64-bit address/size reservation-map entry. */
+syntra_status_t syntra_fdt_get_reservation(
+    const syntra_fdt_t *fdt,
+    size_t index,
+    uint64_t *address,
+    uint64_t *size
 );
 
 /* Count validated reg tuples using the parent's address/size cell widths. */
