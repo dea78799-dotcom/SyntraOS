@@ -95,7 +95,9 @@ jobs:
             cmake \
             ninja-build \
             gcc-aarch64-linux-gnu \
-            binutils-aarch64-linux-gnu
+            binutils-aarch64-linux-gnu \
+            qemu-system-arm \
+            gdb-multiarch
 
       - name: Verify ARM64 compiler
         run: |
@@ -116,3 +118,6 @@ jobs:
           aarch64-linux-gnu-readelf -h build/arm64/syntraos_arm64.elf
           aarch64-linux-gnu-readelf -h build/arm64/syntraos_arm64.elf \
             | grep -q "AArch64"
+
+      - name: Boot ARM64 ELF in QEMU
+        run: bash tools/arm64/qemu_boot_test.sh build/arm64/syntraos_arm64.elf
