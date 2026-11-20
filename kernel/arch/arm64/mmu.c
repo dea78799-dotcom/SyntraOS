@@ -124,3 +124,30 @@ syntra_status_t syntra_arm64_mmu_get_table_indices(
 
     return SYNTRA_STATUS_OK;
 }
+
+syntra_status_t syntra_arm64_mmu_validate_mapping_range(
+    uint64_t virtual_address,
+    uint64_t physical_address,
+    uint64_t size
+)
+{
+    const uint64_t virtual_limit = 1ULL << SYNTRA_ARM64_MMU_VA_BITS;
+    const uint64_t physical_limit = 1ULL << SYNTRA_ARM64_MMU_PA_BITS;
+    const uint64_t page_mask = SYNTRA_ARM64_MMU_PAGE_SIZE - 1ULL;
+
+    if (size == 0ULL ||
+        ((virtual_address | physical_address | size) & page_mask) != 0ULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (virtual_address >= virtual_limit ||
+        physical_address >= physical_limit ||
+        size > (virtual_limit - virtual_address) ||
+        size > (physical_limit - physical_address))
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    return SYNTRA_STATUS_OK;
+}
