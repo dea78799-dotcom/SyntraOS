@@ -24,13 +24,12 @@ syntra_status_t syntra_arm64_boot_memory_metadata_set(
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
 
-    /* Refuse overlapping kernel/stack/DTB ranges: all three are live. */
-    if ((metadata->kernel_start < metadata->stack_top &&
-         metadata->stack_bottom < metadata->kernel_end) ||
-        (metadata->kernel_start < metadata->dtb_start + metadata->dtb_size &&
-         metadata->dtb_start < metadata->kernel_end) ||
-        (metadata->stack_bottom < metadata->dtb_start + metadata->dtb_size &&
-         metadata->dtb_start < metadata->stack_top))
+    /*
+     * The stack is intentionally contained in the linker-defined kernel
+     * image range. Only reject DTB overlap with the complete kernel image.
+     */
+    if (metadata->kernel_start < metadata->dtb_start + metadata->dtb_size &&
+        metadata->dtb_start < metadata->kernel_end)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
@@ -50,7 +49,7 @@ syntra_status_t syntra_arm64_boot_memory_metadata_get(
     }
     if (!boot_memory_metadata_valid)
     {
-        return SYNTRA_STATUS_NOT_INITIALIZED;
+        return SYNTRA_STATUS_ERROR;
     }
 
     *metadata = boot_memory_metadata;

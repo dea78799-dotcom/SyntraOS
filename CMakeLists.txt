@@ -432,6 +432,7 @@ add_test(NAME ARM64FDTGICDiscoveryTest COMMAND fdt_gic_test)
 add_executable(arm64_boot_memory_metadata_test
     tests/arm64/boot_memory_metadata_test.c
     kernel/arch/arm64/boot/memory_map.c
+    kernel/arch/arm64/boot/fdt.c
     kernel/memory/memory_region.c
 )
 target_include_directories(arm64_boot_memory_metadata_test PRIVATE
