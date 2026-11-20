@@ -255,6 +255,9 @@ syntra_arm64_exception_entry:
 
 .Lexception_return:
 
+    /* Restore the saved EL0 stack pointer before ERET. */
+    ldr x9, [sp, #248]
+    msr sp_el0, x9
     ldr x9, [sp, #264]
     msr spsr_el1, x9
     ldr x9, [sp, #256]
