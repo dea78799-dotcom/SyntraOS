@@ -35,6 +35,9 @@ add_executable(syntraos_arm64
     "${SYNTRAOS_ARM64_DIR}/arch.c"
     "${SYNTRAOS_ARM64_DIR}/exception.c"
     "${SYNTRAOS_ARM64_DIR}/registers.c"
+    "${SYNTRAOS_ARM64_DIR}/timer.c"
+
+    "${SYNTRAOS_ROOT}/kernel/timer/timer.c"
 )
 
 set_target_properties(syntraos_arm64 PROPERTIES
@@ -44,6 +47,7 @@ set_target_properties(syntraos_arm64 PROPERTIES
 
 target_include_directories(syntraos_arm64 PRIVATE
     "${SYNTRAOS_ROOT}/kernel/core"
+    "${SYNTRAOS_ROOT}/kernel/timer"
     "${SYNTRAOS_ARM64_DIR}"
 )
 
