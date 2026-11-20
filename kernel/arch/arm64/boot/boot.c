@@ -225,6 +225,7 @@ syntra_status_t syntra_arm64_boot_main(
 )
 {
     const void *dtb;
+    syntra_status_t status;
 
     if (dtb_address != SYNTRA_ARM64_DTB_ADDRESS)
     {
