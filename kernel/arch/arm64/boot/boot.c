@@ -3,6 +3,8 @@
 
 #include "../../core/status.h"
 #include "fdt.h"
+#include "memory_map.h"
+#include "../../../memory/memory_region.h"
 #include "../exception.h"
 #include "../context.h"
 #include "../gic.h"
@@ -214,6 +216,44 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
     if (!found_end)
     {
         return SYNTRA_STATUS_ERROR;
+    }
+
+    status = syntra_arm64_memory_map_discover(
+        &fdt,
+        (uintptr_t)dtb,
+        fdt.total_size
+    );
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("FDT physical memory map discovery failed\\n");
+        return status;
+    }
+
+    syntra_uart_puts("FDT physical memory regions: ");
+    syntra_uart_put_hex((uint64_t)syntra_memory_region_count());
+    syntra_uart_puts("\\n");
+
+    {
+        size_t region_index;
+        for (region_index = 0U;
+             region_index < syntra_memory_region_count();
+             ++region_index)
+        {
+            syntra_memory_region_t region;
+            if (syntra_memory_region_get(region_index, &region) !=
+                SYNTRA_STATUS_OK)
+            {
+                return SYNTRA_STATUS_ERROR;
+            }
+
+            syntra_uart_puts("  region base=");
+            syntra_uart_put_hex((uint64_t)region.base);
+            syntra_uart_puts(" size=");
+            syntra_uart_put_hex((uint64_t)region.size);
+            syntra_uart_puts(" type=");
+            syntra_uart_put_hex((uint64_t)region.type);
+            syntra_uart_puts("\\n");
+        }
     }
 
     status = syntra_boot_report_interrupt_controller(&fdt);
