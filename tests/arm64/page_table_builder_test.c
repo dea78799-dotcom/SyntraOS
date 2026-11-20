@@ -95,9 +95,24 @@ static void test_device_mapping_and_invalid_inputs(void)
         NULL, alloc_cb, resolve_cb, NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
 }
 
+
+static void test_partial_overlap_preflight(void)
+{
+    syntra_arm64_page_table_t pt;
+    reset();
+    assert(syntra_arm64_page_table_init(&pt, alloc_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_map(&pt, 0x50000000ULL, 0x60000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL, SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_map(&pt, 0x50001000ULL, 0x70001000ULL, 0x2000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL, SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_ERROR);
+    assert(syntra_arm64_page_table_verify(&pt, 0x50001000ULL, 0x70001000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL, SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_ERROR);
+}
+
 int main(void)
 {
     test_build_and_walk_verify();
+    test_partial_overlap_preflight();
     test_device_mapping_and_invalid_inputs();
     puts("ARM64 page-table builder tests passed");
     return 0;
