@@ -29,48 +29,55 @@ SECTIONS
 
     __kernel_start = .;
 
-    .text :
+    .text ALIGN(4096) :
     {
-        . = ALIGN(16);
+        __text_start = .;
 
         KEEP(*(.text.boot))
 
         *(.text)
         *(.text.*)
+
+        . = ALIGN(4096);
+        __text_end = .;
     } > RAM :text
 
-    .rodata :
+    .rodata ALIGN(4096) :
     {
-        . = ALIGN(16);
+        __rodata_start = .;
 
         *(.rodata)
         *(.rodata.*)
+
+        . = ALIGN(4096);
+        __rodata_end = .;
     } > RAM :rodata
 
-    .data :
+    .data ALIGN(4096) :
     {
-        . = ALIGN(16);
+        __data_start = .;
 
         *(.data)
         *(.data.*)
+
+        . = ALIGN(4096);
+        __data_end = .;
     } > RAM :data
 
-    .bss (NOLOAD) :
+    .bss ALIGN(4096) (NOLOAD) :
     {
-        . = ALIGN(8);
-
         __bss_start = .;
 
         *(.bss)
         *(.bss.*)
         *(COMMON)
 
-        . = ALIGN(8);
+        . = ALIGN(4096);
 
         __bss_end = .;
     } > RAM :data
 
-    .stack (NOLOAD) :
+    .stack ALIGN(4096) (NOLOAD) :
     {
         . = ALIGN(16);
 
