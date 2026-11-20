@@ -4,6 +4,17 @@
 .type syntra_arm64_enter_user_context, %function
 /* x0 = prepared frame; x1 = dedicated EL1 exception stack top. */
 syntra_arm64_enter_user_context:
+    stp x19, x20, [sp, #-16]!
+    stp x21, x22, [sp, #-16]!
+    stp x23, x24, [sp, #-16]!
+    stp x25, x26, [sp, #-16]!
+    stp x27, x28, [sp, #-16]!
+    stp x29, x30, [sp, #-16]!
+    adrp x9, syntra_el0_saved_kernel_sp
+    add x9, x9, :lo12:syntra_el0_saved_kernel_sp
+    mov x10, sp
+    str x10, [x9]
+
     mov x18, x0
     ldr x9, [x18, #248]
     msr sp_el0, x9
@@ -32,3 +43,26 @@ syntra_arm64_enter_user_context:
     ldr x18, [x18, #144]
     eret
 .size syntra_arm64_enter_user_context, . - syntra_arm64_enter_user_context
+
+.align 4
+.global syntra_arm64_el0_return_trampoline
+.type syntra_arm64_el0_return_trampoline, %function
+syntra_arm64_el0_return_trampoline:
+    adrp x9, syntra_el0_saved_kernel_sp
+    add x9, x9, :lo12:syntra_el0_saved_kernel_sp
+    ldr x9, [x9]
+    mov sp, x9
+    ldp x29, x30, [sp], #16
+    ldp x27, x28, [sp], #16
+    ldp x25, x26, [sp], #16
+    ldp x23, x24, [sp], #16
+    ldp x21, x22, [sp], #16
+    ldp x19, x20, [sp], #16
+    ret
+.size syntra_arm64_el0_return_trampoline, . - syntra_arm64_el0_return_trampoline
+
+.section .bss
+.align 3
+.global syntra_el0_saved_kernel_sp
+syntra_el0_saved_kernel_sp:
+    .zero 8

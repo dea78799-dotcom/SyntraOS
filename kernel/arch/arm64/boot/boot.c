@@ -860,6 +860,12 @@ static uint64_t *syntra_boot_page_table_resolve(
     return (uint64_t *)(uintptr_t)physical_address;
 }
 
+static const uint64_t *syntra_boot_page_table_walk_resolve(
+    uint64_t physical_address, void *context)
+{
+    return syntra_boot_page_table_resolve(physical_address, context);
+}
+
 /* Build and audit the identity mappings, but leave SCTLR_EL1.M disabled. */
 static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
 {
@@ -1047,11 +1053,11 @@ static syntra_status_t syntra_arm64_run_el0_hello_test(void)
     if (status != SYNTRA_STATUS_OK) return status;
 
     if (syntra_arm64_mmu_walk(syntra_active_page_table.root_physical_address,
-            SYNTRA_EL0_CODE_VA, syntra_boot_page_table_resolve, NULL, &code)
+            SYNTRA_EL0_CODE_VA, syntra_boot_page_table_walk_resolve, NULL, &code)
             != SYNTRA_STATUS_OK ||
         !code.user_read || code.user_write || !code.user_execute ||
         syntra_arm64_mmu_walk(syntra_active_page_table.root_physical_address,
-            SYNTRA_EL0_STACK_VA, syntra_boot_page_table_resolve, NULL, &stack)
+            SYNTRA_EL0_STACK_VA, syntra_boot_page_table_walk_resolve, NULL, &stack)
             != SYNTRA_STATUS_OK ||
         !stack.user_read || !stack.user_write || stack.user_execute)
         return SYNTRA_STATUS_PERMISSION_DENIED;
@@ -1081,7 +1087,8 @@ static syntra_status_t syntra_arm64_run_el0_hello_test(void)
     syntra_uart_puts("EL0 transition: ERET\\n");
     syntra_arm64_enter_user_context(context,
         (uintptr_t)(syntra_el0_kernel_stack + sizeof(syntra_el0_kernel_stack)));
-    return SYNTRA_STATUS_ERROR;
+    syntra_uart_puts("EL0 test returned to EL1: PASS\n");
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t syntra_arm64_boot_main(

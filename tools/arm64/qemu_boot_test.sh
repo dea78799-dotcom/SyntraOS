@@ -79,6 +79,16 @@ if ! grep -Fq 'PASS: ARM64 Scheduler switched between two threads' "$UART_LOG"; 
     exit 1
 fi
 
+if ! grep -Fq 'Hello from EL0' "$UART_LOG"; then
+    echo "First EL0 process did not print its UART hello marker." >&2
+    exit 1
+fi
+
+if ! grep -Fq 'EL0 test returned to EL1: PASS' "$UART_LOG"; then
+    echo "EL0 process did not return safely to EL1." >&2
+    exit 1
+fi
+
 if ! grep -Eq 'syntra_arm64_boot_main returned status: 0([[:space:]]|$)' <<<"$GDB_OUTPUT"; then
     echo "ARM64 boot stage returned a non-zero status." >&2
     exit 1

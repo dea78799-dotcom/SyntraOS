@@ -1,6 +1,18 @@
 #include <stddef.h>
 
 #include "exception.h"
+#include "context.h"
+
+extern void syntra_arm64_exception_uart_puts(const char *message) __attribute__((weak));
+extern char __user_text_start[] __attribute__((weak));
+extern void syntra_arm64_user_fault_halt(void) __attribute__((weak));
+extern void syntra_arm64_el0_return_trampoline(void) __attribute__((weak));
+
+static void syntra_exception_uart_puts(const char *message)
+{
+    if (syntra_arm64_exception_uart_puts != NULL)
+        syntra_arm64_exception_uart_puts(message);
+}
 #include "../../interrupt/interrupt.h"
 #include "../../scheduler/scheduler.h"
 
@@ -146,11 +158,26 @@ syntra_status_t syntra_arm64_exception_handle(
 
         if (last_exception_info.exception_class == SYNTRA_ARM64_EXCEPTION_SVC_AARCH64)
         {
-            if ((context->esr_el1 & 0xFFFFULL) == 0x44ULL)
-                syntra_arm64_exception_uart_puts("Hello from EL0\\n");
+            uint64_t immediate = context->esr_el1 & 0xFFFFULL;
+            if (immediate == 0x44ULL)
+            {
+                syntra_exception_uart_puts("Hello from EL0\n");
+                mutable_context->reserved = SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC;
+            }
+            else if (immediate == 0x45ULL &&
+                     syntra_arm64_el0_return_trampoline != NULL)
+            {
+                syntra_exception_uart_puts("EL0 exit SVC: returning to EL1\n");
+                mutable_context->elr_el1 =
+                    (uint64_t)(uintptr_t)syntra_arm64_el0_return_trampoline;
+                mutable_context->spsr_el1 = 0x3C5ULL;
+                mutable_context->reserved = SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC;
+            }
             else
-                syntra_arm64_exception_uart_puts("EL0 SVC: unknown immediate\\n");
-            mutable_context->reserved = SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC;
+            {
+                syntra_exception_uart_puts("EL0 SVC: unknown immediate\n");
+                mutable_context->reserved = SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC;
+            }
         }
         else if (last_exception_info.exception_class == SYNTRA_ARM64_EXCEPTION_DATA_ABORT_LOWER ||
                  last_exception_info.exception_class == SYNTRA_ARM64_EXCEPTION_INSTRUCTION_ABORT_LOWER)
@@ -158,10 +185,11 @@ syntra_status_t syntra_arm64_exception_handle(
             uintptr_t halt_offset = (uintptr_t)syntra_arm64_user_fault_halt -
                 (uintptr_t)__user_text_start;
             if (last_exception_info.exception_class == SYNTRA_ARM64_EXCEPTION_DATA_ABORT_LOWER)
-                syntra_arm64_exception_uart_puts("EL0 Data Abort: caught; stopping user task\\n");
+                syntra_exception_uart_puts("EL0 Data Abort: caught; stopping user task\\n");
             else
-                syntra_arm64_exception_uart_puts("EL0 Instruction Abort: caught; stopping user task\\n");
+                syntra_exception_uart_puts("EL0 Instruction Abort: caught; stopping user task\\n");
             mutable_context->elr_el1 = 0x10000000ULL + halt_offset;
+            mutable_context->spsr_el1 = 0x3C0ULL;
             mutable_context->reserved = SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC;
         }
         else

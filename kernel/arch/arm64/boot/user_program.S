@@ -5,6 +5,7 @@
 syntra_arm64_user_hello:
     mov x0, #0
     svc #0x44
+    svc #0x45
 .Luser_hello_idle:
     wfe
     b .Luser_hello_idle
