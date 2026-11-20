@@ -136,6 +136,44 @@ static void test_translation_indices(void)
         0x40000000ULL, NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
 }
 
+
+static void test_mapping_range_validation(void)
+{
+    const uint64_t page = SYNTRA_ARM64_MMU_PAGE_SIZE;
+
+    assert(syntra_arm64_mmu_validate_mapping_range(
+        0x40000000ULL, 0x40000000ULL, page) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_mmu_validate_mapping_range(
+        0x40000000ULL, 0x40000000ULL, 2ULL * page) == SYNTRA_STATUS_OK);
+
+    /* The last page inside the supported 39-bit VA space is valid. */
+    assert(syntra_arm64_mmu_validate_mapping_range(
+        (1ULL << SYNTRA_ARM64_MMU_VA_BITS) - page,
+        0x0000FFFFFFFFF000ULL, page) == SYNTRA_STATUS_OK);
+
+    assert(syntra_arm64_mmu_validate_mapping_range(
+        0x40000000ULL, 0x40000000ULL, 0ULL) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_mmu_validate_mapping_range(
+        0x40000001ULL, 0x40000000ULL, page) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_mmu_validate_mapping_range(
+        0x40000000ULL, 0x40000001ULL, page) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_mmu_validate_mapping_range(
+        0x40000000ULL, 0x40000000ULL, page + 1ULL) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    /* Reject ranges crossing either address-space boundary. */
+    assert(syntra_arm64_mmu_validate_mapping_range(
+        (1ULL << SYNTRA_ARM64_MMU_VA_BITS) - page,
+        0x40000000ULL, 2ULL * page) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_mmu_validate_mapping_range(
+        0x40000000ULL, 0x0000FFFFFFFFF000ULL, 2ULL * page) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+}
+
 int main(void)
 {
     test_table_descriptor();
@@ -143,6 +181,7 @@ int main(void)
     test_device_page_descriptor();
     test_invalid_page_arguments();
     test_translation_indices();
+    test_mapping_range_validation();
     puts("ARM64 MMU descriptor tests passed");
     return 0;
 }
