@@ -108,7 +108,13 @@ static void build_test_fdt(int use_gic_v2)
         blob[cursor] = 0U;
     }
 
-    structure_offset = 56U;
+    /* One FDT header reservation entry followed by its terminator. */
+    write_be32(blob + 40U, 0U);
+    write_be32(blob + 44U, 0x40000000U);
+    write_be32(blob + 48U, 0U);
+    write_be32(blob + 52U, 0x00001000U);
+
+    structure_offset = 72U;
     cursor = structure_offset;
 
     append_u32(&cursor, 1U);
@@ -160,10 +166,22 @@ static void test_fdt_and_gic_discovery(void)
     uintptr_t base;
     size_t size;
     size_t reg_count;
+    size_t reservation_count;
+    uint64_t reservation_address;
+    uint64_t reservation_size;
 
     build_test_fdt(0);
 
     assert(syntra_fdt_open(blob, sizeof(blob), &fdt) == SYNTRA_STATUS_OK);
+    assert(syntra_fdt_get_reservation_count(
+        &fdt, &reservation_count) == SYNTRA_STATUS_OK);
+    assert(reservation_count == 1U);
+    assert(syntra_fdt_get_reservation(
+        &fdt, 0U, &reservation_address, &reservation_size) == SYNTRA_STATUS_OK);
+    assert(reservation_address == 0x40000000ULL);
+    assert(reservation_size == 0x1000ULL);
+    assert(syntra_fdt_get_reservation(
+        &fdt, 1U, &reservation_address, &reservation_size) == SYNTRA_STATUS_ERROR);
     assert(syntra_fdt_find_compatible(
         &fdt, "arm,gic-v3", &node) == SYNTRA_STATUS_OK);
     assert(syntra_fdt_get_reg_count(
@@ -286,6 +304,18 @@ static void test_rejects_malformed_reg_tuple(void)
         &fdt, &node, &reg_count) == SYNTRA_STATUS_ERROR);
 }
 
+static void test_rejects_reservation_overflow(void)
+{
+    syntra_fdt_t fdt;
+
+    build_test_fdt(0);
+    write_be32(blob + 40U, 0xFFFFFFFFU);
+    write_be32(blob + 44U, 0xFFFFF000U);
+    write_be32(blob + 48U, 0U);
+    write_be32(blob + 52U, 0x00002000U);
+    assert(syntra_fdt_open(blob, sizeof(blob), &fdt) == SYNTRA_STATUS_ERROR);
+}
+
 static void test_rejects_bad_magic(void)
 {
     syntra_fdt_t fdt;
@@ -310,6 +340,7 @@ int main(void)
     test_rejects_invalid_reg_index_and_truncation();
     test_rejects_invalid_cell_properties();
     test_rejects_malformed_reg_tuple();
+    test_rejects_reservation_overflow();
     test_rejects_bad_magic();
     test_rejects_overlapping_blocks();
     puts("FDT/GIC discovery tests passed");
