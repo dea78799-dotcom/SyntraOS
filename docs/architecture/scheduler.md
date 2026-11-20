@@ -1,51 +1,52 @@
 # SyntraOS Scheduler
 
-Version: 0.1.0
-Status: Design Phase
+Version: 1.0.0
+Status: Core implementation in progress; ARM64 context switching pending.
 
-## 1. Overview
+## 1. Responsibilities
 
-The Scheduler is responsible for deciding
-which thread receives CPU execution time.
+The scheduler tracks runnable threads, selects the next thread, and maintains
+thread lifecycle state. Architecture code is responsible for saving and
+restoring CPU registers. Stack allocation is owned by the memory subsystem.
 
-## 2. Main Responsibilities
+## 2. Thread Control Block
 
-- Select the next thread to execute.
-- Manage thread scheduling states.
-- Support priority-based scheduling.
-- Handle thread switching.
-- Coordinate with the timer subsystem.
+Each TCB contains:
+- Thread ID and priority metadata.
+- READY, RUNNING, BLOCKED, or TERMINATED state.
+- Entry function and argument.
+- Caller-owned stack base and size.
+- Architecture-owned saved CPU context pointer.
 
-## 3. Thread States
+Thread creation currently accepts a caller-provided stack. Dynamic stack
+allocation is intentionally deferred until Memory Management provides it.
 
-A thread may have the following states:
+## 3. Scheduling policy
 
-- READY: Waiting for CPU time.
-- RUNNING: Currently executing.
-- BLOCKED: Waiting for an event.
-- TERMINATED: Execution has ended.
+Scheduler V1 uses deterministic round-robin selection across READY threads.
+The priority field is retained as metadata but does not influence V1 ordering.
+A scheduling operation moves the previous RUNNING thread back to READY unless
+it has been blocked or terminated, then selects the next READY thread.
 
-## 4. Scheduling Policy
+## 4. Lifecycle
 
-SyntraOS initially plans to use
-priority-based preemptive scheduling.
+- READY: eligible for CPU time.
+- RUNNING: selected as the current thread.
+- BLOCKED: temporarily ineligible until explicitly woken.
+- TERMINATED: no longer eligible for scheduling.
 
-The scheduling policy may evolve
-during development.
+## 5. Architecture integration
 
-## 5. Architecture Support
+The generic scheduler does not manipulate ARM64 registers. The ARM64 port must
+save the complete exception frame into the current TCB and restore the selected
+thread's frame before exception return. New-thread frames must be initialized
+with a valid entry PC, stack, processor state, and ABI-aligned stack pointer.
 
-The scheduler is designed to support:
+## 6. Validation status
 
-- ARM64
-- x86_64
-- RISC-V 64
+The host test suite covers round-robin order, state transitions, duplicate IDs,
+caller-provided stack validation, and scheduler invariants.
 
-Architecture-specific context switching
-will be implemented separately.
-
-## 6. Current Status
-
-The scheduler is not implemented yet.
-
-This document describes the planned design.
+Preemptive ARM64 switching, idle-thread behavior, and QEMU task alternation are
+not complete until the architecture context-switch path is implemented and
+verified.
