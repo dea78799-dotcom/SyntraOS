@@ -40,6 +40,8 @@ cat "$LOG_FILE"
 
 if grep -Fq "SyntraOS boot OK" "$LOG_FILE" &&
    grep -Eq "FDT physical memory regions: 0x0*[1-9a-fA-F][0-9a-fA-F]*" "$LOG_FILE" &&
+   grep -Fq "Kernel reserved: base=0x0000000040200000" "$LOG_FILE" &&
+   grep -Eq "Physical page allocator: PASS free=0x0*[1-9a-fA-F][0-9a-fA-F]* total=0x0*[1-9a-fA-F][0-9a-fA-F]*" "$LOG_FILE" &&
    grep -Fq "PASS: ARM64 Generic Timer IRQ delivered 3 ticks" "$LOG_FILE" &&
    grep -Fq "PASS: ARM64 Scheduler switched between two threads" "$LOG_FILE" &&
    grep -Eq "Scheduler trace: AB(AB)+" "$LOG_FILE"; then

@@ -5,6 +5,7 @@
 #include "fdt.h"
 #include "memory_map.h"
 #include "../../../memory/memory_region.h"
+#include "../../../memory/page_allocator.h"
 #include "../exception.h"
 #include "../context.h"
 #include "../gic.h"
@@ -30,6 +31,9 @@
 #define SYNTRA_PL011_UARTLCRH (*(volatile uint32_t *)(uintptr_t)(SYNTRA_PL011_BASE + 0x2cU))
 #define SYNTRA_PL011_UARTCR (*(volatile uint32_t *)(uintptr_t)(SYNTRA_PL011_BASE + 0x30U))
 #define SYNTRA_PL011_UARTFR_TXFF (1U << 5)
+
+extern char __kernel_start[];
+extern char __kernel_end[];
 
 static void syntra_uart_init(void)
 {
@@ -229,6 +233,38 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
         return status;
     }
 
+    /*
+     * The linker symbols include .text, .rodata, .data, .bss and the
+     * bootstrap stack. Reserve the complete loaded kernel before the
+     * physical page allocator is allowed to return any RAM page.
+     */
+    {
+        uintptr_t kernel_start = (uintptr_t)__kernel_start;
+        uintptr_t kernel_end = (uintptr_t)__kernel_end;
+
+        if (kernel_start == 0U || kernel_end <= kernel_start)
+        {
+            syntra_uart_puts("Kernel linker memory range invalid\n");
+            return SYNTRA_STATUS_ERROR;
+        }
+
+        status = syntra_memory_region_reserve(
+            kernel_start,
+            (size_t)(kernel_end - kernel_start),
+            SYNTRA_MEMORY_REGION_KERNEL);
+        if (status != SYNTRA_STATUS_OK)
+        {
+            syntra_uart_puts("Kernel RAM reservation failed\n");
+            return status;
+        }
+
+        syntra_uart_puts("Kernel reserved: base=");
+        syntra_uart_put_hex((uint64_t)kernel_start);
+        syntra_uart_puts(" end=");
+        syntra_uart_put_hex((uint64_t)kernel_end);
+        syntra_uart_puts("\n");
+    }
+
     syntra_uart_puts("FDT physical memory regions: ");
     syntra_uart_put_hex((uint64_t)syntra_memory_region_count());
     syntra_uart_puts("\n");
@@ -255,6 +291,19 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
             syntra_uart_puts("\n");
         }
     }
+
+    status = syntra_page_allocator_init();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("Physical page allocator initialization failed\n");
+        return status;
+    }
+
+    syntra_uart_puts("Physical page allocator: PASS free=");
+    syntra_uart_put_hex((uint64_t)syntra_page_allocator_free_count());
+    syntra_uart_puts(" total=");
+    syntra_uart_put_hex((uint64_t)syntra_page_allocator_total_count());
+    syntra_uart_puts("\n");
 
     status = syntra_boot_report_interrupt_controller(&fdt);
     if (status != SYNTRA_STATUS_OK)

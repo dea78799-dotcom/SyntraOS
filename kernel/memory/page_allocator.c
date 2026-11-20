@@ -81,6 +81,16 @@ syntra_status_t syntra_page_allocator_init(void)
             return SYNTRA_STATUS_NOT_IMPLEMENTED;
         }
 
+        /*
+         * Aligning a high physical base upward must not wrap uintptr_t.
+         * Reject an unrepresentable alignment instead of creating low pages.
+         */
+        if (region.base > UINTPTR_MAX -
+                ((uintptr_t)SYNTRA_PAGE_SIZE - 1U))
+        {
+            return SYNTRA_STATUS_INVALID_ARGUMENT;
+        }
+
         first = align_up_page(region.base);
         limit = end - (end % (uintptr_t)SYNTRA_PAGE_SIZE);
 
