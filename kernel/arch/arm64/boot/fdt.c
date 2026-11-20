@@ -623,6 +623,69 @@ static syntra_status_t fdt_get_cell_count(
     return SYNTRA_STATUS_OK;
 }
 
+syntra_status_t syntra_fdt_get_reg_count(
+    const syntra_fdt_t *fdt,
+    const syntra_fdt_node_t *node,
+    size_t *reg_count
+)
+{
+    syntra_fdt_node_t parent;
+    const uint8_t *reg_data;
+    uint32_t reg_size;
+    uint32_t address_cells;
+    uint32_t size_cells;
+    size_t tuple_size;
+    syntra_status_t status;
+
+    if (fdt == NULL || node == NULL || reg_count == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    status = fdt_get_parent_node(fdt, node, &parent);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    status = fdt_get_cell_count(
+        fdt, &parent, "#address-cells", 2U, &address_cells);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        return status;
+    }
+
+    status = fdt_get_cell_count(
+        fdt, &parent, "#size-cells", 1U, &size_cells);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        return status;
+    }
+
+    if (address_cells == 0U || address_cells > 2U ||
+        size_cells == 0U || size_cells > 2U)
+    {
+        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+    }
+
+    status = syntra_fdt_get_property(
+        fdt, node, "reg", &reg_data, &reg_size);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    tuple_size = ((size_t)address_cells + (size_t)size_cells) * 4U;
+    if (tuple_size == 0U || reg_size == 0U ||
+        (size_t)reg_size % tuple_size != 0U)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    *reg_count = (size_t)reg_size / tuple_size;
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_fdt_get_reg(
     const syntra_fdt_t *fdt,
     const syntra_fdt_node_t *node,
