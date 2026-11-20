@@ -74,7 +74,6 @@ GDB_OUTPUT="$(timeout 15s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "continue" \
     -ex "end" \
     -ex "end" \
-    -ex "continue" \
     -ex 'printf "EL0_ENTRY_STOP PC=%#lx\n", $pc' \
     -ex "continue" \
     -ex 'printf "EL0_SVC_STOP vector=%lu ESR=%#lx ELR=%#lx FAR=%#lx SPSR=%#lx SVC_IMM=%#lx\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+280), *(unsigned long*)($x0+264), (*(unsigned long*)($x0+272)&0xffff)' \
