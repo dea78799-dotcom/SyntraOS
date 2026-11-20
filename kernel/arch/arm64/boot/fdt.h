@@ -91,6 +91,13 @@ syntra_status_t syntra_fdt_get_property(
     uint32_t *data_size
 );
 
+/* Count validated reg tuples using the parent's address/size cell widths. */
+syntra_status_t syntra_fdt_get_reg_count(
+    const syntra_fdt_t *fdt,
+    const syntra_fdt_node_t *node,
+    size_t *reg_count
+);
+
 /* Resolve one entry from a node's reg property using its parent's cell widths. */
 syntra_status_t syntra_fdt_get_reg(
     const syntra_fdt_t *fdt,
