@@ -83,7 +83,10 @@ static syntra_status_t process_key(
     unsigned int word;
     uint32_t button = 0U;
 
-    if (code > SYNTRA_INPUT_KEY_MAX ||
+    if ((code > SYNTRA_INPUT_KEY_MAX &&
+         code != SYNTRA_INPUT_BTN_LEFT &&
+         code != SYNTRA_INPUT_BTN_RIGHT &&
+         code != SYNTRA_INPUT_BTN_MIDDLE) ||
         (value != 0 && value != 1 && value != 2))
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
@@ -94,11 +97,13 @@ static syntra_status_t process_key(
         return SYNTRA_STATUS_OK;
     }
 
-    word = (unsigned int)code / 64U;
-    mask = (uint64_t)1U << ((unsigned int)code % 64U);
-
-    if (value == 1) state->keys[word] |= mask;
-    else state->keys[word] &= ~mask;
+    if (code <= SYNTRA_INPUT_KEY_MAX)
+    {
+        word = (unsigned int)code / 64U;
+        mask = (uint64_t)1U << ((unsigned int)code % 64U);
+        if (value == 1) state->keys[word] |= mask;
+        else state->keys[word] &= ~mask;
+    }
 
     if (code == SYNTRA_INPUT_BTN_LEFT) button = SYNTRA_INPUT_BUTTON_LEFT;
     else if (code == SYNTRA_INPUT_BTN_RIGHT) button = SYNTRA_INPUT_BUTTON_RIGHT;
@@ -215,8 +220,16 @@ int syntra_input_key_down(
 {
     uint64_t mask;
 
-    if (state == NULL || state->initialized != 1 ||
-        key_code > SYNTRA_INPUT_KEY_MAX)
+    if (state == NULL || state->initialized != 1)
+        return 0;
+
+    if (key_code == SYNTRA_INPUT_BTN_LEFT)
+        return (state->buttons & SYNTRA_INPUT_BUTTON_LEFT) != 0U;
+    if (key_code == SYNTRA_INPUT_BTN_RIGHT)
+        return (state->buttons & SYNTRA_INPUT_BUTTON_RIGHT) != 0U;
+    if (key_code == SYNTRA_INPUT_BTN_MIDDLE)
+        return (state->buttons & SYNTRA_INPUT_BUTTON_MIDDLE) != 0U;
+    if (key_code > SYNTRA_INPUT_KEY_MAX)
         return 0;
 
     mask = (uint64_t)1U << ((unsigned int)key_code % 64U);
