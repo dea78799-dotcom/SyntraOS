@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "../../core/status.h"
+#include "boot/fdt.h"
 
 /*
  * SyntraOS ARM64 Generic Interrupt Controller interface.
@@ -51,6 +52,12 @@ typedef struct
 syntra_status_t syntra_arm64_gic_configure(
     const syntra_arm64_gic_config_t *config
 );
+
+/*
+ * Locate a supported GIC node in the FDT and store its MMIO regions.
+ * This performs no hardware register access.
+ */
+syntra_status_t syntra_arm64_gic_discover(const syntra_fdt_t *fdt);
 
 /*
  * Hardware initialization is deliberately unavailable until
