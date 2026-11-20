@@ -68,9 +68,9 @@ GDB_OUTPUT="$(timeout 15s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "commands 2" \
     -ex "silent" \
     -ex 'if *(unsigned long*)($x0+288)==8 && (((*(unsigned long*)($x0+272)>>26)&0x3f)==0x15)' \
-    -ex 'printf "EL0_SVC_BREAK_HIT\\n"' \
+    -ex 'printf "EL0_SVC_BREAK_HIT\n"' \
     -ex "else" \
-    -ex 'printf "EXCEPTION_TRACE vector=%lu ESR=%#lx ELR=%#lx FAR=%#lx SPSR=%#lx\\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+280), *(unsigned long*)($x0+264)' \
+    -ex 'printf "EXCEPTION_TRACE vector=%lu ESR=%#lx ELR=%#lx FAR=%#lx SPSR=%#lx\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+280), *(unsigned long*)($x0+264)' \
     -ex "continue" \
     -ex "end" \
     -ex "end" \
