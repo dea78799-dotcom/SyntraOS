@@ -64,7 +64,16 @@ GDB_OUTPUT="$(timeout 15s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "set confirm off" \
     -ex "target remote 127.0.0.1:$GDB_PORT" \
     -ex "hbreak *0x10000000" \
-    -ex 'break syntra_arm64_exception_handle_and_select if *(unsigned long*)($x0+288)==8 && ((*(unsigned long*)($x0+272)>>26)&0x3f)==0x15' \
+    -ex "break syntra_arm64_exception_handle_and_select" \
+    -ex "commands 2" \
+    -ex "silent" \
+    -ex 'if *(unsigned long*)($x0+288)==8 && (((*(unsigned long*)($x0+272)>>26)&0x3f)==0x15)' \
+    -ex 'printf "EL0_SVC_BREAK_HIT\\n"' \
+    -ex "else" \
+    -ex 'printf "EXCEPTION_TRACE vector=%lu ESR=%#lx ELR=%#lx FAR=%#lx SPSR=%#lx\\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+280), *(unsigned long*)($x0+264)' \
+    -ex "continue" \
+    -ex "end" \
+    -ex "end" \
     -ex "continue" \
     -ex 'printf "EL0_ENTRY_STOP PC=%#lx\n", $pc' \
     -ex "continue" \
