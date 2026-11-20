@@ -127,4 +127,22 @@ syntra_status_t syntra_arm64_exception_decode(
     syntra_arm64_exception_info_t *info
 );
 
+/*
+ * Capture and decode a context produced by the ARM64 vector entry.
+ * The current policy is diagnostic-only: the assembly entry halts after
+ * this function returns. It does not resume the interrupted execution.
+ */
+syntra_status_t syntra_arm64_exception_handle(
+    const syntra_arm64_exception_context_t *context
+);
+
+/* Read-only access to the most recently captured exception snapshot. */
+const syntra_arm64_exception_context_t *
+syntra_arm64_exception_get_last_context(void);
+
+const syntra_arm64_exception_info_t *
+syntra_arm64_exception_get_last_info(void);
+
+int syntra_arm64_exception_has_last_context(void);
+
 #endif
