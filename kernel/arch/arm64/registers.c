@@ -4,7 +4,7 @@
 
 /*
  * SyntraOS ARM64 Register Decoder
- * Version: 1.0.0
+ * Version: 1.1.0
  *
  * Decodes values supplied by the architecture layer.
  * This implementation does not access CPU system registers.
@@ -29,7 +29,7 @@ syntra_status_t syntra_arm64_register_decode_current_el(
     switch (decoded_level)
     {
         case SYNTRA_ARM64_EL0:
-            *level = SYNTRA_ARM64_MODE_UNKNOWN;
+            *level = SYNTRA_ARM64_MODE_EL0;
             return SYNTRA_STATUS_OK;
 
         case SYNTRA_ARM64_EL1:

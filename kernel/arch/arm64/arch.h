@@ -19,7 +19,9 @@ typedef enum
     SYNTRA_ARM64_MODE_UNKNOWN = 0,
     SYNTRA_ARM64_MODE_EL1 = 1,
     SYNTRA_ARM64_MODE_EL2 = 2,
-    SYNTRA_ARM64_MODE_EL3 = 3
+    SYNTRA_ARM64_MODE_EL3 = 3,
+    /* Added without renumbering existing public enum values. */
+    SYNTRA_ARM64_MODE_EL0 = 4
 } syntra_arm64_exception_level_t;
 
 /*

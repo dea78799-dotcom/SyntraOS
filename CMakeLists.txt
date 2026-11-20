@@ -453,6 +453,13 @@ add_executable(arm64_context_test
 target_link_libraries(arm64_context_test PRIVATE syntra_kernel)
 add_test(NAME ARM64ContextFrameTest COMMAND arm64_context_test)
 
+# ARM64 Current Exception Level decoder tests
+add_executable(arm64_registers_test
+    tests/arm64/registers_test.c
+)
+target_link_libraries(arm64_registers_test PRIVATE syntra_kernel)
+add_test(NAME ARM64RegisterDecoderTest COMMAND arm64_registers_test)
+
 # ARM64 MMU mapping-plan validation tests
 add_executable(arm64_mmu_mapping_plan_test
     tests/arm64/mmu_mapping_plan_test.c
