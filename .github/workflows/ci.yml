@@ -127,9 +127,14 @@ jobs:
           check_tool aarch64-linux-gnu-ld binutils-aarch64-linux-gnu
           check_tool qemu-system-aarch64 qemu-system-arm
 
+          # QEMU virt uses this firmware ROM on the Ubuntu runner image.
+          if ! dpkg-query -W -f='${Status}' qemu-efi-aarch64 2>/dev/null | grep -q "install ok installed"; then
+            MISSING_PACKAGES+=(qemu-efi-aarch64)
+          fi
+
           # The freestanding ARM64 build still includes <limits.h>; without
           # cross libc development headers GCC falls back to host headers.
-          if ! dpkg-query -W -f="${Status}" libc6-dev-arm64-cross 2>/dev/null | grep -q "install ok installed"; then
+          if ! dpkg-query -W -f='${Status}' libc6-dev-arm64-cross 2>/dev/null | grep -q "install ok installed"; then
             MISSING_PACKAGES+=(libc6-dev-arm64-cross)
           fi
 
