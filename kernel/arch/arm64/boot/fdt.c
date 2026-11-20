@@ -296,7 +296,7 @@ static int fdt_string_equals(const char *left, const char *right)
         return 0;
     }
 
-    while (left[index] != '\\0' && right[index] != '\\0')
+    while (left[index] != '\0' && right[index] != '\0')
     {
         if (left[index] != right[index])
         {
@@ -322,7 +322,7 @@ static int fdt_string_list_contains(
         return 0;
     }
 
-    while (value[value_length] != '\\0')
+    while (value[value_length] != '\0')
     {
         ++value_length;
     }
