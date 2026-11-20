@@ -26,6 +26,7 @@ add_library(syntra_kernel STATIC
     kernel/arch/arm64/registers.c
     kernel/arch/arm64/mmu.c
     kernel/arch/arm64/page_table_builder.c
+    kernel/arch/arm64/mmu_mapping_plan.c
     kernel/arch/arm64/context.c
 
     kernel/scheduler/scheduler.c
@@ -451,6 +452,20 @@ add_executable(arm64_context_test
 )
 target_link_libraries(arm64_context_test PRIVATE syntra_kernel)
 add_test(NAME ARM64ContextFrameTest COMMAND arm64_context_test)
+
+# ARM64 MMU mapping-plan validation tests
+add_executable(arm64_mmu_mapping_plan_test
+    tests/arm64/mmu_mapping_plan_test.c
+    kernel/arch/arm64/mmu_mapping_plan.c
+    kernel/arch/arm64/mmu.c
+)
+target_include_directories(arm64_mmu_mapping_plan_test PRIVATE
+    kernel/arch/arm64
+    kernel/arch/arm64/boot
+    kernel/memory
+    kernel/core
+)
+add_test(NAME ARM64MMUMappingPlanTest COMMAND arm64_mmu_mapping_plan_test)
 
 # ARM64 MMU descriptor construction tests
 add_executable(mmu_descriptor_test
