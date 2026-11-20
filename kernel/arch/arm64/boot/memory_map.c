@@ -309,13 +309,22 @@ static syntra_status_t discover_reserved_memory_nodes(
                 size_t count;
                 size_t index;
 
-                status = syntra_fdt_get_reg_count(fdt, &node, &count);
-                if (status == SYNTRA_STATUS_NOT_IMPLEMENTED ||
-                    status == SYNTRA_STATUS_ERROR)
+                const uint8_t *reg_data;
+                uint32_t reg_data_size;
+
+                status = syntra_fdt_get_property(
+                    fdt, &node, "reg", &reg_data, &reg_data_size);
+                if (status == SYNTRA_STATUS_NOT_IMPLEMENTED)
                 {
                     /* Dynamic reserved-memory nodes may use size/alignment. */
                     continue;
                 }
+                if (status != SYNTRA_STATUS_OK || reg_data_size == 0U)
+                {
+                    return SYNTRA_STATUS_ERROR;
+                }
+
+                status = syntra_fdt_get_reg_count(fdt, &node, &count);
                 if (status != SYNTRA_STATUS_OK)
                 {
                     return status;
