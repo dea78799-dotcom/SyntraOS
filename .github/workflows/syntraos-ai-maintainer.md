@@ -11,8 +11,7 @@ on:
 if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository)
 permissions:
   actions: read
-  contents: write
-  pull-requests: write
+  contents: read
 engine: copilot
 max-turns: 12
 timeout-minutes: 25
