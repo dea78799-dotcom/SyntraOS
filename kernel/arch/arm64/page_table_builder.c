@@ -1,5 +1,7 @@
 #include "page_table_builder.h"
 
+#include <stddef.h>
+
 #define DESC_VALID (1ULL << 0U)
 #define DESC_TYPE  (1ULL << 1U)
 #define DESC_ADDR  SYNTRA_ARM64_MMU_PA_MASK
