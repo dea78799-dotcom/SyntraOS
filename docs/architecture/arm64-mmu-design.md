@@ -45,6 +45,21 @@ expected EL, that the MMU starts disabled, or that the image boots.
 The ARM64 toolchain targets generic AArch64 bare-metal compilation with `-march=armv8-a`.
 It does not define a board-specific CPU model or a boot firmware contract.
 
+The CI workflow now also installs QEMU and GDB, boots the bare-metal ELF on
+`virt` with a Cortex-A57 CPU and GICv3, and uses a GDB breakpoint immediately after
+`syntra_arm64_boot_main` returns. The smoke test passes only when the boot function
+returns `SYNTRA_STATUS_OK`.
+
+For QEMU `virt`, the DTB placement depends on the image boot mode. QEMU documents that
+ELF/bare-metal boot places the DTB at the start of RAM (`0x40000000`), while a non-ELF
+Linux kernel image receives the DTB address in `x0`. SyntraOS currently builds an ELF,
+so its fixed bare-metal DTB address is consistent with this selected mode. The entry
+path must be revisited if the boot mode changes.
+
+This QEMU smoke test proves entry into the C boot stage and successful FDT/GIC
+configuration discovery under the selected emulated platform. It does not prove MMU
+activation, GIC register access, interrupt delivery, or physical-device boot.
+
 
 ## 3. Boot contract required before enabling translation
 
