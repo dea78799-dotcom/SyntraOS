@@ -53,6 +53,116 @@ static void syntra_uart_puts(const char *message)
 }
 
 
+
+static void syntra_uart_put_hex(uint64_t value)
+{
+    static const char digits[] = "0123456789abcdef";
+    int shift;
+
+    syntra_uart_puts("0x");
+    for (shift = 60; shift >= 0; shift -= 4)
+    {
+        syntra_uart_putc(digits[(value >> (unsigned int)shift) & 0x0fU]);
+    }
+}
+
+static syntra_status_t syntra_boot_report_interrupt_controller(
+    const syntra_fdt_t *fdt
+)
+{
+    static const char *const compatibles[] = {
+        "arm,gic-v3",
+        "arm,gic-400",
+        "arm,cortex-a15-gic",
+        "arm,cortex-a9-gic"
+    };
+    syntra_fdt_node_t node;
+    syntra_status_t status;
+    const uint8_t *compatible_data;
+    uint32_t compatible_size;
+    uintptr_t base;
+    size_t region_size;
+    size_t index;
+    uint32_t offset;
+
+    for (index = 0U; index < sizeof(compatibles) / sizeof(compatibles[0]); ++index)
+    {
+        status = syntra_fdt_find_compatible(fdt, compatibles[index], &node);
+        if (status == SYNTRA_STATUS_OK)
+        {
+            break;
+        }
+    }
+
+    if (index == sizeof(compatibles) / sizeof(compatibles[0])
+        || status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("FDT interrupt-controller: NOT FOUND\n");
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    status = syntra_fdt_get_property(
+        fdt, &node, "compatible", &compatible_data, &compatible_size);
+    if (status != SYNTRA_STATUS_OK || compatible_size == 0U)
+    {
+        syntra_uart_puts("FDT compatible property invalid\n");
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    syntra_uart_puts("FDT interrupt-controller compatible: ");
+    offset = 0U;
+    while (offset < compatible_size)
+    {
+        uint32_t length = 0U;
+        while (offset + length < compatible_size &&
+               compatible_data[offset + length] != 0U)
+        {
+            ++length;
+        }
+
+        for (uint32_t char_index = 0U; char_index < length; ++char_index)
+        {
+            syntra_uart_putc((char)compatible_data[offset + char_index]);
+        }
+
+        offset += length + 1U;
+        if (offset < compatible_size)
+        {
+            syntra_uart_puts(", ");
+        }
+    }
+    syntra_uart_puts("\n");
+
+    status = syntra_fdt_get_reg(fdt, &node, 0U, &base, &region_size);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("FDT interrupt-controller reg[0] invalid\n");
+        return status;
+    }
+
+    syntra_uart_puts("FDT interrupt-controller MMIO reg[0]: base=");
+    syntra_uart_put_hex((uint64_t)base);
+    syntra_uart_puts(" size=");
+    syntra_uart_put_hex((uint64_t)region_size);
+    syntra_uart_puts("\n");
+
+    status = syntra_fdt_get_reg(fdt, &node, 1U, &base, &region_size);
+    if (status == SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("FDT interrupt-controller MMIO reg[1]: base=");
+        syntra_uart_put_hex((uint64_t)base);
+        syntra_uart_puts(" size=");
+        syntra_uart_put_hex((uint64_t)region_size);
+        syntra_uart_puts("\n");
+    }
+
+    syntra_uart_puts(index == 0U
+        ? "FDT detected controller: GICv3\n"
+        : "FDT detected controller: GICv2-compatible\n");
+
+    return SYNTRA_STATUS_OK;
+}
+
 static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
 {
     syntra_fdt_t fdt;
@@ -98,6 +208,12 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
     if (!found_end)
     {
         return SYNTRA_STATUS_ERROR;
+    }
+
+    status = syntra_boot_report_interrupt_controller(&fdt);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        return status;
     }
 
     return syntra_arm64_gic_discover(&fdt);
