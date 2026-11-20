@@ -237,3 +237,16 @@ syntra_status_t syntra_arm64_boot_main(
     }
 
     dtb = (const void *)(uintptr_t)dtb_address;
+
+
+    syntra_uart_init();
+    status = validate_dtb_and_discover_gic(dtb);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("SyntraOS boot failed: FDT/GIC discovery\n");
+        return status;
+    }
+
+    syntra_uart_puts("SyntraOS boot OK\n");
+    return SYNTRA_STATUS_OK;
+}
