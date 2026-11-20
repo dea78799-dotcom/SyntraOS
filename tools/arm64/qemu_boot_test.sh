@@ -56,16 +56,23 @@ fi
 
 echo "Waiting for SyntraOS boot stage to return from QEMU virt..."
 
-timeout 30s "$GDB_BIN" -q -batch "$ELF_PATH" \
+GDB_OUTPUT="$(timeout 30s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "set architecture aarch64" \
     -ex "target remote 127.0.0.1:$GDB_PORT" \
     -ex "break syntra_arm64_boot_returned" \
     -ex "continue" \
     -ex 'printf "syntra_arm64_boot_main returned status: %d\\n", (int)($x0 & 0xffffffff)' \
-    -ex 'if $x0 != 0' \
-    -ex '  echo ARM64 boot stage returned an error\\n' \
-    -ex '  quit 1' \
-    -ex 'end' \
-    -ex 'detach'
+    -ex 'detach' 2>&1)" || {
+        printf '%s\\n' "$GDB_OUTPUT" >&2
+        echo "GDB failed before the ARM64 boot return point was verified." >&2
+        exit 1
+    }
+
+printf '%s\\n' "$GDB_OUTPUT"
+
+if ! grep -Eq 'syntra_arm64_boot_main returned status: 0([[:space:]]|$)' <<<"$GDB_OUTPUT"; then
+    echo "ARM64 boot stage returned a non-zero status." >&2
+    exit 1
+fi
 
 echo "QEMU ARM64 boot smoke test passed."
