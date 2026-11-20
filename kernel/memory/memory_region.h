@@ -32,6 +32,14 @@ syntra_status_t syntra_memory_region_add(
     size_t size,
     syntra_memory_region_type_t type
 );
+
+/* Carve a non-RAM reservation out of one containing RAM region. */
+syntra_status_t syntra_memory_region_reserve(
+    uintptr_t base,
+    size_t size,
+    syntra_memory_region_type_t type
+);
+
 size_t syntra_memory_region_count(void);
 syntra_status_t syntra_memory_region_get(
     size_t index,
