@@ -42,11 +42,11 @@ static void syntra_uart_putc(char character)
 
 static void syntra_uart_puts(const char *message)
 {
-    while (*message != '\\0')
+    while (*message != '\0')
     {
-        if (*message == '\\n')
+        if (*message == '\n')
         {
-            syntra_uart_putc('\\r');
+            syntra_uart_putc('\r');
         }
         syntra_uart_putc(*message++);
     }
@@ -128,7 +128,7 @@ syntra_status_t syntra_arm64_boot_main(
         if (status == SYNTRA_STATUS_OK)
         {
             syntra_uart_init();
-            syntra_uart_puts("SyntraOS boot OK\\n");
+            syntra_uart_puts("SyntraOS boot OK\n");
         }
 
         return status;
