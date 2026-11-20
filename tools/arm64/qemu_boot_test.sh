@@ -93,8 +93,8 @@ if ! grep -Fq 'PASS: ARM64 Scheduler switched between two threads' "$UART_LOG"; 
     exit 1
 fi
 
-if ! grep -Fq 'EL0 entry breakpoint hit:' <<<"$GDB_OUTPUT"; then
-    echo "GDB did not stop at EL0 virtual entry 0x10000000." >&2
+if ! grep -Fq '0x0000000010000000' <<<"$GDB_OUTPUT"; then
+    echo "GDB did not report a stop at EL0 virtual entry 0x10000000." >&2
     exit 1
 fi
 
