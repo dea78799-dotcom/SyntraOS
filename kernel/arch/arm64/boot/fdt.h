@@ -88,4 +88,13 @@ syntra_status_t syntra_fdt_get_property(
     uint32_t *data_size
 );
 
+/* Resolve one entry from a node's reg property using its parent's cell widths. */
+syntra_status_t syntra_fdt_get_reg(
+    const syntra_fdt_t *fdt,
+    const syntra_fdt_node_t *node,
+    uint32_t reg_index,
+    uintptr_t *base,
+    size_t *size
+);
+
 #endif
