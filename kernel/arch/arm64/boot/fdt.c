@@ -156,6 +156,11 @@ syntra_status_t syntra_fdt_open(
         {
             break;
         }
+
+        if (size == 0U || address > UINT64_MAX - size)
+        {
+            return SYNTRA_STATUS_ERROR;
+        }
     }
 
     reserve_size = (uint32_t)(reserve_cursor - reserve_offset);
@@ -184,6 +189,65 @@ syntra_status_t syntra_fdt_open(
     fdt->structure_size = structure_size;
     fdt->strings = bytes + strings_offset;
     fdt->strings_size = strings_size;
+    fdt->reserve_map = bytes + reserve_offset;
+    fdt->reserve_map_size = reserve_size;
+
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t syntra_fdt_get_reservation_count(
+    const syntra_fdt_t *fdt,
+    size_t *reservation_count
+)
+{
+    if (fdt == NULL || reservation_count == NULL ||
+        fdt->reserve_map == NULL || fdt->reserve_map_size < 16U ||
+        (fdt->reserve_map_size & 15U) != 0U)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    *reservation_count = (fdt->reserve_map_size / 16U) - 1U;
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t syntra_fdt_get_reservation(
+    const syntra_fdt_t *fdt,
+    size_t index,
+    uint64_t *address,
+    uint64_t *size
+)
+{
+    size_t count;
+    size_t offset;
+    syntra_status_t status;
+
+    if (address == NULL || size == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    status = syntra_fdt_get_reservation_count(fdt, &count);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        return status;
+    }
+
+    if (index >= count)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    offset = index * 16U;
+    *address = ((uint64_t)fdt_read_be32(fdt->reserve_map + offset) << 32U) |
+               fdt_read_be32(fdt->reserve_map + offset + 4U);
+    *size = ((uint64_t)fdt_read_be32(fdt->reserve_map + offset + 8U) << 32U) |
+            fdt_read_be32(fdt->reserve_map + offset + 12U);
+
+    if (*size == 0U || *address > UINT64_MAX - *size)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
 
     return SYNTRA_STATUS_OK;
 }
