@@ -3,9 +3,11 @@
 
 #include <stdint.h>
 
+#include "arch.h"
+
 /*
  * SyntraOS ARM64 System Registers
- * Version: 1.0.0
+ * Version: 1.1.0
  */
 
 /*
@@ -44,5 +46,14 @@ typedef enum
 
 #define SYNTRA_ARM64_CURRENT_EL_SHIFT 2U
 #define SYNTRA_ARM64_CURRENT_EL_MASK  0x3U
+
+/*
+ * Decode CurrentEL register value.
+ */
+
+syntra_status_t syntra_arm64_register_decode_current_el(
+    uint64_t current_el,
+    syntra_arm64_exception_level_t *level
+);
 
 #endif
