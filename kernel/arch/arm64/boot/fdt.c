@@ -32,6 +32,22 @@ static size_t fdt_align4(size_t value)
     return (value + 3U) & ~(size_t)3U;
 }
 
+static int fdt_regions_overlap(
+    uint32_t first_offset,
+    uint32_t first_size,
+    uint32_t second_offset,
+    uint32_t second_size
+)
+{
+    if (first_size == 0U || second_size == 0U)
+    {
+        return 0;
+    }
+
+    return first_offset < second_offset + second_size &&
+           second_offset < first_offset + first_size;
+}
+
 static int fdt_find_string_end(
     const uint8_t *data,
     size_t available,
@@ -68,6 +84,7 @@ syntra_status_t syntra_fdt_open(
     uint32_t strings_size;
     uint32_t structure_size;
     size_t reserve_cursor;
+    uint32_t reserve_size;
 
     if (bytes == NULL || fdt == NULL || accessible_size < FDT_HEADER_SIZE)
     {
@@ -139,6 +156,26 @@ syntra_status_t syntra_fdt_open(
         {
             break;
         }
+    }
+
+    reserve_size = (uint32_t)(reserve_cursor - reserve_offset);
+
+    /*
+     * All three FDT data regions must be distinct. Overlapping blocks can
+     * make a malformed blob reinterpret structure bytes as strings or
+     * reservation entries.
+     */
+    if (fdt_regions_overlap(
+            structure_offset, structure_size,
+            strings_offset, strings_size) ||
+        fdt_regions_overlap(
+            structure_offset, structure_size,
+            reserve_offset, reserve_size) ||
+        fdt_regions_overlap(
+            strings_offset, strings_size,
+            reserve_offset, reserve_size))
+    {
+        return SYNTRA_STATUS_ERROR;
     }
 
     fdt->blob = bytes;
