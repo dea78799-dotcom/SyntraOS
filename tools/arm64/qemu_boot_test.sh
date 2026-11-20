@@ -60,9 +60,12 @@ echo "Waiting for SyntraOS boot stage to return from QEMU virt..."
 GDB_OUTPUT="$(timeout 30s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "set architecture aarch64" \
     -ex "target remote 127.0.0.1:$GDB_PORT" \
+    -ex "break *0x10000000" \
+    -ex "continue" \
+    -ex 'printf "EL0 entry breakpoint hit: PC=%#lx PSTATE=%#lx\\n", $pc, $cpsr' \
     -ex "break syntra_arm64_boot_returned" \
     -ex "continue" \
-    -ex 'printf "syntra_arm64_boot_main returned status: %d\n", (int)($x0 & 0xffffffff)' \
+    -ex 'printf "syntra_arm64_boot_main returned status: %d\\n", (int)($x0 & 0xffffffff)' \
     -ex 'detach' 2>&1)" || {
         printf '%s\n' "$GDB_OUTPUT" >&2
         echo "GDB failed before the ARM64 boot return point was verified." >&2
@@ -76,6 +79,11 @@ cat "$UART_LOG"
 
 if ! grep -Fq 'PASS: ARM64 Scheduler switched between two threads' "$UART_LOG"; then
     echo "ARM64 scheduler context-switch marker was not observed on UART." >&2
+    exit 1
+fi
+
+if ! grep -Fq 'EL0 entry breakpoint hit:' <<<"$GDB_OUTPUT"; then
+    echo "GDB did not stop at EL0 virtual entry 0x10000000." >&2
     exit 1
 fi
 

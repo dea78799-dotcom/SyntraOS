@@ -96,6 +96,7 @@ static void syntra_uart_puts(const char *message)
 
 
 void syntra_arm64_exception_uart_puts(const char *message) { syntra_uart_puts(message); }
+void syntra_arm64_exception_uart_put_hex(uint64_t value) { syntra_uart_put_hex(value); }
 
 static void syntra_uart_put_hex(uint64_t value)
 {
@@ -1060,6 +1061,42 @@ static syntra_status_t syntra_arm64_run_el0_hello_test(void)
             SYNTRA_EL0_STACK_VA, syntra_boot_page_table_walk_resolve, NULL, &stack)
             != SYNTRA_STATUS_OK ||
         !stack.user_read || !stack.user_write || stack.user_execute)
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+
+    syntra_uart_puts("EL0 code descriptor: VA=");
+    syntra_uart_put_hex(SYNTRA_EL0_CODE_VA);
+    syntra_uart_puts(" DESC=");
+    syntra_uart_put_hex(code.page_descriptor);
+    syntra_uart_puts(" AF=");
+    syntra_uart_put_hex((code.page_descriptor >> 10U) & 1ULL);
+    syntra_uart_puts(" AP=");
+    syntra_uart_put_hex((code.page_descriptor >> 6U) & 3ULL);
+    syntra_uart_puts(" UXN=");
+    syntra_uart_put_hex((code.page_descriptor >> 54U) & 1ULL);
+    syntra_uart_puts(" SH=");
+    syntra_uart_put_hex((code.page_descriptor >> 8U) & 3ULL);
+    syntra_uart_puts("\n");
+    syntra_uart_puts("EL0 stack descriptor: VA=");
+    syntra_uart_put_hex(SYNTRA_EL0_STACK_VA);
+    syntra_uart_puts(" DESC=");
+    syntra_uart_put_hex(stack.page_descriptor);
+    syntra_uart_puts(" AF=");
+    syntra_uart_put_hex((stack.page_descriptor >> 10U) & 1ULL);
+    syntra_uart_puts(" AP=");
+    syntra_uart_put_hex((stack.page_descriptor >> 6U) & 3ULL);
+    syntra_uart_puts(" UXN=");
+    syntra_uart_put_hex((stack.page_descriptor >> 54U) & 1ULL);
+    syntra_uart_puts(" SH=");
+    syntra_uart_put_hex((stack.page_descriptor >> 8U) & 3ULL);
+    syntra_uart_puts("\n");
+    if (((code.page_descriptor >> 10U) & 1ULL) != 1ULL ||
+        ((code.page_descriptor >> 6U) & 3ULL) != 3ULL ||
+        ((code.page_descriptor >> 54U) & 1ULL) != 0ULL ||
+        ((code.page_descriptor >> 8U) & 3ULL) != 3ULL ||
+        ((stack.page_descriptor >> 10U) & 1ULL) != 1ULL ||
+        ((stack.page_descriptor >> 6U) & 3ULL) != 1ULL ||
+        ((stack.page_descriptor >> 54U) & 1ULL) != 1ULL ||
+        ((stack.page_descriptor >> 8U) & 3ULL) != 3ULL)
         return SYNTRA_STATUS_PERMISSION_DENIED;
 
     fault_va = SYNTRA_EL0_CODE_VA + (fault_pa - text_pa);
