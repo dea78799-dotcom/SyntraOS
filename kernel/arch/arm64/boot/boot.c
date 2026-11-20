@@ -14,6 +14,45 @@
 #define SYNTRA_ARM64_DTB_LIMIT    0x00200000ULL
 #define SYNTRA_ARM64_EL1_VALUE    0x4ULL
 
+#define SYNTRA_PL011_BASE 0x09000000ULL
+#define SYNTRA_PL011_UARTDR (*(volatile uint32_t *)(uintptr_t)(SYNTRA_PL011_BASE + 0x00U))
+#define SYNTRA_PL011_UARTFR (*(volatile uint32_t *)(uintptr_t)(SYNTRA_PL011_BASE + 0x18U))
+#define SYNTRA_PL011_UARTIBRD (*(volatile uint32_t *)(uintptr_t)(SYNTRA_PL011_BASE + 0x24U))
+#define SYNTRA_PL011_UARTFBRD (*(volatile uint32_t *)(uintptr_t)(SYNTRA_PL011_BASE + 0x28U))
+#define SYNTRA_PL011_UARTLCRH (*(volatile uint32_t *)(uintptr_t)(SYNTRA_PL011_BASE + 0x2cU))
+#define SYNTRA_PL011_UARTCR (*(volatile uint32_t *)(uintptr_t)(SYNTRA_PL011_BASE + 0x30U))
+#define SYNTRA_PL011_UARTFR_TXFF (1U << 5)
+
+static void syntra_uart_init(void)
+{
+    SYNTRA_PL011_UARTCR = 0U;
+    SYNTRA_PL011_UARTIBRD = 13U;
+    SYNTRA_PL011_UARTFBRD = 1U;
+    SYNTRA_PL011_UARTLCRH = (3U << 5);
+    SYNTRA_PL011_UARTCR = (1U << 0) | (1U << 8) | (1U << 9);
+}
+
+static void syntra_uart_putc(char character)
+{
+    while ((SYNTRA_PL011_UARTFR & SYNTRA_PL011_UARTFR_TXFF) != 0U)
+    {
+    }
+    SYNTRA_PL011_UARTDR = (uint32_t)character;
+}
+
+static void syntra_uart_puts(const char *message)
+{
+    while (*message != '\\0')
+    {
+        if (*message == '\\n')
+        {
+            syntra_uart_putc('\\r');
+        }
+        syntra_uart_putc(*message++);
+    }
+}
+
+
 static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
 {
     syntra_fdt_t fdt;
@@ -83,5 +122,15 @@ syntra_status_t syntra_arm64_boot_main(
 
     dtb = (const void *)(uintptr_t)dtb_address;
 
-    return validate_dtb_and_discover_gic(dtb);
+    {
+        syntra_status_t status = validate_dtb_and_discover_gic(dtb);
+
+        if (status == SYNTRA_STATUS_OK)
+        {
+            syntra_uart_init();
+            syntra_uart_puts("SyntraOS boot OK\\n");
+        }
+
+        return status;
+    }
 }
