@@ -79,7 +79,10 @@ syntra_status_t syntra_fdt_find_compatible(
     syntra_fdt_node_t *node
 );
 
-/* Find a property belonging directly to a node, not one of its children. */
+/*
+ * Find a property belonging directly to a node, not one of its children.
+ * Returns SYNTRA_STATUS_NOT_IMPLEMENTED when the property is absent.
+ */
 syntra_status_t syntra_fdt_get_property(
     const syntra_fdt_t *fdt,
     const syntra_fdt_node_t *node,
