@@ -25,6 +25,7 @@ add_library(syntra_kernel STATIC
     kernel/arch/arm64/exception.c
     kernel/arch/arm64/registers.c
     kernel/arch/arm64/mmu.c
+    kernel/arch/arm64/page_table_builder.c
     kernel/arch/arm64/context.c
 
     kernel/scheduler/scheduler.c
@@ -471,3 +472,15 @@ target_include_directories(arm64_mmu_test PRIVATE
     kernel/core
 )
 add_test(NAME ARM64MMUTest COMMAND arm64_mmu_test)
+
+# ARM64 Page Table Builder tests
+add_executable(arm64_page_table_builder_test
+    tests/arm64/page_table_builder_test.c
+    kernel/arch/arm64/mmu.c
+    kernel/arch/arm64/page_table_builder.c
+)
+target_include_directories(arm64_page_table_builder_test PRIVATE
+    kernel/arch/arm64
+    kernel/core
+)
+add_test(NAME ARM64PageTableBuilderTest COMMAND arm64_page_table_builder_test)
