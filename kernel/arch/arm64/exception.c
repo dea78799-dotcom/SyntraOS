@@ -37,6 +37,7 @@ syntra_status_t syntra_arm64_exception_decode(
             (esr >> SYNTRA_ARM64_EXCEPTION_CLASS_SHIFT)
             & SYNTRA_ARM64_EXCEPTION_CLASS_MASK
         );
+    info->vector_index = SYNTRA_ARM64_VECTOR_UNKNOWN;
 
     return SYNTRA_STATUS_OK;
 }
