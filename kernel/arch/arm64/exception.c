@@ -3,12 +3,16 @@
 #include "exception.h"
 
 /*
- * SyntraOS ARM64 Hardware Exception Decoder
- * Version: 1.0.0
+ * SyntraOS ARM64 Hardware Exception Handler
+ * Version: 1.1.0
  *
- * Decodes ARM64 exception information
- * supplied by the architecture layer.
+ * Captures the architecture-provided exception frame for diagnostics.
+ * This is not yet a recoverable exception or IRQ dispatcher.
  */
+
+static syntra_arm64_exception_context_t last_exception_context;
+static syntra_arm64_exception_info_t last_exception_info;
+static int last_exception_valid;
 
 syntra_status_t syntra_arm64_exception_decode(
     uint64_t esr,
@@ -35,4 +39,72 @@ syntra_status_t syntra_arm64_exception_decode(
         );
 
     return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t syntra_arm64_exception_handle(
+    const syntra_arm64_exception_context_t *context
+)
+{
+    if (context == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    last_exception_valid = 0;
+
+    for (unsigned int i = 0U; i < 31U; i++)
+    {
+        last_exception_context.registers[i] =
+            context->registers[i];
+    }
+
+    last_exception_context.sp_el0 = context->sp_el0;
+    last_exception_context.elr_el1 = context->elr_el1;
+    last_exception_context.spsr_el1 = context->spsr_el1;
+    last_exception_context.esr_el1 = context->esr_el1;
+    last_exception_context.far_el1 = context->far_el1;
+
+    syntra_status_t status = syntra_arm64_exception_decode(
+        context->esr_el1,
+        context->far_el1,
+        context->elr_el1,
+        context->spsr_el1,
+        &last_exception_info
+    );
+
+    if (status != SYNTRA_STATUS_OK)
+    {
+        return status;
+    }
+
+    last_exception_valid = 1;
+
+    return SYNTRA_STATUS_OK;
+}
+
+const syntra_arm64_exception_context_t *
+syntra_arm64_exception_get_last_context(void)
+{
+    if (!last_exception_valid)
+    {
+        return NULL;
+    }
+
+    return &last_exception_context;
+}
+
+const syntra_arm64_exception_info_t *
+syntra_arm64_exception_get_last_info(void)
+{
+    if (!last_exception_valid)
+    {
+        return NULL;
+    }
+
+    return &last_exception_info;
+}
+
+int syntra_arm64_exception_has_last_context(void)
+{
+    return last_exception_valid;
 }
