@@ -4,9 +4,16 @@
 #include "context.h"
 
 extern void syntra_arm64_exception_uart_puts(const char *message) __attribute__((weak));
+extern void syntra_arm64_exception_uart_put_hex(uint64_t value) __attribute__((weak));
 extern char __user_text_start[] __attribute__((weak));
 extern void syntra_arm64_user_fault_halt(void) __attribute__((weak));
 extern void syntra_arm64_el0_return_trampoline(void) __attribute__((weak));
+
+static void syntra_exception_uart_hex(uint64_t value)
+{
+    if (syntra_arm64_exception_uart_put_hex != NULL)
+        syntra_arm64_exception_uart_put_hex(value);
+}
 
 static void syntra_exception_uart_puts(const char *message)
 {
@@ -268,6 +275,22 @@ syntra_arm64_exception_handle_and_select(
     syntra_thread_t *next;
 
     if (context == NULL) return NULL;
+
+    if (context->vector_index >= SYNTRA_ARM64_VECTOR_LOWER_AARCH64_SYNC &&
+        context->vector_index <= SYNTRA_ARM64_VECTOR_LOWER_AARCH64_SERROR)
+    {
+        syntra_exception_uart_puts("EL0 exception: vector=");
+        syntra_exception_uart_hex(context->vector_index);
+        syntra_exception_uart_puts(" ESR_EL1=");
+        syntra_exception_uart_hex(context->esr_el1);
+        syntra_exception_uart_puts(" FAR_EL1=");
+        syntra_exception_uart_hex(context->far_el1);
+        syntra_exception_uart_puts(" ELR_EL1=");
+        syntra_exception_uart_hex(context->elr_el1);
+        syntra_exception_uart_puts(" SPSR_EL1=");
+        syntra_exception_uart_hex(context->spsr_el1);
+        syntra_exception_uart_puts("\\n");
+    }
 
     status = syntra_arm64_exception_handle(context);
     if (status != SYNTRA_STATUS_OK) return NULL;

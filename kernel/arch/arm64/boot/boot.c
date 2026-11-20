@@ -96,6 +96,7 @@ static void syntra_uart_puts(const char *message)
 
 
 void syntra_arm64_exception_uart_puts(const char *message) { syntra_uart_puts(message); }
+void syntra_arm64_exception_uart_put_hex(uint64_t value) { syntra_uart_put_hex(value); }
 
 static void syntra_uart_put_hex(uint64_t value)
 {
@@ -1068,6 +1069,40 @@ static syntra_status_t syntra_arm64_run_el0_hello_test(void)
     __asm__ volatile("dsb ish" ::: "memory");
     __asm__ volatile("isb" ::: "memory");
 
+    syntra_uart_puts("EL0 code descriptor: ");
+    syntra_uart_put_hex(code.page_descriptor);
+    syntra_uart_puts(" AF=");
+    syntra_uart_put_hex((code.page_descriptor >> 10U) & 1U);
+    syntra_uart_puts(" AP=");
+    syntra_uart_put_hex((code.page_descriptor >> 6U) & 3U);
+    syntra_uart_puts(" SH=");
+    syntra_uart_put_hex((code.page_descriptor >> 8U) & 3U);
+    syntra_uart_puts(" UXN=");
+    syntra_uart_put_hex((code.page_descriptor >> 54U) & 1U);
+    syntra_uart_puts("\\nEL0 stack descriptor: ");
+    syntra_uart_put_hex(stack.page_descriptor);
+    syntra_uart_puts(" AF=");
+    syntra_uart_put_hex((stack.page_descriptor >> 10U) & 1U);
+    syntra_uart_puts(" AP=");
+    syntra_uart_put_hex((stack.page_descriptor >> 6U) & 3U);
+    syntra_uart_puts(" SH=");
+    syntra_uart_put_hex((stack.page_descriptor >> 8U) & 3U);
+    syntra_uart_puts(" UXN=");
+    syntra_uart_put_hex((stack.page_descriptor >> 54U) & 1U);
+    syntra_uart_puts("\\n");
+    if (((code.page_descriptor >> 10U) & 1U) != 1U ||
+        ((code.page_descriptor >> 6U) & 3U) != 3U ||
+        ((code.page_descriptor >> 8U) & 3U) != 3U ||
+        ((code.page_descriptor >> 54U) & 1U) != 0U ||
+        ((stack.page_descriptor >> 10U) & 1U) != 1U ||
+        ((stack.page_descriptor >> 6U) & 3U) != 1U ||
+        ((stack.page_descriptor >> 8U) & 3U) != 3U ||
+        ((stack.page_descriptor >> 54U) & 1U) != 1U)
+    {
+        syntra_uart_puts("EL0 descriptor attributes: FAIL\\n");
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+    }
+    syntra_uart_puts("EL0 descriptor attributes: PASS\\n");
     syntra_uart_puts("EL0 page permissions: code=RO+UX stack=RW+UXN PASS\\n");
     status = syntra_arm64_user_context_initialize(
         syntra_el0_kernel_stack, sizeof(syntra_el0_kernel_stack),
