@@ -112,3 +112,30 @@ lower-EL exception entry, and validated syscall argument handling are implemente
 This is a focused pre-MMU audit, not a claim that every repository file has been
 reviewed. Remaining review includes all HAL implementations, remaining tools and
 scripts, driver stubs, all architecture documentation, and cross-module API usage.
+
+## 8. Additional findings from FDT and region-manager review
+
+- `syntra_fdt_open()` validates that the FDT reservation map is aligned,
+  in-bounds, non-overlapping with the structure/string blocks, and terminated
+  by the zero address/zero size entry. It currently discards the reservation
+  entries instead of exposing them to the memory bootstrap.
+- `syntra_fdt_get_reg()` resolves a node's `reg` tuples using the parent
+  `#address-cells` and `#size-cells`, with overflow checks. There is no
+  public helper yet to enumerate nodes with `device_type = "memory"` or to
+  enumerate `/reserved-memory` children.
+- `kernel/memory/memory_region.c` already provides a bounded region registry
+  with overlap rejection and address lookup. It is a useful reusable primitive,
+  but it is not populated from FDT and is not included in the ARM64 kernel target.
+- The region registry validates a new region's end before overlap checks, so its
+  current overlap arithmetic is safe for entries accepted through its public add
+  API. It should still receive direct boundary/overflow tests before it becomes
+  part of boot-critical memory discovery.
+- The ARM64 CI script `tools/arm64/run_qemu.sh` checks boot completion, three
+  Generic Timer IRQ ticks, the scheduler-switch marker, and an alternating
+  A/B trace. The separate GDB-based `qemu_boot_test.sh` checks the scheduler
+  marker and successful boot return. The workflow currently invokes
+  `run_qemu.sh`.
+
+These findings refine implementation step 1: expose the validated FDT
+reservation-map entries and add RAM/reserved-memory node enumeration, then
+populate and test the existing region registry before page-table allocation.
