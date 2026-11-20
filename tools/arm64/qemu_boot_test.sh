@@ -61,14 +61,14 @@ GDB_OUTPUT="$(timeout 30s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "target remote 127.0.0.1:$GDB_PORT" \
     -ex "break syntra_arm64_boot_returned" \
     -ex "continue" \
-    -ex 'printf "syntra_arm64_boot_main returned status: %d\\n", (int)($x0 & 0xffffffff)' \
+    -ex 'printf "syntra_arm64_boot_main returned status: %d\n", (int)($x0 & 0xffffffff)' \
     -ex 'detach' 2>&1)" || {
-        printf '%s\\n' "$GDB_OUTPUT" >&2
+        printf '%s\n' "$GDB_OUTPUT" >&2
         echo "GDB failed before the ARM64 boot return point was verified." >&2
         exit 1
     }
 
-printf '%s\\n' "$GDB_OUTPUT"
+printf '%s\n' "$GDB_OUTPUT"
 
 if ! grep -Eq 'syntra_arm64_boot_main returned status: 0([[:space:]]|$)' <<<"$GDB_OUTPUT"; then
     echo "ARM64 boot stage returned a non-zero status." >&2
