@@ -5,6 +5,8 @@ on:
   workflow_run:
     workflows: ["SyntraOS CI"]
     types: [completed]
+    branches:
+      - main
   workflow_dispatch:
   schedule:
     - cron: "0 2 * * 1"
