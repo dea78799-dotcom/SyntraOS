@@ -15,59 +15,170 @@
 .type syntra_arm64_vectors, %function
 
 syntra_arm64_vectors:
-    /* Current EL with SP0: synchronous, IRQ, FIQ, SError. */
-    b syntra_arm64_exception_entry
+    b .Lvector_0
     .space 124
-    b syntra_arm64_exception_entry
+    b .Lvector_1
     .space 124
-    b syntra_arm64_exception_entry
+    b .Lvector_2
     .space 124
-    b syntra_arm64_exception_entry
+    b .Lvector_3
     .space 124
-
-    /* Current EL with SPx: synchronous, IRQ, FIQ, SError. */
-    b syntra_arm64_exception_entry
+    b .Lvector_4
     .space 124
-    b syntra_arm64_exception_entry
+    b .Lvector_5
     .space 124
-    b syntra_arm64_exception_entry
+    b .Lvector_6
     .space 124
-    b syntra_arm64_exception_entry
+    b .Lvector_7
     .space 124
-
-    /* Lower EL using AArch64: synchronous, IRQ, FIQ, SError. */
-    b syntra_arm64_exception_entry
+    b .Lvector_8
     .space 124
-    b syntra_arm64_exception_entry
+    b .Lvector_9
     .space 124
-    b syntra_arm64_exception_entry
+    b .Lvector_10
     .space 124
-    b syntra_arm64_exception_entry
+    b .Lvector_11
     .space 124
-
-    /* Lower EL using AArch32: synchronous, IRQ, FIQ, SError. */
-    b syntra_arm64_exception_entry
+    b .Lvector_12
     .space 124
-    b syntra_arm64_exception_entry
+    b .Lvector_13
     .space 124
-    b syntra_arm64_exception_entry
+    b .Lvector_14
     .space 124
-    b syntra_arm64_exception_entry
+    b .Lvector_15
     .space 124
 
 .size syntra_arm64_vectors, . - syntra_arm64_vectors
 
 /*
- * Exception context layout must match syntra_arm64_exception_context_t:
+ * Each vector stub preserves the interrupted x0 in a 16-byte scratch slot
+ * and passes its architectural vector index in x0 to the common entry.
+ */
+.Lvector_0:
+    msr daifset, #0xf
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x0, #0
+    b syntra_arm64_exception_entry
+
+.Lvector_1:
+    msr daifset, #0xf
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x0, #1
+    b syntra_arm64_exception_entry
+
+.Lvector_2:
+    msr daifset, #0xf
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x0, #2
+    b syntra_arm64_exception_entry
+
+.Lvector_3:
+    msr daifset, #0xf
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x0, #3
+    b syntra_arm64_exception_entry
+
+.Lvector_4:
+    msr daifset, #0xf
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x0, #4
+    b syntra_arm64_exception_entry
+
+.Lvector_5:
+    msr daifset, #0xf
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x0, #5
+    b syntra_arm64_exception_entry
+
+.Lvector_6:
+    msr daifset, #0xf
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x0, #6
+    b syntra_arm64_exception_entry
+
+.Lvector_7:
+    msr daifset, #0xf
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x0, #7
+    b syntra_arm64_exception_entry
+
+.Lvector_8:
+    msr daifset, #0xf
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x0, #8
+    b syntra_arm64_exception_entry
+
+.Lvector_9:
+    msr daifset, #0xf
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x0, #9
+    b syntra_arm64_exception_entry
+
+.Lvector_10:
+    msr daifset, #0xf
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x0, #10
+    b syntra_arm64_exception_entry
+
+.Lvector_11:
+    msr daifset, #0xf
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x0, #11
+    b syntra_arm64_exception_entry
+
+.Lvector_12:
+    msr daifset, #0xf
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x0, #12
+    b syntra_arm64_exception_entry
+
+.Lvector_13:
+    msr daifset, #0xf
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x0, #13
+    b syntra_arm64_exception_entry
+
+.Lvector_14:
+    msr daifset, #0xf
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x0, #14
+    b syntra_arm64_exception_entry
+
+.Lvector_15:
+    msr daifset, #0xf
+    sub sp, sp, #16
+    str x0, [sp]
+    mov x0, #15
+    b syntra_arm64_exception_entry
+
+/*
+ * Context layout must match syntra_arm64_exception_context_t:
+ *   x0-x30       0..240
+ *   SP_EL0          248
+ *   ELR_EL1         256
+ *   SPSR_EL1        264
+ *   ESR_EL1         272
+ *   FAR_EL1         280
+ *   vector_index    288
+ *   reserved        296
  *
- *   x0-x30   0..240
- *   SP_EL0      248
- *   ELR_EL1     256
- *   SPSR_EL1    264
- *   ESR_EL1     272
- *   FAR_EL1     280
- *
- * Total frame size: 288 bytes (16-byte aligned).
+ * The 304-byte frame is 16-byte aligned. The interrupted x0 is in the
+ * scratch slot immediately above it, at [sp, #304].
  */
 .global syntra_arm64_exception_entry
 .global syntra_arm64_exception_unhandled
@@ -76,14 +187,13 @@ syntra_arm64_vectors:
 
 syntra_arm64_exception_unhandled:
 syntra_arm64_exception_entry:
-    /* Mask exceptions before touching the exception frame. */
     msr daifset, #0xf
+    sub sp, sp, #304
 
-    /* Allocate the ABI-defined, 16-byte-aligned context frame. */
-    sub sp, sp, #288
-
-    /* Preserve every general-purpose register before using scratch regs. */
-    stp x0,  x1,  [sp, #0]
+    /* Recover original x0 and preserve x1-x30. */
+    ldr x9, [sp, #304]
+    str x9, [sp, #0]
+    str x1, [sp, #8]
     stp x2,  x3,  [sp, #16]
     stp x4,  x5,  [sp, #32]
     stp x6,  x7,  [sp, #48]
@@ -100,27 +210,28 @@ syntra_arm64_exception_entry:
     stp x28, x29, [sp, #224]
     str x30, [sp, #240]
 
+    /* Store vector index and reserved ABI slot. */
+    ldr x9, [sp, #312]
+    str x9, [sp, #288]
+    str xzr, [sp, #296]
+
     /* Capture architectural exception state. */
     mrs x9, sp_el0
     str x9, [sp, #248]
-
     mrs x9, elr_el1
     str x9, [sp, #256]
-
     mrs x9, spsr_el1
     str x9, [sp, #264]
-
     mrs x9, esr_el1
     str x9, [sp, #272]
-
     mrs x9, far_el1
     str x9, [sp, #280]
 
     /*
      * Pass the saved frame to the C diagnostic handler.
-     * The handler copies the frame into a stable kernel snapshot.
-     * Do not ERET or enable IRQs until a real dispatcher and return path
-     * are implemented and validated.
+     * IRQ/FIQ/SError are identified but not dispatched yet.
+     * Do not ERET or enable IRQs until a complete controller and return
+     * path are implemented and validated.
      */
     mov x0, sp
     bl syntra_arm64_exception_handle
