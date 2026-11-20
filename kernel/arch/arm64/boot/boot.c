@@ -96,7 +96,6 @@ static void syntra_uart_puts(const char *message)
 
 
 void syntra_arm64_exception_uart_puts(const char *message) { syntra_uart_puts(message); }
-void syntra_arm64_exception_uart_put_hex(uint64_t value) { syntra_uart_put_hex(value); }
 
 static void syntra_uart_put_hex(uint64_t value)
 {
@@ -110,6 +109,8 @@ static void syntra_uart_put_hex(uint64_t value)
     }
 }
 
+
+void syntra_arm64_exception_uart_put_hex(uint64_t value) { syntra_uart_put_hex(value); }
 
 static void syntra_boot_report_mmu_registers(const char *prefix)
 {
