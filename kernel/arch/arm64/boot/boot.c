@@ -2,54 +2,60 @@
 #include <stddef.h>
 
 #include "../../core/status.h"
+#include "fdt.h"
 
 /*
  * SyntraOS ARM64 Boot Stage
- * Version: 1.0.0
+ * Version: 1.1.0
  */
 
 #define SYNTRA_ARM64_DTB_ADDRESS  0x40000000ULL
 #define SYNTRA_ARM64_DTB_LIMIT    0x00200000ULL
-#define SYNTRA_ARM64_DTB_MAGIC   0xD00DFEEDU
-#define SYNTRA_ARM64_DTB_HEADER_SIZE 40U
+#define SYNTRA_ARM64_EL1_VALUE    0x4ULL
 
-#define SYNTRA_ARM64_EL1_VALUE 0x4ULL
-
-static uint32_t read_be32(const uint8_t *data)
+static int validate_dtb(const void *dtb)
 {
-    return ((uint32_t)data[0] << 24) |
-           ((uint32_t)data[1] << 16) |
-           ((uint32_t)data[2] << 8)  |
-           (uint32_t)data[3];
-}
+    syntra_fdt_t fdt;
+    syntra_fdt_iterator_t iterator;
+    syntra_fdt_token_t token;
+    syntra_status_t status;
+    int found_end = 0;
 
-static int validate_dtb(const uint8_t *dtb)
-{
-    uint32_t total_size;
+    status = syntra_fdt_open(
+        dtb,
+        (size_t)SYNTRA_ARM64_DTB_LIMIT,
+        &fdt
+    );
 
-    if (dtb == NULL)
+    if (status != SYNTRA_STATUS_OK)
     {
         return 0;
     }
 
-    if (read_be32(dtb) != SYNTRA_ARM64_DTB_MAGIC)
+    syntra_fdt_iterator_init(&iterator);
+
+    for (;;)
     {
-        return 0;
+        status = syntra_fdt_next(&fdt, &iterator, &token);
+
+        if (status == SYNTRA_STATUS_NOT_IMPLEMENTED)
+        {
+            break;
+        }
+
+        if (status != SYNTRA_STATUS_OK)
+        {
+            return 0;
+        }
+
+        if (token.type == SYNTRA_FDT_TOKEN_END)
+        {
+            found_end = 1;
+            break;
+        }
     }
 
-    total_size = read_be32(dtb + 4);
-
-    if (total_size < SYNTRA_ARM64_DTB_HEADER_SIZE)
-    {
-        return 0;
-    }
-
-    if (total_size > SYNTRA_ARM64_DTB_LIMIT)
-    {
-        return 0;
-    }
-
-    return 1;
+    return found_end;
 }
 
 syntra_status_t syntra_arm64_boot_main(
@@ -57,7 +63,7 @@ syntra_status_t syntra_arm64_boot_main(
     uint64_t current_el
 )
 {
-    const uint8_t *dtb;
+    const void *dtb;
 
     if (dtb_address != SYNTRA_ARM64_DTB_ADDRESS)
     {
@@ -69,7 +75,7 @@ syntra_status_t syntra_arm64_boot_main(
         return SYNTRA_STATUS_NOT_IMPLEMENTED;
     }
 
-    dtb = (const uint8_t *)(uintptr_t)dtb_address;
+    dtb = (const void *)(uintptr_t)dtb_address;
 
     if (!validate_dtb(dtb))
     {
@@ -77,9 +83,8 @@ syntra_status_t syntra_arm64_boot_main(
     }
 
     /*
-     * DTB header validation completed.
-     * Full FDT parsing and hardware initialization
-     * are not implemented yet.
+     * The FDT header and complete structure token stream are validated.
+     * Device discovery and hardware initialization remain separate stages.
      */
 
     return SYNTRA_STATUS_OK;
