@@ -195,6 +195,7 @@ syntra_status_t syntra_fdt_next(
 
     token->type = (syntra_fdt_token_type_t)type;
     token->depth = iterator->depth;
+    token->offset = cursor - 4U;
     token->name = NULL;
     token->data = NULL;
     token->data_size = 0U;
@@ -284,4 +285,196 @@ syntra_status_t syntra_fdt_next(
 
     iterator->offset = cursor;
     return SYNTRA_STATUS_OK;
+}
+
+static int fdt_string_equals(const char *left, const char *right)
+{
+    size_t index = 0U;
+
+    if (left == NULL || right == NULL)
+    {
+        return 0;
+    }
+
+    while (left[index] != '\\0' && right[index] != '\\0')
+    {
+        if (left[index] != right[index])
+        {
+            return 0;
+        }
+        ++index;
+    }
+
+    return left[index] == right[index];
+}
+
+static int fdt_string_list_contains(
+    const uint8_t *data,
+    uint32_t data_size,
+    const char *value
+)
+{
+    size_t value_length = 0U;
+    size_t offset = 0U;
+
+    if (data == NULL || value == NULL)
+    {
+        return 0;
+    }
+
+    while (value[value_length] != '\\0')
+    {
+        ++value_length;
+    }
+
+    while (offset < data_size)
+    {
+        size_t remaining = (size_t)data_size - offset;
+        size_t item_length;
+
+        if (!fdt_find_string_end(data + offset, remaining, &item_length))
+        {
+            return 0;
+        }
+
+        if (item_length == value_length)
+        {
+            size_t index;
+            int equal = 1;
+
+            for (index = 0U; index < item_length; ++index)
+            {
+                if ((char)data[offset + index] != value[index])
+                {
+                    equal = 0;
+                    break;
+                }
+            }
+
+            if (equal)
+            {
+                return 1;
+            }
+        }
+
+        offset += item_length + 1U;
+    }
+
+    return 0;
+}
+
+syntra_status_t syntra_fdt_find_compatible(
+    const syntra_fdt_t *fdt,
+    const char *compatible,
+    syntra_fdt_node_t *node
+)
+{
+    syntra_fdt_iterator_t iterator;
+    syntra_fdt_token_t token;
+    syntra_fdt_node_t candidate;
+    int candidate_valid = 0;
+    syntra_status_t status;
+
+    if (fdt == NULL || compatible == NULL || node == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    syntra_fdt_iterator_init(&iterator);
+
+    for (;;)
+    {
+        status = syntra_fdt_next(fdt, &iterator, &token);
+        if (status != SYNTRA_STATUS_OK)
+        {
+            return status == SYNTRA_STATUS_NOT_IMPLEMENTED
+                ? SYNTRA_STATUS_ERROR
+                : status;
+        }
+
+        if (token.type == SYNTRA_FDT_TOKEN_BEGIN_NODE)
+        {
+            candidate.begin_offset = token.offset;
+            candidate.depth = token.depth;
+            candidate_valid = 1;
+        }
+        else if (token.type == SYNTRA_FDT_TOKEN_PROPERTY &&
+                 candidate_valid &&
+                 token.depth == candidate.depth + 1U &&
+                 fdt_string_equals(token.name, "compatible") &&
+                 fdt_string_list_contains(
+                     token.data,
+                     token.data_size,
+                     compatible))
+        {
+            *node = candidate;
+            return SYNTRA_STATUS_OK;
+        }
+        else if (token.type == SYNTRA_FDT_TOKEN_END_NODE &&
+                 candidate_valid &&
+                 token.depth == candidate.depth)
+        {
+            candidate_valid = 0;
+        }
+    }
+}
+
+syntra_status_t syntra_fdt_get_property(
+    const syntra_fdt_t *fdt,
+    const syntra_fdt_node_t *node,
+    const char *property_name,
+    const uint8_t **data,
+    uint32_t *data_size
+)
+{
+    syntra_fdt_iterator_t iterator;
+    syntra_fdt_token_t token;
+    syntra_status_t status;
+
+    if (fdt == NULL || node == NULL || property_name == NULL ||
+        data == NULL || data_size == NULL ||
+        node->begin_offset >= fdt->structure_size)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    iterator.offset = node->begin_offset;
+    iterator.depth = node->depth;
+    iterator.ended = 0U;
+
+    status = syntra_fdt_next(fdt, &iterator, &token);
+    if (status != SYNTRA_STATUS_OK ||
+        token.type != SYNTRA_FDT_TOKEN_BEGIN_NODE ||
+        token.depth != node->depth)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    for (;;)
+    {
+        status = syntra_fdt_next(fdt, &iterator, &token);
+        if (status != SYNTRA_STATUS_OK)
+        {
+            return status == SYNTRA_STATUS_NOT_IMPLEMENTED
+                ? SYNTRA_STATUS_ERROR
+                : status;
+        }
+
+        if (token.type == SYNTRA_FDT_TOKEN_PROPERTY &&
+            token.depth == node->depth + 1U)
+        {
+            if (fdt_string_equals(token.name, property_name))
+            {
+                *data = token.data;
+                *data_size = token.data_size;
+                return SYNTRA_STATUS_OK;
+            }
+        }
+        else if (token.type == SYNTRA_FDT_TOKEN_BEGIN_NODE ||
+                 (token.type == SYNTRA_FDT_TOKEN_END_NODE &&
+                  token.depth == node->depth))
+        {
+            return SYNTRA_STATUS_ERROR;
+        }
+    }
 }
