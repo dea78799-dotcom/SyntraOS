@@ -62,6 +62,7 @@ GDB_OUTPUT="$(timeout 30s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "set architecture aarch64" \
     -ex "set target-async off" \
     -ex "target remote 127.0.0.1:$GDB_PORT" \
+    -ex "set mi-async off" \
     -ex "hbreak *0x10000000" \
     -ex "continue" \
     -ex 'printf "EL0 entry breakpoint hit: PC=%#lx PSTATE=%#lx\\n", $pc, $cpsr' \
