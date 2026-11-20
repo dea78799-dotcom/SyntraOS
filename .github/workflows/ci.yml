@@ -99,12 +99,30 @@ jobs:
     name: Build ARM64 Kernel ELF
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      APT_ARCHIVE_CACHE: ${{ runner.temp }}/syntraos-apt/archives
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Prepare APT archive cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$APT_ARCHIVE_CACHE/partial"
+          chmod 1777 "$APT_ARCHIVE_CACHE" "$APT_ARCHIVE_CACHE/partial"
+
+      - name: Restore APT package archive cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/syntraos-apt/archives
+          key: ${{ runner.os }}-${{ runner.arch }}-syntraos-apt-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-syntraos-apt-
+
       - name: Install ARM64 cross-compilation tools
+        id: arm64_tools
         timeout-minutes: 25
         shell: bash
         run: |
@@ -134,18 +152,25 @@ jobs:
 
           if [ "${#MISSING_PACKAGES[@]}" -eq 0 ]; then
             echo "All ARM64 build tools are already available; skipping apt."
+            echo "apt_updated=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           echo "Installing missing packages: ${MISSING_PACKAGES[*]}"
 
+          sudo install -d -m 1777 "$APT_ARCHIVE_CACHE" "$APT_ARCHIVE_CACHE/partial"
+
           sudo apt-get \
+            -o Dir::Cache::archives="$APT_ARCHIVE_CACHE" \
             -o Acquire::Retries=2 \
             -o Acquire::http::Timeout=15 \
             -o Acquire::https::Timeout=15 \
             update
+          echo "apt_updated=true" >> "$GITHUB_OUTPUT"
 
           sudo apt-get \
+            -o Dir::Cache::archives="$APT_ARCHIVE_CACHE" \
+            -o APT::Keep-Downloaded-Packages=true \
             -o Acquire::Retries=2 \
             -o Acquire::http::Timeout=15 \
             -o Acquire::https::Timeout=15 \
@@ -181,13 +206,30 @@ jobs:
           if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then
             MISSING_PACKAGES+=(qemu-system-arm)
           fi
-          if ! dpkg-query -W -f='${Status}' qemu-efi-aarch64 2>/dev/null | grep -q "install ok installed"; then
-            MISSING_PACKAGES+=(qemu-efi-aarch64)
-          fi
+          # SyntraOS boots the ELF directly with QEMU -kernel; it does not
+          # use UEFI firmware, so the separate UEFI firmware package is omitted.
 
           if [ "${#MISSING_PACKAGES[@]}" -gt 0 ]; then
-            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
-            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install --no-install-recommends -y "${MISSING_PACKAGES[@]}"
+            sudo install -d -m 1777 "$APT_ARCHIVE_CACHE" "$APT_ARCHIVE_CACHE/partial"
+
+            if [ "${{ steps.arm64_tools.outputs.apt_updated }}" != "true" ]; then
+              sudo apt-get \
+                -o Dir::Cache::archives="$APT_ARCHIVE_CACHE" \
+                -o Acquire::Retries=2 \
+                -o Acquire::http::Timeout=15 \
+                -o Acquire::https::Timeout=15 \
+                update
+            fi
+
+            sudo apt-get \
+              -o Dir::Cache::archives="$APT_ARCHIVE_CACHE" \
+              -o APT::Keep-Downloaded-Packages=true \
+              -o Acquire::Retries=2 \
+              -o Acquire::http::Timeout=15 \
+              -o Acquire::https::Timeout=15 \
+              install --no-install-recommends -y "${MISSING_PACKAGES[@]}"
+          else
+            echo "QEMU ARM64 system emulator is already available; skipping apt."
           fi
 
       - name: Boot ARM64 ELF in QEMU
