@@ -3,6 +3,60 @@
 #include <stddef.h>
 #include <stdint.h>
 
+static syntra_arm64_boot_memory_metadata_t boot_memory_metadata;
+static int boot_memory_metadata_valid;
+
+syntra_status_t syntra_arm64_boot_memory_metadata_set(
+    const syntra_arm64_boot_memory_metadata_t *metadata
+)
+{
+    if (metadata == NULL ||
+        metadata->kernel_start == 0U ||
+        metadata->kernel_end <= metadata->kernel_start ||
+        metadata->stack_bottom == 0U ||
+        metadata->stack_top <= metadata->stack_bottom ||
+        metadata->dtb_start == 0U ||
+        metadata->dtb_size == 0U ||
+        metadata->dtb_start > UINTPTR_MAX - metadata->dtb_size ||
+        (metadata->stack_bottom & 0xFULL) != 0U ||
+        (metadata->stack_top & 0xFULL) != 0U)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    /* Refuse overlapping kernel/stack/DTB ranges: all three are live. */
+    if ((metadata->kernel_start < metadata->stack_top &&
+         metadata->stack_bottom < metadata->kernel_end) ||
+        (metadata->kernel_start < metadata->dtb_start + metadata->dtb_size &&
+         metadata->dtb_start < metadata->kernel_end) ||
+        (metadata->stack_bottom < metadata->dtb_start + metadata->dtb_size &&
+         metadata->dtb_start < metadata->stack_top))
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    boot_memory_metadata = *metadata;
+    boot_memory_metadata_valid = 1;
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t syntra_arm64_boot_memory_metadata_get(
+    syntra_arm64_boot_memory_metadata_t *metadata
+)
+{
+    if (metadata == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+    if (!boot_memory_metadata_valid)
+    {
+        return SYNTRA_STATUS_NOT_INITIALIZED;
+    }
+
+    *metadata = boot_memory_metadata;
+    return SYNTRA_STATUS_OK;
+}
+
 static int memory_name_matches(const char *name)
 {
     static const char prefix[] = "memory";

@@ -85,8 +85,14 @@ SECTIONS
 
     __kernel_end = .;
 
-    ASSERT(
-        __kernel_end <= ORIGIN(RAM) + LENGTH(RAM),
-        "SyntraOS kernel exceeds available RAM"
-    )
+    ASSERT(__kernel_start < __kernel_end,
+           "SyntraOS kernel range is empty")
+    ASSERT((__stack_bottom & 0xF) == 0,
+           "SyntraOS stack bottom must be 16-byte aligned")
+    ASSERT((__stack_top & 0xF) == 0,
+           "SyntraOS stack top must be 16-byte aligned")
+    ASSERT(__stack_bottom < __stack_top,
+           "SyntraOS stack range is invalid")
+    ASSERT(__kernel_end <= ORIGIN(RAM) + LENGTH(RAM),
+           "SyntraOS kernel exceeds available RAM")
 }

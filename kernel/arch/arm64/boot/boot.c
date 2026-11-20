@@ -35,6 +35,8 @@
 
 extern char __kernel_start[];
 extern char __kernel_end[];
+extern char __stack_bottom[];
+extern char __stack_top[];
 
 static void syntra_uart_init(void)
 {
@@ -292,6 +294,38 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
     if (!found_end)
     {
         return SYNTRA_STATUS_ERROR;
+    }
+
+    {
+        syntra_arm64_boot_memory_metadata_t metadata;
+
+        metadata.kernel_start = (uintptr_t)__kernel_start;
+        metadata.kernel_end = (uintptr_t)__kernel_end;
+        metadata.stack_bottom = (uintptr_t)__stack_bottom;
+        metadata.stack_top = (uintptr_t)__stack_top;
+        metadata.dtb_start = (uintptr_t)dtb;
+        metadata.dtb_size = fdt.total_size;
+
+        status = syntra_arm64_boot_memory_metadata_set(&metadata);
+        if (status != SYNTRA_STATUS_OK)
+        {
+            syntra_uart_puts("Boot memory metadata validation failed\\n");
+            return status;
+        }
+
+        syntra_uart_puts("Boot memory metadata: PASS kernel=");
+        syntra_uart_put_hex((uint64_t)metadata.kernel_start);
+        syntra_uart_puts("-");
+        syntra_uart_put_hex((uint64_t)metadata.kernel_end);
+        syntra_uart_puts(" stack=");
+        syntra_uart_put_hex((uint64_t)metadata.stack_bottom);
+        syntra_uart_puts("-");
+        syntra_uart_put_hex((uint64_t)metadata.stack_top);
+        syntra_uart_puts(" dtb=");
+        syntra_uart_put_hex((uint64_t)metadata.dtb_start);
+        syntra_uart_puts(" size=");
+        syntra_uart_put_hex((uint64_t)metadata.dtb_size);
+        syntra_uart_puts("\\n");
     }
 
     status = syntra_arm64_memory_map_discover(
