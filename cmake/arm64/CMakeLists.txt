@@ -52,6 +52,7 @@ add_executable(syntraos_arm64
     "${SYNTRAOS_ROOT}/kernel/timer/timer.c"
     "${SYNTRAOS_ROOT}/kernel/gui/framebuffer.c"
     "${SYNTRAOS_ROOT}/kernel/gui/desktop.c"
+    "${SYNTRAOS_ROOT}/kernel/gui/ramfb.c"
 )
 
 set_target_properties(syntraos_arm64 PROPERTIES

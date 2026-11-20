@@ -17,6 +17,7 @@ set(CMAKE_C_EXTENSIONS OFF)
 add_library(syntra_gui STATIC
     kernel/gui/framebuffer.c
     kernel/gui/desktop.c
+    kernel/gui/ramfb.c
 )
 target_include_directories(syntra_gui PUBLIC
     kernel/gui
@@ -114,6 +115,14 @@ add_executable(gui_desktop_test
 )
 target_link_libraries(gui_desktop_test PRIVATE syntra_gui)
 add_test(NAME GUIDesktopRendererTest COMMAND gui_desktop_test)
+
+
+# QEMU ramfb firmware-directory and wire-format tests
+add_executable(gui_ramfb_test
+    tests/gui/ramfb_test.c
+)
+target_link_libraries(gui_ramfb_test PRIVATE syntra_gui)
+add_test(NAME GUIRamfbProtocolTest COMMAND gui_ramfb_test)
 
 # Scheduler Test
 add_executable(scheduler_test
