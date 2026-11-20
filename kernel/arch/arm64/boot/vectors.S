@@ -190,9 +190,10 @@ syntra_arm64_exception_entry:
     msr daifset, #0xf
     sub sp, sp, #304
 
-    /* Recover original x0 and preserve x1-x30. */
-    ldr x9, [sp, #304]
-    str x9, [sp, #0]
+    /* Save vector index, recover original x0, then preserve x1-x30. */
+    str x0, [sp, #288]
+    ldr x0, [sp, #304]
+    str x0, [sp, #0]
     str x1, [sp, #8]
     stp x2,  x3,  [sp, #16]
     stp x4,  x5,  [sp, #32]
@@ -210,9 +211,7 @@ syntra_arm64_exception_entry:
     stp x28, x29, [sp, #224]
     str x30, [sp, #240]
 
-    /* Store vector index and reserved ABI slot. */
-    ldr x9, [sp, #312]
-    str x9, [sp, #288]
+    /* Clear the reserved ABI slot. */
     str xzr, [sp, #296]
 
     /* Capture architectural exception state. */
