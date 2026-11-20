@@ -201,6 +201,23 @@ static void test_gic_v2_discovery(void)
     assert(info.config.cpu_interface_size == (size_t)0x1000U);
 }
 
+static void test_rejects_invalid_reg_index_and_truncation(void)
+{
+    syntra_fdt_t fdt;
+    syntra_fdt_node_t node;
+    uintptr_t base;
+    size_t size;
+
+    build_test_fdt(0);
+    assert(syntra_fdt_open(blob, sizeof(blob), &fdt) == SYNTRA_STATUS_OK);
+    assert(syntra_fdt_find_compatible(
+        &fdt, "arm,gic-v3", &node) == SYNTRA_STATUS_OK);
+
+    assert(syntra_fdt_get_reg(
+        &fdt, &node, 2U, &base, &size) == SYNTRA_STATUS_ERROR);
+    assert(syntra_fdt_open(blob, 20U, &fdt) == SYNTRA_STATUS_ERROR);
+}
+
 static void test_rejects_bad_magic(void)
 {
     syntra_fdt_t fdt;
@@ -222,6 +239,7 @@ int main(void)
 {
     test_fdt_and_gic_discovery();
     test_gic_v2_discovery();
+    test_rejects_invalid_reg_index_and_truncation();
     test_rejects_bad_magic();
     test_rejects_overlapping_blocks();
     puts("FDT/GIC discovery tests passed");
