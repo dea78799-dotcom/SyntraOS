@@ -235,6 +235,39 @@ syntra_arm64_exception_entry:
     mov x0, sp
     bl syntra_arm64_exception_handle
 
+    /* Return only from the explicitly validated SVC test exception. */
+    ldr x9, [sp, #296]
+    movz x10, #0x5254
+    movk x10, #0x5241, lsl #16
+    movk x10, #0x4e54, lsl #32
+    movk x10, #0x5359, lsl #48
+    cmp x9, x10
+    b.ne .Lexception_halt
+
+    ldr x9, [sp, #264]
+    msr spsr_el1, x9
+    ldr x9, [sp, #256]
+    msr elr_el1, x9
+
+    ldp x0,  x1,  [sp, #0]
+    ldp x2,  x3,  [sp, #16]
+    ldp x4,  x5,  [sp, #32]
+    ldp x6,  x7,  [sp, #48]
+    ldp x8,  x9,  [sp, #64]
+    ldp x10, x11, [sp, #80]
+    ldp x12, x13, [sp, #96]
+    ldp x14, x15, [sp, #112]
+    ldp x16, x17, [sp, #128]
+    ldp x18, x19, [sp, #144]
+    ldp x20, x21, [sp, #160]
+    ldp x22, x23, [sp, #176]
+    ldp x24, x25, [sp, #192]
+    ldp x26, x27, [sp, #208]
+    ldp x28, x29, [sp, #224]
+    ldr x30, [sp, #240]
+    add sp, sp, #320
+    eret
+
 .Lexception_halt:
     wfe
     b .Lexception_halt
