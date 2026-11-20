@@ -103,7 +103,7 @@ static void test_l2_two_mib_block(void)
         (2ULL<<DESC_SH_SHIFT) | DESC_PXN | DESC_UXN;
     assert(syntra_arm64_mmu_walk(ROOT_PA,va,resolve,NULL,&out)==SYNTRA_STATUS_OK);
     assert(out.level==2U && out.page_size==(1ULL<<21U));
-    assert(out.physical_address==0x60045123ULL);
+    assert(out.physical_address==0x60145123ULL);
     assert(out.memory_type==SYNTRA_ARM64_MMU_MEMORY_DEVICE);
     assert(!out.privileged_execute && !out.user_execute);
 }
