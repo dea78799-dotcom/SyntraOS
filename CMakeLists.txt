@@ -24,6 +24,7 @@ add_library(syntra_kernel STATIC
     kernel/arch/arm64/arch.c
     kernel/arch/arm64/exception.c
     kernel/arch/arm64/registers.c
+    kernel/arch/arm64/mmu.c
 
     kernel/scheduler/scheduler.c
     kernel/memory/memory.c
@@ -408,3 +409,13 @@ target_include_directories(fdt_gic_test PRIVATE
     kernel/arch/arm64
 )
 add_test(NAME ARM64FDTGICDiscoveryTest COMMAND fdt_gic_test)
+
+# ARM64 MMU descriptor construction tests
+add_executable(mmu_descriptor_test
+    tests/arm64/mmu_descriptor_test.c
+    kernel/arch/arm64/mmu.c
+)
+target_include_directories(mmu_descriptor_test PRIVATE
+    kernel/arch/arm64
+)
+add_test(NAME ARM64MMUDescriptorTest COMMAND mmu_descriptor_test)
