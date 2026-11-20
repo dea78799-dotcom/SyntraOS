@@ -560,9 +560,25 @@ static void syntra_scheduler_test_worker(void *argument)
     unsigned int worker_index = worker_id - SYNTRA_SCHEDULER_TEST_WORKER_A_ID;
     uint64_t observed_tick = timer_get_ticks();
 
-    while (timer_get_ticks() < scheduler_test_deadline)
+    for (;;)
     {
-        uint64_t current_tick = timer_get_ticks();
+        uint64_t current_tick;
+
+        /*
+         * Keep the tick observation and all associated trace state in one
+         * IRQ-atomic section. Otherwise a timer IRQ can switch workers after
+         * the tick comparison but before the trace append, making the test
+         * report a false non-alternating sequence.
+         */
+        __asm__ volatile("msr daifset, #2" ::: "memory");
+        current_tick = timer_get_ticks();
+        if (current_tick >= scheduler_test_deadline)
+        {
+            __asm__ volatile("msr daifclr, #2" ::: "memory");
+            __asm__ volatile("isb" ::: "memory");
+            break;
+        }
+
         if (current_tick != observed_tick)
         {
             observed_tick = current_tick;
@@ -572,8 +588,6 @@ static void syntra_scheduler_test_worker(void *argument)
                 scheduler_test_switches++;
             scheduler_test_last_worker = worker_id;
 
-            /* Keep trace updates atomic with respect to timer preemption. */
-            __asm__ volatile("msr daifset, #2" ::: "memory");
             if (scheduler_test_trace_length <
                 (unsigned int)sizeof(scheduler_test_trace))
             {
@@ -582,9 +596,9 @@ static void syntra_scheduler_test_worker(void *argument)
                         ? 'A' : 'B';
                 scheduler_test_trace_length++;
             }
-            __asm__ volatile("msr daifclr, #2" ::: "memory");
-            __asm__ volatile("isb" ::: "memory");
         }
+        __asm__ volatile("msr daifclr, #2" ::: "memory");
+        __asm__ volatile("isb" ::: "memory");
     }
 
     scheduler_test_completed++;
