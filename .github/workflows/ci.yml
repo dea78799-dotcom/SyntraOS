@@ -125,7 +125,6 @@ jobs:
           check_tool ninja ninja-build
           check_tool aarch64-linux-gnu-gcc gcc-aarch64-linux-gnu
           check_tool aarch64-linux-gnu-ld binutils-aarch64-linux-gnu
-          check_tool qemu-system-aarch64 qemu-system-arm
 
           # QEMU virt uses this firmware ROM on the Ubuntu runner image.
           if ! dpkg-query -W -f='${Status}' qemu-efi-aarch64 2>/dev/null | grep -q "install ok installed"; then
