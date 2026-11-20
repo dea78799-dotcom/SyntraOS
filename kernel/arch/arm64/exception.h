@@ -16,6 +16,7 @@
 #define SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC 0x53594E5452415254ULL
 #define SYNTRA_ARM64_IRQ_RETURN_MAGIC 0x4952515245545552ULL
 #define SYNTRA_ARM64_EXCEPTION_TEST_SVC_IMMEDIATE 0x42U
+#define SYNTRA_ARM64_SCHEDULER_START_SVC_IMMEDIATE 0x43U
 
 /*
  * Exception frame layout shared by future vector-entry assembly and C.
@@ -178,6 +179,11 @@ syntra_status_t syntra_arm64_exception_decode(
  */
 syntra_status_t syntra_arm64_exception_handle(
     const syntra_arm64_exception_context_t *context
+);
+
+syntra_arm64_exception_context_t *
+syntra_arm64_exception_handle_and_select(
+    syntra_arm64_exception_context_t *context
 );
 
 /* Read-only access to the most recently captured exception snapshot. */

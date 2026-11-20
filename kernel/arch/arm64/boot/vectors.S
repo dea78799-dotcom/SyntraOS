@@ -233,8 +233,11 @@ syntra_arm64_exception_entry:
      * path are implemented and validated.
      */
     mov x0, sp
-    bl syntra_arm64_exception_handle
+    bl syntra_arm64_exception_handle_and_select
+    cbz x0, .Lexception_use_current_frame
+    mov sp, x0
 
+.Lexception_use_current_frame:
     /* Return only from validated SVC or acknowledged IRQ handlers. */
     ldr x9, [sp, #296]
     movz x10, #0x5254

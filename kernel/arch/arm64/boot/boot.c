@@ -4,10 +4,12 @@
 #include "../../core/status.h"
 #include "fdt.h"
 #include "../exception.h"
+#include "../context.h"
 #include "../gic.h"
 #include "../timer.h"
 #include "../../../timer/timer.h"
 #include "../../../interrupt/interrupt.h"
+#include "../../../scheduler/scheduler.h"
 
 /*
  * SyntraOS ARM64 Boot Stage
@@ -341,6 +343,133 @@ static syntra_status_t syntra_arm64_svc_vector_test(void)
     return SYNTRA_STATUS_OK;
 }
 
+
+#define SYNTRA_SCHEDULER_TEST_STACK_SIZE 8192U
+#define SYNTRA_SCHEDULER_TEST_BOOT_ID 1U
+#define SYNTRA_SCHEDULER_TEST_WORKER_A_ID 2U
+#define SYNTRA_SCHEDULER_TEST_WORKER_B_ID 3U
+
+static _Alignas(16) uint8_t scheduler_worker_a_stack[SYNTRA_SCHEDULER_TEST_STACK_SIZE];
+static _Alignas(16) uint8_t scheduler_worker_b_stack[SYNTRA_SCHEDULER_TEST_STACK_SIZE];
+static volatile uint64_t scheduler_test_deadline;
+static volatile unsigned int scheduler_test_completed;
+static volatile unsigned int scheduler_test_last_worker;
+static volatile unsigned int scheduler_test_switches;
+static volatile unsigned int scheduler_test_worker_slices[2];
+
+static void syntra_scheduler_test_worker(void *argument)
+{
+    unsigned int worker_id = (unsigned int)(uintptr_t)argument;
+    unsigned int worker_index = worker_id - SYNTRA_SCHEDULER_TEST_WORKER_A_ID;
+    uint64_t observed_tick = timer_get_ticks();
+
+    while (timer_get_ticks() < scheduler_test_deadline)
+    {
+        uint64_t current_tick = timer_get_ticks();
+        if (current_tick != observed_tick)
+        {
+            observed_tick = current_tick;
+            scheduler_test_worker_slices[worker_index]++;
+            if (scheduler_test_last_worker != 0U &&
+                scheduler_test_last_worker != worker_id)
+                scheduler_test_switches++;
+            scheduler_test_last_worker = worker_id;
+        }
+    }
+
+    scheduler_test_completed++;
+    if (scheduler_test_completed == 2U)
+        (void)scheduler_wake_thread(SYNTRA_SCHEDULER_TEST_BOOT_ID);
+}
+
+static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
+{
+    syntra_status_t status;
+    syntra_thread_t *thread;
+    syntra_arm64_exception_context_t *initial_context = NULL;
+
+    scheduler_test_completed = 0U;
+    scheduler_test_last_worker = 0U;
+    scheduler_test_switches = 0U;
+    scheduler_test_worker_slices[0] = 0U;
+    scheduler_test_worker_slices[1] = 0U;
+
+    status = scheduler_init();
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = scheduler_create_thread(
+        SYNTRA_SCHEDULER_TEST_WORKER_A_ID, 0U,
+        syntra_scheduler_test_worker,
+        (void *)(uintptr_t)SYNTRA_SCHEDULER_TEST_WORKER_A_ID,
+        scheduler_worker_a_stack, sizeof(scheduler_worker_a_stack));
+    if (status != SYNTRA_STATUS_OK) return status;
+    thread = scheduler_get_thread(SYNTRA_SCHEDULER_TEST_WORKER_A_ID);
+    if (thread == NULL) return SYNTRA_STATUS_ERROR;
+    status = syntra_arm64_context_initialize(
+        scheduler_worker_a_stack, sizeof(scheduler_worker_a_stack),
+        syntra_scheduler_test_worker,
+        (void *)(uintptr_t)SYNTRA_SCHEDULER_TEST_WORKER_A_ID,
+        &initial_context);
+    if (status != SYNTRA_STATUS_OK) return status;
+    thread->cpu_context = initial_context;
+
+    status = scheduler_create_thread(
+        SYNTRA_SCHEDULER_TEST_WORKER_B_ID, 0U,
+        syntra_scheduler_test_worker,
+        (void *)(uintptr_t)SYNTRA_SCHEDULER_TEST_WORKER_B_ID,
+        scheduler_worker_b_stack, sizeof(scheduler_worker_b_stack));
+    if (status != SYNTRA_STATUS_OK) return status;
+    thread = scheduler_get_thread(SYNTRA_SCHEDULER_TEST_WORKER_B_ID);
+    if (thread == NULL) return SYNTRA_STATUS_ERROR;
+    initial_context = NULL;
+    status = syntra_arm64_context_initialize(
+        scheduler_worker_b_stack, sizeof(scheduler_worker_b_stack),
+        syntra_scheduler_test_worker,
+        (void *)(uintptr_t)SYNTRA_SCHEDULER_TEST_WORKER_B_ID,
+        &initial_context);
+    if (status != SYNTRA_STATUS_OK) return status;
+    thread->cpu_context = initial_context;
+
+    status = scheduler_add_thread(SYNTRA_SCHEDULER_TEST_BOOT_ID, 0U);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = scheduler_set_thread_state(
+        SYNTRA_SCHEDULER_TEST_BOOT_ID, THREAD_BLOCKED);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    scheduler_test_deadline = timer_get_ticks() + 8ULL;
+    status = interrupt_enable(30U);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_arm64_timer_enable();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        (void)interrupt_disable(30U);
+        return status;
+    }
+
+    __asm__ volatile("dsb sy" ::: "memory");
+    __asm__ volatile("msr daifclr, #2" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+    __asm__ volatile("svc #0x43" ::: "memory");
+
+    __asm__ volatile("msr daifset, #2" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+    (void)syntra_arm64_timer_disable();
+    (void)interrupt_disable(30U);
+
+    if (scheduler_test_completed != 2U ||
+        scheduler_test_worker_slices[0] == 0U ||
+        scheduler_test_worker_slices[1] == 0U ||
+        scheduler_test_switches < 2U ||
+        scheduler_validate() != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("FAIL: ARM64 Scheduler context switch validation\n");
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    syntra_uart_puts("PASS: ARM64 Scheduler switched between two threads\n");
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_arm64_boot_main(
     uint64_t dtb_address,
     uint64_t current_el
@@ -401,6 +530,13 @@ syntra_status_t syntra_arm64_boot_main(
     if (status != SYNTRA_STATUS_OK)
     {
         syntra_uart_puts("SyntraOS boot failed: GICv3/Generic Timer IRQ test\n");
+        return status;
+    }
+
+    status = syntra_arm64_scheduler_context_switch_test();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("SyntraOS boot failed: ARM64 Scheduler context switch test\n");
         return status;
     }
 

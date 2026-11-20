@@ -2,6 +2,7 @@
 
 #include "exception.h"
 #include "../../interrupt/interrupt.h"
+#include "../../scheduler/scheduler.h"
 
 /*
  * SyntraOS ARM64 Hardware Exception Handler
@@ -139,4 +140,63 @@ syntra_arm64_exception_get_last_info(void)
 int syntra_arm64_exception_has_last_context(void)
 {
     return last_exception_valid;
+}
+
+
+/* ARM64 exception-to-scheduler bridge. */
+#define SYNTRA_ARM64_BOOT_THREAD_ID 1U
+static int scheduler_context_switching_active;
+
+syntra_arm64_exception_context_t *
+syntra_arm64_exception_handle_and_select(
+    syntra_arm64_exception_context_t *context
+)
+{
+    syntra_status_t status;
+    syntra_thread_t *current;
+    syntra_thread_t *next;
+
+    if (context == NULL) return NULL;
+
+    status = syntra_arm64_exception_handle(context);
+    if (status != SYNTRA_STATUS_OK) return NULL;
+
+    if (context->vector_index == SYNTRA_ARM64_VECTOR_CURRENT_SPX_SYNC &&
+        last_exception_info.exception_class == SYNTRA_ARM64_EXCEPTION_SVC_AARCH64 &&
+        (context->esr_el1 & 0xFFFFU) ==
+            SYNTRA_ARM64_SCHEDULER_START_SVC_IMMEDIATE)
+    {
+        syntra_thread_t *boot_thread =
+            scheduler_get_thread(SYNTRA_ARM64_BOOT_THREAD_ID);
+
+        if (scheduler_context_switching_active ||
+            boot_thread == NULL ||
+            boot_thread->state != THREAD_BLOCKED)
+            return NULL;
+
+        boot_thread->cpu_context = context;
+        context->reserved = SYNTRA_ARM64_IRQ_RETURN_MAGIC;
+        scheduler_context_switching_active = 1;
+
+        next = scheduler_schedule_next();
+        if (next == NULL || next->cpu_context == NULL)
+        {
+            scheduler_context_switching_active = 0;
+            return NULL;
+        }
+        return (syntra_arm64_exception_context_t *)next->cpu_context;
+    }
+
+    if (scheduler_context_switching_active &&
+        context->vector_index == SYNTRA_ARM64_VECTOR_CURRENT_SPX_IRQ)
+    {
+        current = scheduler_get_current();
+        if (current != NULL) current->cpu_context = context;
+
+        next = scheduler_schedule_next();
+        if (next == NULL || next->cpu_context == NULL) return NULL;
+        return (syntra_arm64_exception_context_t *)next->cpu_context;
+    }
+
+    return NULL;
 }

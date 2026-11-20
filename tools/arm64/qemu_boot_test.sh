@@ -21,6 +21,7 @@ command -v "$GDB_BIN" >/dev/null 2>&1 || {
 }
 
 QEMU_LOG="$(mktemp)"
+UART_LOG="$(mktemp)"
 QEMU_PID=""
 
 cleanup() {
@@ -28,7 +29,7 @@ cleanup() {
         kill "$QEMU_PID" >/dev/null 2>&1 || true
         wait "$QEMU_PID" >/dev/null 2>&1 || true
     fi
-    rm -f "$QEMU_LOG"
+    rm -f "$QEMU_LOG" "$UART_LOG"
 }
 trap cleanup EXIT
 
@@ -38,7 +39,7 @@ trap cleanup EXIT
     -m 512M \
     -kernel "$ELF_PATH" \
     -display none \
-    -serial none \
+    -serial "file:$UART_LOG" \
     -monitor none \
     -no-reboot \
     -no-shutdown \
@@ -69,6 +70,14 @@ GDB_OUTPUT="$(timeout 30s "$GDB_BIN" -q -batch "$ELF_PATH" \
     }
 
 printf '%s\n' "$GDB_OUTPUT"
+
+echo "QEMU UART output:"
+cat "$UART_LOG"
+
+if ! grep -Fq 'PASS: ARM64 Scheduler switched between two threads' "$UART_LOG"; then
+    echo "ARM64 scheduler context-switch marker was not observed on UART." >&2
+    exit 1
+fi
 
 if ! grep -Eq 'syntra_arm64_boot_main returned status: 0([[:space:]]|$)' <<<"$GDB_OUTPUT"; then
     echo "ARM64 boot stage returned a non-zero status." >&2
