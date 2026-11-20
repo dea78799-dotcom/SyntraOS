@@ -20,7 +20,7 @@ static int gic_initialized;
 #define GICD_TYPER 0x004U
 #define GICD_CTLR_RWP (1U << 31)
 #define GICD_CTLR_DS (1U << 6)
-#define GICD_CTLR_ENABLE_G1 (1U << 0)
+#define GICD_CTLR_ENABLE_G1 (1U << 1)
 #define GICR_FRAME_SIZE 0x20000U
 #define GICR_TYPER 0x0008U
 #define GICR_WAKER 0x0014U
