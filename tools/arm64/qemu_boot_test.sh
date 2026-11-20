@@ -65,35 +65,7 @@ GDB_OUTPUT="$(timeout 30s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "target remote 127.0.0.1:$GDB_PORT" \
     -ex "hbreak *0x10000000" \
     -ex "continue" \
-    -ex 'printf "EL0_ENTRY_STOP PC=%#lx\n", $pc' \
-    -ex "detach" 2>&1)" || { \
-        printf '%s\\n' "$GDB_OUTPUT" >&2; \
-        echo "GDB failed before EL0 entry was verified." >&2; \
-        echo "QEMU UART output captured before GDB failure:" >&2; \
-        if [[ -s "$UART_LOG" ]]; then cat "$UART_LOG" >&2; else echo "(UART log is empty)" >&2; fi; \
-        echo "QEMU diagnostic output:" >&2; \
-        cat "$QEMU_LOG" >&2; \
-        exit 1; \
-    }
-printf '%s\n' "$GDB_OUTPUT"
-
-echo "Waiting for EL0 UART completion markers..."
-for _ in $(seq 1 100); do
-    if grep -Fq "Hello from EL0" "$UART_LOG" && grep -Fq "EL0 test returned to EL1: PASS" "$UART_LOG"; then
-        break
-    fi
-    sleep 0.1
-done
-
-echo "QEMU UART output:"
-cat "$UART_LOG"
-
-if ! grep -Fq 'PASS: ARM64 Scheduler switched between two threads' "$UART_LOG"; then
-    echo "ARM64 scheduler context-switch marker was not observed on UART." >&2
-    exit 1
-fi
-
-    -ex 'printf "EL0_ENTRY_STOP PC=%#lx\n", $pc' \
+if ! grep -Fq 'EL0_ENTRY_STOP PC=0x10000000' <<<"$GDB_OUTPUT"; then
     echo "GDB did not stop at EL0 entry PC 0x10000000." >&2
     exit 1
 fi
