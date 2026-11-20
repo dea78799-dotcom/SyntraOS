@@ -32,6 +32,7 @@ add_executable(syntraos_arm64
     "${SYNTRAOS_ARM64_DIR}/boot/entry.S"
     "${SYNTRAOS_ARM64_DIR}/boot/vectors.S"
     "${SYNTRAOS_ARM64_DIR}/boot/boot.c"
+    "${SYNTRAOS_ARM64_DIR}/boot/fdt.c"
 
     "${SYNTRAOS_ARM64_DIR}/arch.c"
     "${SYNTRAOS_ARM64_DIR}/exception.c"
