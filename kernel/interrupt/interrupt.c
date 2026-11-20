@@ -1,8 +1,6 @@
 #include "interrupt.h"
 
 #include <stddef.h>
-#include <string.h>
-
 #define SYNTRA_INTERRUPT_PRIORITY_MAX 255U
 
 static syntra_interrupt_entry_t interrupt_entries[
@@ -26,11 +24,15 @@ syntra_status_t interrupt_init(void)
         return SYNTRA_STATUS_OK;
     }
 
-    memset(
-        interrupt_entries,
-        0,
-        sizeof(interrupt_entries)
-    );
+    for (unsigned int i = 0U;
+         i < SYNTRA_MAX_INTERRUPT_HANDLERS;
+         ++i)
+    {
+        interrupt_entries[i].handler = NULL;
+        interrupt_entries[i].context = NULL;
+        interrupt_entries[i].call_count = 0U;
+        interrupt_entries[i].registered = 0;
+    }
 
     registered_handlers = 0U;
     dispatched_count = 0U;
