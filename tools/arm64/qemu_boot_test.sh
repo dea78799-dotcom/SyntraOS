@@ -60,6 +60,10 @@ echo "Waiting for SyntraOS boot stage to return from QEMU virt..."
 
 GDB_OUTPUT="$(timeout 30s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "set architecture aarch64" \
+    -ex "set pagination off" \
+    -ex "set confirm off" \
+    -ex "set mi-async off" \
+    -ex "set non-stop off" \
     -ex "target remote 127.0.0.1:$GDB_PORT" \
     -ex "hbreak *0x10000000" \
     -ex "break syntra_arm64_boot_returned" \
