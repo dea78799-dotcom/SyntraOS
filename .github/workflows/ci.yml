@@ -105,7 +105,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install ARM64 cross-compilation tools
-        timeout-minutes: 8
+        timeout-minutes: 15
         shell: bash
         run: |
           set -euo pipefail
@@ -126,7 +126,6 @@ jobs:
           check_tool aarch64-linux-gnu-gcc gcc-aarch64-linux-gnu
           check_tool aarch64-linux-gnu-ld binutils-aarch64-linux-gnu
           check_tool qemu-system-aarch64 qemu-system-arm
-          check_tool gdb-multiarch gdb-multiarch
 
           if [ "${#MISSING_PACKAGES[@]}" -eq 0 ]; then
             echo "All ARM64 build tools are already available; skipping apt."
@@ -145,7 +144,7 @@ jobs:
             -o Acquire::Retries=2 \
             -o Acquire::http::Timeout=15 \
             -o Acquire::https::Timeout=15 \
-            install -y "${MISSING_PACKAGES[@]}"
+            install --no-install-recommends -y "${MISSING_PACKAGES[@]}"
 
       - name: Verify ARM64 compiler
         run: |
