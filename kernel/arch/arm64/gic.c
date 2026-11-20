@@ -7,9 +7,9 @@
  * SyntraOS ARM64 GIC platform interface.
  * Version: 0.1.0
  *
- * This stage validates and stores platform data only. Register access,
- * CPU-interface setup, interrupt routing, and EOI handling are deferred
- * until the FDT parser and MMIO access policy are available.
+ * FDT discovery validates and stores platform register regions.
+ * Register access, CPU-interface setup, interrupt routing, and EOI
+ * handling remain deferred until MMIO access policy is available.
  */
 
 static syntra_arm64_gic_config_t gic_config;
