@@ -39,10 +39,17 @@ typedef struct
 {
     syntra_fdt_token_type_t type;
     uint32_t depth;
+    size_t offset;
     const char *name;
     const uint8_t *data;
     uint32_t data_size;
 } syntra_fdt_token_t;
+
+typedef struct
+{
+    size_t begin_offset;
+    uint32_t depth;
+} syntra_fdt_node_t;
 
 /* Open and validate an FDT blob within the supplied accessible byte range. */
 syntra_status_t syntra_fdt_open(
@@ -63,6 +70,22 @@ syntra_status_t syntra_fdt_next(
     const syntra_fdt_t *fdt,
     syntra_fdt_iterator_t *iterator,
     syntra_fdt_token_t *token
+);
+
+/* Find the first node whose compatible string list contains the requested value. */
+syntra_status_t syntra_fdt_find_compatible(
+    const syntra_fdt_t *fdt,
+    const char *compatible,
+    syntra_fdt_node_t *node
+);
+
+/* Find a property belonging directly to a node, not one of its children. */
+syntra_status_t syntra_fdt_get_property(
+    const syntra_fdt_t *fdt,
+    const syntra_fdt_node_t *node,
+    const char *property_name,
+    const uint8_t **data,
+    uint32_t *data_size
 );
 
 #endif
