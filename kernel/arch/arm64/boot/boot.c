@@ -7,6 +7,7 @@
 #include "../gic.h"
 #include "../timer.h"
 #include "../../../timer/timer.h"
+#include "../../../interrupt/interrupt.h"
 
 /*
  * SyntraOS ARM64 Boot Stage
@@ -222,16 +223,33 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
     return syntra_arm64_gic_discover(&fdt);
 }
 
+static void syntra_arm64_timer_irq_handler(
+    syntra_interrupt_id_t interrupt_id,
+    void *context
+)
+{
+    (void)interrupt_id;
+    (void)context;
+    syntra_arm64_timer_handle_irq();
+}
+
 static syntra_status_t syntra_arm64_generic_timer_irq_test(void)
 {
     uint64_t start;
     uint64_t timeout_ticks;
     syntra_status_t status;
 
-    status = syntra_arm64_gic_init();
+    status = interrupt_init();
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = interrupt_controller_attach(
+        syntra_arm64_gic_controller_ops(), NULL);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = interrupt_controller_init();
     if (status != SYNTRA_STATUS_OK)
     {
-        syntra_uart_puts("GICv3 initialization failed; IRQs remain masked\n");
+        syntra_uart_puts("GICv3 controller initialization failed; IRQs remain masked\n");
         return status;
     }
 
@@ -242,9 +260,20 @@ static syntra_status_t syntra_arm64_generic_timer_irq_test(void)
         return status;
     }
 
+    status = interrupt_register(
+        30U, syntra_arm64_timer_irq_handler, NULL);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = interrupt_set_priority(30U, 0x80U);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = interrupt_enable(30U);
+    if (status != SYNTRA_STATUS_OK) return status;
+
     status = syntra_arm64_timer_enable();
     if (status != SYNTRA_STATUS_OK)
     {
+        (void)interrupt_disable(30U);
         syntra_uart_puts("Generic Timer enable failed\n");
         return status;
     }
@@ -262,6 +291,7 @@ static syntra_status_t syntra_arm64_generic_timer_irq_test(void)
         {
             __asm__ volatile("msr daifset, #2" ::: "memory");
             (void)syntra_arm64_timer_disable();
+            (void)interrupt_disable(30U);
             syntra_uart_puts("FAIL: Generic Timer IRQ timeout\n");
             return SYNTRA_STATUS_ERROR;
         }
@@ -270,9 +300,17 @@ static syntra_status_t syntra_arm64_generic_timer_irq_test(void)
     __asm__ volatile("msr daifset, #2" ::: "memory");
     __asm__ volatile("isb" ::: "memory");
     status = syntra_arm64_timer_disable();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        (void)interrupt_disable(30U);
+        return status;
+    }
+
+    status = interrupt_disable(30U);
     if (status != SYNTRA_STATUS_OK) return status;
 
     if (timer_get_ticks() < 3ULL) return SYNTRA_STATUS_ERROR;
+    syntra_uart_puts("PASS: Generic Interrupt Framework dispatched ARM64 Timer IRQs\n");
     syntra_uart_puts("PASS: ARM64 Generic Timer IRQ delivered 3 ticks\n");
     return SYNTRA_STATUS_OK;
 }

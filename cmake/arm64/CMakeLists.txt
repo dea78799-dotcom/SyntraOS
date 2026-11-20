@@ -41,6 +41,7 @@ add_executable(syntraos_arm64
     "${SYNTRAOS_ARM64_DIR}/mmu.c"
     "${SYNTRAOS_ARM64_DIR}/timer.c"
 
+    "${SYNTRAOS_ROOT}/kernel/interrupt/interrupt.c"
     "${SYNTRAOS_ROOT}/kernel/timer/timer.c"
 )
 
@@ -52,6 +53,7 @@ set_target_properties(syntraos_arm64 PROPERTIES
 target_include_directories(syntraos_arm64 PRIVATE
     "${SYNTRAOS_ROOT}/kernel/core"
     "${SYNTRAOS_ROOT}/kernel/timer"
+    "${SYNTRAOS_ROOT}/kernel/interrupt"
     "${SYNTRAOS_ARM64_DIR}"
 )
 

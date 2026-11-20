@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <string.h>
 
+#define SYNTRA_INTERRUPT_PRIORITY_MAX 255U
+
 static syntra_interrupt_entry_t interrupt_entries[
     SYNTRA_MAX_INTERRUPT_HANDLERS
 ];
@@ -12,6 +14,10 @@ static unsigned int dispatched_count;
 static unsigned int failed_dispatches;
 
 static int interrupt_initialized;
+static syntra_interrupt_controller_ops_t controller_ops;
+static void *controller_context;
+static int controller_attached;
+static int controller_initialized;
 
 syntra_status_t interrupt_init(void)
 {
@@ -140,6 +146,121 @@ syntra_status_t interrupt_dispatch(
     );
 
     return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t interrupt_controller_attach(
+    const syntra_interrupt_controller_ops_t *ops,
+    void *context
+)
+{
+    if (!interrupt_initialized)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    if (ops == NULL ||
+        ops->initialize == NULL ||
+        ops->enable == NULL ||
+        ops->disable == NULL ||
+        ops->set_priority == NULL ||
+        ops->acknowledge == NULL ||
+        ops->end_of_interrupt == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (controller_initialized)
+    {
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+    }
+
+    controller_ops = *ops;
+    controller_context = context;
+    controller_attached = 1;
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t interrupt_controller_init(void)
+{
+    syntra_status_t status;
+
+    if (!interrupt_initialized || !controller_attached)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    if (controller_initialized)
+    {
+        return SYNTRA_STATUS_OK;
+    }
+
+    status = controller_ops.initialize(controller_context);
+    if (status == SYNTRA_STATUS_OK)
+    {
+        controller_initialized = 1;
+    }
+    return status;
+}
+
+syntra_status_t interrupt_enable(syntra_interrupt_id_t interrupt_id)
+{
+    if (!controller_initialized)
+        return SYNTRA_STATUS_ERROR;
+    if (interrupt_id >= SYNTRA_MAX_INTERRUPT_HANDLERS)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    return controller_ops.enable(controller_context, interrupt_id);
+}
+
+syntra_status_t interrupt_disable(syntra_interrupt_id_t interrupt_id)
+{
+    if (!controller_initialized)
+        return SYNTRA_STATUS_ERROR;
+    if (interrupt_id >= SYNTRA_MAX_INTERRUPT_HANDLERS)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    return controller_ops.disable(controller_context, interrupt_id);
+}
+
+syntra_status_t interrupt_set_priority(
+    syntra_interrupt_id_t interrupt_id,
+    unsigned int priority
+)
+{
+    if (!controller_initialized)
+        return SYNTRA_STATUS_ERROR;
+    if (interrupt_id >= SYNTRA_MAX_INTERRUPT_HANDLERS ||
+        priority > SYNTRA_INTERRUPT_PRIORITY_MAX)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    return controller_ops.set_priority(
+        controller_context, interrupt_id, priority);
+}
+
+syntra_status_t interrupt_handle_pending(void)
+{
+    syntra_interrupt_id_t interrupt_id;
+    syntra_status_t dispatch_status;
+    syntra_status_t eoi_status;
+    syntra_status_t status;
+
+    if (!controller_initialized)
+        return SYNTRA_STATUS_ERROR;
+
+    status = controller_ops.acknowledge(
+        controller_context, &interrupt_id);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    /* GIC INTIDs 1020-1023 are special/spurious and must not be EOI'd. */
+    if (interrupt_id >= SYNTRA_MAX_INTERRUPT_HANDLERS)
+        return SYNTRA_STATUS_OK;
+
+    dispatch_status = interrupt_dispatch(interrupt_id);
+    eoi_status = controller_ops.end_of_interrupt(
+        controller_context, interrupt_id);
+
+    if (eoi_status != SYNTRA_STATUS_OK)
+        return eoi_status;
+
+    return dispatch_status;
 }
 
 syntra_status_t interrupt_get_info(

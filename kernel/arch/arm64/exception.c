@@ -1,8 +1,7 @@
 #include <stddef.h>
 
 #include "exception.h"
-#include "gic.h"
-#include "timer.h"
+#include "../../interrupt/interrupt.h"
 
 /*
  * SyntraOS ARM64 Hardware Exception Handler
@@ -92,18 +91,8 @@ syntra_status_t syntra_arm64_exception_handle(
 
     if (context->vector_index == SYNTRA_ARM64_VECTOR_CURRENT_SPX_IRQ)
     {
-        uint32_t interrupt_id;
-        syntra_status_t irq_status =
-            syntra_arm64_gic_acknowledge(&interrupt_id);
+        syntra_status_t irq_status = interrupt_handle_pending();
         if (irq_status != SYNTRA_STATUS_OK) return irq_status;
-
-        if (interrupt_id == 30U) syntra_arm64_timer_handle_irq();
-
-        if (interrupt_id < 1020U)
-        {
-            irq_status = syntra_arm64_gic_end_of_interrupt(interrupt_id);
-            if (irq_status != SYNTRA_STATUS_OK) return irq_status;
-        }
 
         ((syntra_arm64_exception_context_t *)context)->reserved =
             SYNTRA_ARM64_IRQ_RETURN_MAGIC;

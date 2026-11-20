@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "../../core/status.h"
+#include "../../interrupt/interrupt.h"
 #include "boot/fdt.h"
 
 /*
@@ -89,6 +90,14 @@ syntra_status_t syntra_arm64_gic_acknowledge(
 syntra_status_t syntra_arm64_gic_end_of_interrupt(
     uint32_t interrupt_id
 );
+syntra_status_t syntra_arm64_gic_enable_interrupt(uint32_t interrupt_id);
+syntra_status_t syntra_arm64_gic_disable_interrupt(uint32_t interrupt_id);
+syntra_status_t syntra_arm64_gic_set_priority(
+    uint32_t interrupt_id,
+    uint8_t priority
+);
+const syntra_interrupt_controller_ops_t *
+syntra_arm64_gic_controller_ops(void);
 
 syntra_status_t syntra_arm64_gic_get_info(
     syntra_arm64_gic_info_t *info

@@ -15,9 +15,14 @@
 static syntra_arm64_gic_config_t gic_config;
 static int gic_configured;
 static int gic_initialized;
+static uintptr_t gic_local_redistributor_base;
 
 #define GICD_CTLR 0x000U
 #define GICD_TYPER 0x004U
+#define GICD_IGROUPR 0x080U
+#define GICD_ISENABLER 0x100U
+#define GICD_ICENABLER 0x180U
+#define GICD_IPRIORITYR 0x400U
 #define GICD_CTLR_RWP (1U << 31)
 #define GICD_CTLR_DS (1U << 6)
 #define GICD_CTLR_ENABLE_G1 (1U << 1)
@@ -30,9 +35,8 @@ static int gic_initialized;
 /* Offsets below are relative to the SGI frame base. */
 #define GICR_IGROUPR0 0x00080U
 #define GICR_ISENABLER0 0x00100U
+#define GICR_ICENABLER0 0x00180U
 #define GICR_IPRIORITYR0 0x00400U
-#define GICR_PPI_TIMER_ID 30U
-#define GICR_PPI_TIMER_MASK (1U << GICR_PPI_TIMER_ID)
 #define GIC_WAIT_LIMIT 1000000U
 
 static inline void gic_dsb(void)
@@ -206,7 +210,6 @@ syntra_status_t syntra_arm64_gic_init(void)
 #if defined(__aarch64__)
     volatile uint32_t *dist;
     volatile uint32_t *waker;
-    volatile uint32_t *sgi;
     uintptr_t redist_base;
     uint32_t typer;
     uint32_t control;
@@ -220,7 +223,7 @@ syntra_status_t syntra_arm64_gic_init(void)
 
     dist = (volatile uint32_t *)gic_config.distributor_base;
     typer = dist[GICD_TYPER / sizeof(uint32_t)];
-    if ((((typer & 0x1FU) + 1U) * 32U) <= GICR_PPI_TIMER_ID)
+    if ((((typer & 0x1FU) + 1U) * 32U) <= 30U)
         return SYNTRA_STATUS_ERROR;
 
     /* QEMU is run with secure=off: require single-security-state mode. */
@@ -237,16 +240,7 @@ syntra_status_t syntra_arm64_gic_init(void)
     if (!gic_wait_register_clear(waker, GICR_WAKER_CHILDREN_ASLEEP))
         return SYNTRA_STATUS_ERROR;
 
-    sgi = (volatile uint32_t *)(redist_base + GICR_SGI_BASE);
-    sgi[GICR_IGROUPR0 / sizeof(uint32_t)] |= GICR_PPI_TIMER_MASK;
-    {
-        volatile uint8_t *priority =
-            (volatile uint8_t *)(redist_base + GICR_SGI_BASE +
-                                 GICR_IPRIORITYR0);
-        priority[GICR_PPI_TIMER_ID] = 0x80U;
-    }
-    sgi[GICR_ISENABLER0 / sizeof(uint32_t)] |= GICR_PPI_TIMER_MASK;
-    gic_dsb();
+    gic_local_redistributor_base = redist_base;
 
     status = gic_init_cpu_interface();
     if (status != SYNTRA_STATUS_OK) return status;
@@ -367,6 +361,166 @@ syntra_status_t syntra_arm64_gic_end_of_interrupt(
 #endif
 }
 
+syntra_status_t syntra_arm64_gic_set_priority(
+    uint32_t interrupt_id,
+    uint8_t priority
+)
+{
+    if (!gic_initialized) return SYNTRA_STATUS_ERROR;
+    if (interrupt_id >= 1020U) return SYNTRA_STATUS_INVALID_ARGUMENT;
+#if defined(__aarch64__)
+    if (interrupt_id < 32U)
+    {
+        volatile uint8_t *priorities =
+            (volatile uint8_t *)(gic_local_redistributor_base +
+                                 GICR_SGI_BASE + GICR_IPRIORITYR0);
+        priorities[interrupt_id] = priority;
+    }
+    else
+    {
+        volatile uint8_t *priorities =
+            (volatile uint8_t *)(gic_config.distributor_base +
+                                 GICD_IPRIORITYR);
+        if ((size_t)GICD_IPRIORITYR + interrupt_id >=
+            gic_config.distributor_size)
+            return SYNTRA_STATUS_INVALID_ARGUMENT;
+        priorities[interrupt_id] = priority;
+    }
+    gic_dsb();
+    return SYNTRA_STATUS_OK;
+#else
+    (void)priority;
+    return SYNTRA_STATUS_NOT_IMPLEMENTED;
+#endif
+}
+
+syntra_status_t syntra_arm64_gic_enable_interrupt(uint32_t interrupt_id)
+{
+    if (!gic_initialized) return SYNTRA_STATUS_ERROR;
+    if (interrupt_id >= 1020U) return SYNTRA_STATUS_INVALID_ARGUMENT;
+#if defined(__aarch64__)
+    {
+        uint32_t word = interrupt_id / 32U;
+        uint32_t bit = 1U << (interrupt_id % 32U);
+        if (interrupt_id < 32U)
+        {
+            volatile uint32_t *sgi =
+                (volatile uint32_t *)(gic_local_redistributor_base +
+                                      GICR_SGI_BASE);
+            sgi[GICR_IGROUPR0 / sizeof(uint32_t)] |= bit;
+            sgi[GICR_ISENABLER0 / sizeof(uint32_t)] = bit;
+        }
+        else
+        {
+            volatile uint32_t *dist =
+                (volatile uint32_t *)gic_config.distributor_base;
+            size_t group_index = GICD_IGROUPR / sizeof(uint32_t) + word;
+            size_t enable_index = GICD_ISENABLER / sizeof(uint32_t) + word;
+            if ((enable_index + 1U) * sizeof(uint32_t) >
+                gic_config.distributor_size)
+                return SYNTRA_STATUS_INVALID_ARGUMENT;
+            dist[group_index] |= bit;
+            dist[enable_index] = bit;
+        }
+        gic_dsb();
+        return SYNTRA_STATUS_OK;
+    }
+#else
+    return SYNTRA_STATUS_NOT_IMPLEMENTED;
+#endif
+}
+
+syntra_status_t syntra_arm64_gic_disable_interrupt(uint32_t interrupt_id)
+{
+    if (!gic_initialized) return SYNTRA_STATUS_ERROR;
+    if (interrupt_id >= 1020U) return SYNTRA_STATUS_INVALID_ARGUMENT;
+#if defined(__aarch64__)
+    {
+        uint32_t word = interrupt_id / 32U;
+        uint32_t bit = 1U << (interrupt_id % 32U);
+        if (interrupt_id < 32U)
+        {
+            volatile uint32_t *sgi =
+                (volatile uint32_t *)(gic_local_redistributor_base +
+                                      GICR_SGI_BASE);
+            sgi[GICR_ICENABLER0 / sizeof(uint32_t)] = bit;
+        }
+        else
+        {
+            volatile uint32_t *dist =
+                (volatile uint32_t *)gic_config.distributor_base;
+            size_t disable_index = GICD_ICENABLER / sizeof(uint32_t) + word;
+            if ((disable_index + 1U) * sizeof(uint32_t) >
+                gic_config.distributor_size)
+                return SYNTRA_STATUS_INVALID_ARGUMENT;
+            dist[disable_index] = bit;
+        }
+        gic_dsb();
+        return SYNTRA_STATUS_OK;
+    }
+#else
+    return SYNTRA_STATUS_NOT_IMPLEMENTED;
+#endif
+}
+
+static syntra_status_t gic_controller_initialize(void *context)
+{
+    (void)context;
+    return syntra_arm64_gic_init();
+}
+
+static syntra_status_t gic_controller_enable(void *context, unsigned int id)
+{
+    (void)context;
+    return syntra_arm64_gic_enable_interrupt(id);
+}
+
+static syntra_status_t gic_controller_disable(void *context, unsigned int id)
+{
+    (void)context;
+    return syntra_arm64_gic_disable_interrupt(id);
+}
+
+static syntra_status_t gic_controller_priority(
+    void *context,
+    unsigned int id,
+    unsigned int priority
+)
+{
+    (void)context;
+    if (priority > 255U) return SYNTRA_STATUS_INVALID_ARGUMENT;
+    return syntra_arm64_gic_set_priority(id, (uint8_t)priority);
+}
+
+static syntra_status_t gic_controller_acknowledge(
+    void *context,
+    unsigned int *id
+)
+{
+    (void)context;
+    return syntra_arm64_gic_acknowledge(id);
+}
+
+static syntra_status_t gic_controller_eoi(void *context, unsigned int id)
+{
+    (void)context;
+    return syntra_arm64_gic_end_of_interrupt(id);
+}
+
+const syntra_interrupt_controller_ops_t *
+syntra_arm64_gic_controller_ops(void)
+{
+    static const syntra_interrupt_controller_ops_t ops = {
+        gic_controller_initialize,
+        gic_controller_enable,
+        gic_controller_disable,
+        gic_controller_priority,
+        gic_controller_acknowledge,
+        gic_controller_eoi
+    };
+    return &ops;
+}
+
 syntra_status_t syntra_arm64_gic_get_info(
     syntra_arm64_gic_info_t *info
 )
@@ -379,7 +533,7 @@ syntra_status_t syntra_arm64_gic_get_info(
     info->config = gic_config;
     info->configured = gic_configured;
     info->initialized = gic_initialized;
-    info->hardware_access_enabled = 0;
+    info->hardware_access_enabled = gic_initialized;
 
     return SYNTRA_STATUS_OK;
 }
