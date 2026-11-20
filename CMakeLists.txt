@@ -100,6 +100,14 @@ add_executable(scheduler_test
 target_link_libraries(scheduler_test PRIVATE syntra_kernel)
 add_test(NAME SchedulerTest COMMAND scheduler_test)
 
+# Memory Region Manager Test
+add_executable(memory_region_test
+    tests/memory/memory_region_test.c
+    kernel/memory/memory_region.c
+)
+target_include_directories(memory_region_test PRIVATE kernel/memory kernel/core)
+add_test(NAME MemoryRegionManagerTest COMMAND memory_region_test)
+
 # Memory Test
 add_executable(memory_test
     tests/memory/memory_test.c
