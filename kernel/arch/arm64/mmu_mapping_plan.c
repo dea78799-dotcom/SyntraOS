@@ -23,9 +23,9 @@ static syntra_status_t append_section(syntra_arm64_mmu_mapping_plan_t *p,uint64_
  if(s==e) return SYNTRA_STATUS_OK;
  return append(p,s,e-s,SYNTRA_ARM64_MMU_MEMORY_NORMAL,a,x);
 }
-syntra_status_t syntra_arm64_mmu_mapping_plan_build(const syntra_arm64_boot_memory_metadata_t *m,const syntra_memory_region_t *r,size_t n,const syntra_arm64_gic_config_t *g,uintptr_t ub,size_t us,syntra_arm64_mmu_mapping_plan_t *p){
+syntra_status_t syntra_arm64_mmu_mapping_plan_build(const syntra_arm64_boot_memory_metadata_t *m,const syntra_memory_region_t *r,size_t n,const syntra_arm64_gic_config_t *g,uintptr_t ub,size_t us,uintptr_t fb,size_t fs,syntra_arm64_mmu_mapping_plan_t *p){
  syntra_status_t st;size_t i;uint64_t end;
- if(!m||!r||!n||!g||!p||!ub||!us||!m->kernel_start||m->kernel_end<=m->kernel_start||!m->dtb_start||!m->dtb_size||
+ if(!m||!r||!n||!g||!p||!ub||!us||((fb==0U)!=(fs==0U))||!m->kernel_start||m->kernel_end<=m->kernel_start||!m->dtb_start||!m->dtb_size||
  m->text_end>m->rodata_start||m->rodata_end>m->data_start||m->data_end>m->bss_start||m->bss_end>m->stack_bottom||m->stack_top<=m->stack_bottom)return SYNTRA_STATUS_INVALID_ARGUMENT;
  p->count=0;
  for(i=0;i<n;i++){if(!r[i].size||!range_end(r[i].base,r[i].size,&end))return SYNTRA_STATUS_INVALID_ARGUMENT;
@@ -37,6 +37,7 @@ syntra_status_t syntra_arm64_mmu_mapping_plan_build(const syntra_arm64_boot_memo
  st=append_section(p,m->stack_bottom,m->stack_top,SYNTRA_ARM64_MMU_ACCESS_READ_WRITE,0,m->kernel_start,m->kernel_end);if(st!=SYNTRA_STATUS_OK)return st;
  st=append_region(p,m->dtb_start,m->dtb_size,SYNTRA_ARM64_MMU_MEMORY_NORMAL,SYNTRA_ARM64_MMU_ACCESS_READ_ONLY,0,1);if(st!=SYNTRA_STATUS_OK)return st;
  st=append_region(p,ub,us,SYNTRA_ARM64_MMU_MEMORY_DEVICE,SYNTRA_ARM64_MMU_ACCESS_READ_WRITE,0,1);if(st!=SYNTRA_STATUS_OK)return st;
+ if(fb!=0U){if(fs<0x18U)return SYNTRA_STATUS_INVALID_ARGUMENT;st=append_region(p,fb,fs,SYNTRA_ARM64_MMU_MEMORY_DEVICE,SYNTRA_ARM64_MMU_ACCESS_READ_WRITE,0,1);if(st!=SYNTRA_STATUS_OK)return st;}
  if(g->version==SYNTRA_ARM64_GIC_VERSION_3){st=append_region(p,g->distributor_base,g->distributor_size,SYNTRA_ARM64_MMU_MEMORY_DEVICE,SYNTRA_ARM64_MMU_ACCESS_READ_WRITE,0,1);if(st!=SYNTRA_STATUS_OK)return st;st=append_region(p,g->redistributor_base,g->redistributor_size,SYNTRA_ARM64_MMU_MEMORY_DEVICE,SYNTRA_ARM64_MMU_ACCESS_READ_WRITE,0,1);if(st!=SYNTRA_STATUS_OK)return st;}
  else if(g->version==SYNTRA_ARM64_GIC_VERSION_2){st=append_region(p,g->distributor_base,g->distributor_size,SYNTRA_ARM64_MMU_MEMORY_DEVICE,SYNTRA_ARM64_MMU_ACCESS_READ_WRITE,0,1);if(st!=SYNTRA_STATUS_OK)return st;st=append_region(p,g->cpu_interface_base,g->cpu_interface_size,SYNTRA_ARM64_MMU_MEMORY_DEVICE,SYNTRA_ARM64_MMU_ACCESS_READ_WRITE,0,1);}
  else return SYNTRA_STATUS_INVALID_ARGUMENT;

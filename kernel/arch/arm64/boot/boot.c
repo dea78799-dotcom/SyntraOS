@@ -12,6 +12,10 @@
 #include "../mmu.h"
 #include "../page_table_builder.h"
 #include "../mmu_mapping_plan.h"
+
+/* Optional QEMU fw_cfg MMIO window, discovered from the supplied FDT. */
+static uintptr_t syntra_fw_cfg_base;
+static size_t syntra_fw_cfg_size;
 #include "../timer.h"
 #include "../../../timer/timer.h"
 #include "../../../interrupt/interrupt.h"
@@ -276,6 +280,38 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
     if (status != SYNTRA_STATUS_OK)
     {
         return status;
+    }
+
+    syntra_fw_cfg_base = 0U;
+    syntra_fw_cfg_size = 0U;
+    {
+        syntra_fdt_node_t fw_cfg_node;
+        uintptr_t fw_cfg_base;
+        size_t fw_cfg_size;
+        status = syntra_fdt_find_compatible(
+            &fdt, "qemu,fw-cfg-mmio", &fw_cfg_node);
+        if (status == SYNTRA_STATUS_OK)
+        {
+            status = syntra_fdt_get_reg(
+                &fdt, &fw_cfg_node, 0U, &fw_cfg_base, &fw_cfg_size);
+            if (status != SYNTRA_STATUS_OK || fw_cfg_size < 0x18U)
+            {
+                syntra_uart_puts("FDT fw_cfg MMIO region invalid\n");
+                return SYNTRA_STATUS_ERROR;
+            }
+            syntra_fw_cfg_base = fw_cfg_base;
+            syntra_fw_cfg_size = fw_cfg_size;
+            syntra_uart_puts("FDT fw_cfg MMIO: base=");
+            syntra_uart_put_hex((uint64_t)syntra_fw_cfg_base);
+            syntra_uart_puts(" size=");
+            syntra_uart_put_hex((uint64_t)syntra_fw_cfg_size);
+            syntra_uart_puts("\n");
+        }
+        else
+        {
+            /* UART-only boot remains supported when fw_cfg is absent. */
+            syntra_uart_puts("FDT fw_cfg: NOT FOUND; GUI output unavailable\n");
+        }
     }
 
     syntra_fdt_iterator_init(&iterator);
@@ -839,7 +875,8 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
 
     status = syntra_arm64_mmu_mapping_plan_build(
         &metadata, regions, region_count, &gic_info.config,
-        SYNTRA_PL011_BASE, 0x1000U, &plan);
+        SYNTRA_PL011_BASE, 0x1000U,
+        syntra_fw_cfg_base, syntra_fw_cfg_size, &plan);
     if (status != SYNTRA_STATUS_OK)
     {
         syntra_uart_puts("MMU mapping plan: FAIL\n");

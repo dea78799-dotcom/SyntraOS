@@ -23,5 +23,6 @@ syntra_status_t syntra_arm64_mmu_mapping_plan_build(
  const syntra_memory_region_t *regions, size_t region_count,
  const syntra_arm64_gic_config_t *gic,
  uintptr_t uart_base, size_t uart_size,
+ uintptr_t fw_cfg_base, size_t fw_cfg_size,
  syntra_arm64_mmu_mapping_plan_t *plan);
 #endif
