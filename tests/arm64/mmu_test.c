@@ -115,7 +115,7 @@ static void test_ap_pxn_uxn_shareability_and_table_restrictions(void)
     reset();
     assert(syntra_arm64_mmu_make_page_descriptor(0x40000000ULL,
         SYNTRA_ARM64_MMU_MEMORY_NORMAL,SYNTRA_ARM64_MMU_ACCESS_READ_ONLY,0,&d)==SYNTRA_STATUS_OK);
-    setup_page(d | (3ULL<<DESC_AP_SHIFT) | (1ULL<<DESC_UXN));
+    setup_page(d | (3ULL<<DESC_AP_SHIFT) | DESC_UXN);
     assert(syntra_arm64_mmu_walk(ROOT_PA,VA,resolve,NULL,&out)==SYNTRA_STATUS_OK);
     assert(out.privileged_read && !out.privileged_write);
     assert(out.user_read && !out.user_write);

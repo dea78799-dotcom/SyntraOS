@@ -106,7 +106,8 @@ static syntra_status_t decode_leaf(
     int pxn_table = 0, uxn_table = 0;
 
     if ((descriptor & ~allowed) != 0ULL) return SYNTRA_STATUS_ERROR;
-    if ((descriptor & DESC_VALID) == 0ULL || (descriptor & DESC_TYPE) == 0ULL)
+    if ((descriptor & DESC_VALID) == 0ULL ||
+        ((level == 3U) != ((descriptor & DESC_TYPE) != 0ULL)))
         return SYNTRA_STATUS_ERROR;
     if (level == 1U) page_size = 1ULL << 30U;
     else if (level == 2U) page_size = 1ULL << 21U;
