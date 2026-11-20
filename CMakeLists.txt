@@ -20,6 +20,11 @@ add_library(syntra_kernel STATIC
     kernel/core/log.c
     kernel/core/panic.c
 
+    # ARM64 Architecture Foundation
+    kernel/arch/arm64/arch.c
+    kernel/arch/arm64/exception.c
+    kernel/arch/arm64/registers.c
+
     kernel/scheduler/scheduler.c
     kernel/memory/memory.c
     kernel/process/process.c
@@ -57,6 +62,7 @@ add_library(syntra_kernel STATIC
 target_include_directories(syntra_kernel PUBLIC
 
     kernel/core
+    kernel/arch/arm64
     kernel/scheduler
     kernel/memory
     kernel/process
