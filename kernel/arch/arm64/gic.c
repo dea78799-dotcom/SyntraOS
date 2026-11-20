@@ -139,12 +139,21 @@ syntra_status_t syntra_arm64_gic_probe(
     distributor = (volatile const uint32_t *)distributor_base;
     redistributor = (volatile const uint64_t *)redistributor_base;
 
+    /* Use the architectural barrier on ARM64; keep host unit-test builds portable. */
+#if defined(__aarch64__)
     __asm__ volatile("dmb sy" ::: "memory");
+#else
+    __asm__ volatile("" ::: "memory");
+#endif
     result->distributor_typer = distributor[0x004U / sizeof(uint32_t)];
     result->distributor_iidr = distributor[0x008U / sizeof(uint32_t)];
     result->redistributor_typer =
         redistributor[0x008U / sizeof(uint64_t)];
+#if defined(__aarch64__)
     __asm__ volatile("dmb sy" ::: "memory");
+#else
+    __asm__ volatile("" ::: "memory");
+#endif
 
     return SYNTRA_STATUS_OK;
 }
