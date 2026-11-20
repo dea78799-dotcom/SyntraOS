@@ -9,10 +9,25 @@ on:
     branches:
       - main
 
+  # Run a health check every day at 02:00 UTC (09:00 Vietnam time).
+  schedule:
+    - cron: "0 2 * * *"
+
+  # Allow a maintainer to start the same checks manually.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: syntraos-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: Build and Test SyntraOS
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout source
@@ -83,6 +98,7 @@ jobs:
   arm64-cross-build:
     name: Build ARM64 Kernel ELF
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout source
