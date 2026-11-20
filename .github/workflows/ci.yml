@@ -99,8 +99,6 @@ jobs:
     name: Build ARM64 Kernel ELF
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      APT_ARCHIVE_CACHE: ${{ runner.temp }}/syntraos-apt/archives
 
     steps:
       - name: Checkout source
@@ -108,6 +106,8 @@ jobs:
 
       - name: Prepare APT archive cache
         shell: bash
+        env:
+          APT_ARCHIVE_CACHE: ${{ runner.temp }}/syntraos-apt/archives
         run: |
           set -euo pipefail
           mkdir -p "$APT_ARCHIVE_CACHE/partial"
@@ -125,6 +125,8 @@ jobs:
         id: arm64_tools
         timeout-minutes: 25
         shell: bash
+        env:
+          APT_ARCHIVE_CACHE: ${{ runner.temp }}/syntraos-apt/archives
         run: |
           set -euo pipefail
 
@@ -199,6 +201,8 @@ jobs:
       - name: Install QEMU only after ELF verification
         timeout-minutes: 12
         shell: bash
+        env:
+          APT_ARCHIVE_CACHE: ${{ runner.temp }}/syntraos-apt/archives
         run: |
           set -euo pipefail
 
