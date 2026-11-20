@@ -14,6 +14,18 @@ set(CMAKE_C_EXTENSIONS OFF)
 # Kernel Library
 # ==================================================
 
+add_library(syntra_gui STATIC
+    kernel/gui/framebuffer.c
+    kernel/gui/desktop.c
+)
+target_include_directories(syntra_gui PUBLIC
+    kernel/gui
+    kernel/core
+)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(syntra_gui PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 add_library(syntra_kernel STATIC
 
     kernel/core/kernel.c
@@ -95,6 +107,13 @@ endif()
 # ==================================================
 
 enable_testing()
+
+# SyntraOS GUI software framebuffer and desktop renderer test
+add_executable(gui_desktop_test
+    tests/gui/desktop_test.c
+)
+target_link_libraries(gui_desktop_test PRIVATE syntra_gui)
+add_test(NAME GUIDesktopRendererTest COMMAND gui_desktop_test)
 
 # Scheduler Test
 add_executable(scheduler_test
