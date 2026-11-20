@@ -38,6 +38,7 @@ add_executable(syntraos_arm64
     "${SYNTRAOS_ARM64_DIR}/exception.c"
     "${SYNTRAOS_ARM64_DIR}/gic.c"
     "${SYNTRAOS_ARM64_DIR}/registers.c"
+    "${SYNTRAOS_ARM64_DIR}/mmu.c"
     "${SYNTRAOS_ARM64_DIR}/timer.c"
 
     "${SYNTRAOS_ROOT}/kernel/timer/timer.c"
