@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   compile:
-    name: Compile and publish generated workflow artifact
+    name: Compile and propose generated workflow locks
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -26,6 +26,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GH_AW_GITHUB_TOKEN }}
 
       - name: Install GitHub Agentic Workflows extension
         run: gh extension install github/gh-aw
@@ -33,10 +34,31 @@ jobs:
       - name: Compile Markdown workflows
         run: gh aw compile
 
-      - name: Upload generated lock files
-        uses: actions/upload-artifact@v4
-        with:
-          name: syntraos-agentic-workflow-locks
-          path: .github/workflows/*.lock.yml
-          if-no-files-found: error
-          retention-days: 7
+      - name: Create pull request for generated lock files
+        env:
+          GH_TOKEN: ${{ secrets.GH_AW_GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git add .github/workflows/*.lock.yml
+
+          if git diff --cached --quiet; then
+            echo "No generated workflow lock changes."
+            exit 0
+          fi
+
+          branch="automation/gh-aw-lock-${GITHUB_RUN_ID}"
+          git switch -c "$branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "ci: compile GitHub Agentic Workflow locks"
+          git push origin "$branch"
+
+          gh pr create \
+            --repo "$GH_REPO" \
+            --base main \
+            --head "$branch" \
+            --title "ci: compile GitHub Agentic Workflow locks" \
+            --body "Generated lock files from the reviewed Agentic Workflow Markdown sources. Please review and merge this PR to activate the agentic workflow."
