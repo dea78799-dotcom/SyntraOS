@@ -56,6 +56,10 @@ _start:
     /* Enter the ARM64 C boot stage. */
     bl syntra_arm64_boot_main
 
+    /* GDB-visible return point for the QEMU boot smoke test. */
+    .global syntra_arm64_boot_returned
+syntra_arm64_boot_returned:
+
 .Lhalt:
     msr daifset, #0xf
     wfe
