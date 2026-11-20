@@ -3,6 +3,7 @@
 
 #include "../../core/status.h"
 #include "fdt.h"
+#include "../exception.h"
 #include "../gic.h"
 
 /*
@@ -219,6 +220,32 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
     return syntra_arm64_gic_discover(&fdt);
 }
 
+static syntra_status_t syntra_arm64_svc_vector_test(void)
+{
+    const syntra_arm64_exception_info_t *info;
+    const syntra_arm64_exception_context_t *context;
+
+    __asm__ volatile("svc #0x42" ::: "memory");
+
+    info = syntra_arm64_exception_get_last_info();
+    context = syntra_arm64_exception_get_last_context();
+    if (info == NULL || context == NULL)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    if (info->exception_class != SYNTRA_ARM64_EXCEPTION_SVC_AARCH64
+        || info->vector_index != SYNTRA_ARM64_VECTOR_CURRENT_SPX_SYNC
+        || (context->esr_el1 & 0xFFFFU)
+            != SYNTRA_ARM64_EXCEPTION_TEST_SVC_IMMEDIATE)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    syntra_uart_puts("PASS: SVC exception vector and ERET return path\n");
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_arm64_boot_main(
     uint64_t dtb_address,
     uint64_t current_el
@@ -245,6 +272,13 @@ syntra_status_t syntra_arm64_boot_main(
     if (status != SYNTRA_STATUS_OK)
     {
         syntra_uart_puts("SyntraOS boot failed: FDT/GIC discovery\n");
+        return status;
+    }
+
+    status = syntra_arm64_svc_vector_test();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("SyntraOS boot failed: SVC/ERET test\n");
         return status;
     }
 
