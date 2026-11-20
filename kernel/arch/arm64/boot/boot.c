@@ -225,13 +225,13 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
     );
     if (status != SYNTRA_STATUS_OK)
     {
-        syntra_uart_puts("FDT physical memory map discovery failed\\n");
+        syntra_uart_puts("FDT physical memory map discovery failed\n");
         return status;
     }
 
     syntra_uart_puts("FDT physical memory regions: ");
     syntra_uart_put_hex((uint64_t)syntra_memory_region_count());
-    syntra_uart_puts("\\n");
+    syntra_uart_puts("\n");
 
     {
         size_t region_index;
@@ -252,7 +252,7 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
             syntra_uart_put_hex((uint64_t)region.size);
             syntra_uart_puts(" type=");
             syntra_uart_put_hex((uint64_t)region.type);
-            syntra_uart_puts("\\n");
+            syntra_uart_puts("\n");
         }
     }
 
