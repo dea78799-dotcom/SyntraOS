@@ -70,6 +70,10 @@ GDB_OUTPUT="$(timeout 30s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex 'detach' 2>&1)" || {
         printf '%s\n' "$GDB_OUTPUT" >&2
         echo "GDB failed before the ARM64 boot return point was verified." >&2
+        echo "QEMU UART output captured before GDB failure:" >&2
+        if [[ -s "$UART_LOG" ]]; then cat "$UART_LOG" >&2; else echo "(UART log is empty)" >&2; fi
+        echo "QEMU diagnostic output:" >&2
+        cat "$QEMU_LOG" >&2
         exit 1
     }
 
