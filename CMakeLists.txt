@@ -74,6 +74,7 @@ add_library(syntra_kernel STATIC
     kernel/hal/hal_device_event_queue.c
     kernel/hal/hal_device_event_dispatcher.c
     kernel/hal/hal_device_event_router.c
+    kernel/input/input.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -91,6 +92,7 @@ target_include_directories(syntra_kernel PUBLIC
     kernel/uptime
     kernel/config
     kernel/hal
+    kernel/input
 )
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -108,6 +110,11 @@ endif()
 # ==================================================
 
 enable_testing()
+
+# SyntraOS input event core test
+add_executable(input_test tests/input/input_test.c)
+target_link_libraries(input_test PRIVATE syntra_kernel)
+add_test(NAME InputEventCoreTest COMMAND input_test)
 
 # SyntraOS GUI software framebuffer and desktop renderer test
 add_executable(gui_desktop_test

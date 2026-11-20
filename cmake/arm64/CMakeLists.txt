@@ -53,6 +53,7 @@ add_executable(syntraos_arm64
     "${SYNTRAOS_ROOT}/kernel/gui/framebuffer.c"
     "${SYNTRAOS_ROOT}/kernel/gui/desktop.c"
     "${SYNTRAOS_ROOT}/kernel/gui/ramfb.c"
+    "${SYNTRAOS_ROOT}/kernel/input/input.c"
 )
 
 set_target_properties(syntraos_arm64 PROPERTIES
@@ -66,6 +67,7 @@ target_include_directories(syntraos_arm64 PRIVATE
     "${SYNTRAOS_ROOT}/kernel/scheduler"
     "${SYNTRAOS_ROOT}/kernel/timer"
     "${SYNTRAOS_ROOT}/kernel/interrupt"
+    "${SYNTRAOS_ROOT}/kernel/input"
     "${SYNTRAOS_ARM64_DIR}"
 )
 
