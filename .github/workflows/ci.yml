@@ -242,11 +242,16 @@ jobs:
       - name: Verify QEMU RAM framebuffer desktop pixels
         run: bash tools/arm64/run_qemu_gui_test.sh build/arm64/syntraos_arm64.elf
 
-      - name: Upload SyntraOS desktop screenshot
+      - name: Convert desktop screenshot to PNG for mobile viewing
+        run: python3 tools/arm64/ppm_to_png.py build/arm64/syntraos-desktop.ppm build/arm64/syntraos-desktop.png
+
+      - name: Upload SyntraOS desktop screenshots
         uses: actions/upload-artifact@v4
         with:
           name: syntraos-desktop-preview-${{ github.sha }}
-          path: build/arm64/syntraos-desktop.ppm
+          path: |
+            build/arm64/syntraos-desktop.ppm
+            build/arm64/syntraos-desktop.png
           if-no-files-found: error
           retention-days: 14
 
