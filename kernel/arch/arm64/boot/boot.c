@@ -879,6 +879,15 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
     syntra_uart_put_hex(page_table.root_physical_address);
     syntra_uart_puts("\n");
     syntra_uart_puts("MMU post-activation mapping verification: PASS\n");
+
+    /* Exercise the synchronous exception vector with translation enabled. */
+    status = syntra_arm64_svc_vector_test();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("Post-MMU SVC/ERET validation: FAIL\n");
+        return status;
+    }
+    syntra_uart_puts("Post-MMU SVC/ERET validation: PASS\n");
     return SYNTRA_STATUS_OK;
 }
 
