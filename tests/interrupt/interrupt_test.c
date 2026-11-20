@@ -14,6 +14,7 @@ static unsigned int mock_priority_calls;
 static unsigned int mock_acknowledge_calls;
 static unsigned int mock_eoi_calls;
 static unsigned int mock_last_priority;
+static syntra_interrupt_id_t mock_last_controller_id;
 static syntra_interrupt_id_t mock_pending_id = 30U;
 
 static syntra_status_t mock_controller_initialize(void *context)
@@ -26,7 +27,8 @@ static syntra_status_t mock_controller_initialize(void *context)
 static syntra_status_t mock_controller_enable(void *context, syntra_interrupt_id_t id)
 {
     (void)context;
-    assert(id == 30U);
+    assert(id < SYNTRA_MAX_INTERRUPT_HANDLERS);
+    mock_last_controller_id = id;
     mock_enable_calls++;
     return SYNTRA_STATUS_OK;
 }
@@ -34,7 +36,8 @@ static syntra_status_t mock_controller_enable(void *context, syntra_interrupt_id
 static syntra_status_t mock_controller_disable(void *context, syntra_interrupt_id_t id)
 {
     (void)context;
-    assert(id == 30U);
+    assert(id < SYNTRA_MAX_INTERRUPT_HANDLERS);
+    mock_last_controller_id = id;
     mock_disable_calls++;
     return SYNTRA_STATUS_OK;
 }
@@ -43,7 +46,8 @@ static syntra_status_t mock_controller_priority(
     void *context, syntra_interrupt_id_t id, unsigned int priority)
 {
     (void)context;
-    assert(id == 30U);
+    assert(id < SYNTRA_MAX_INTERRUPT_HANDLERS);
+    mock_last_controller_id = id;
     mock_last_priority = priority;
     mock_priority_calls++;
     return SYNTRA_STATUS_OK;
@@ -188,8 +192,29 @@ int main(void)
     assert(interrupt_handle_pending() == SYNTRA_STATUS_OK);
     assert(mock_eoi_calls == 1U);
 
+    /* Unhandled valid IRQs must still receive EOI and return safely. */
+    mock_pending_id = 11U;
+    assert(interrupt_handle_pending() == SYNTRA_STATUS_OK);
+    assert(mock_eoi_calls == 2U);
+
+    /* Exercise the highest valid INTID and reject reserved IDs. */
+    assert(interrupt_register(1019U, test_handler, &test_context) ==
+        SYNTRA_STATUS_OK);
+    assert(interrupt_enable(1019U) == SYNTRA_STATUS_OK);
+    assert(mock_last_controller_id == 1019U);
+    mock_pending_id = 1019U;
+    assert(interrupt_handle_pending() == SYNTRA_STATUS_OK);
+    assert(mock_eoi_calls == 3U);
+    assert(handler_calls == 3U);
+    assert(received_interrupt_id == 1019U);
+    assert(interrupt_disable(1019U) == SYNTRA_STATUS_OK);
+    assert(interrupt_unregister(1019U) == SYNTRA_STATUS_OK);
+    assert(interrupt_enable(1020U) == SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(interrupt_register(1020U, test_handler, &test_context) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+
     assert(interrupt_disable(30U) == SYNTRA_STATUS_OK);
-    assert(mock_disable_calls == 1U);
+    assert(mock_disable_calls == 2U);
 
     assert(interrupt_unregister(30U) == SYNTRA_STATUS_OK);
 

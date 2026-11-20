@@ -259,10 +259,16 @@ syntra_status_t interrupt_handle_pending(void)
     eoi_status = controller_ops.end_of_interrupt(
         controller_context, interrupt_id);
 
+    /* Always complete the controller handshake, even for an unhandled IRQ.
+     * An unregistered interrupt is recorded by dispatch, but must not
+     * prevent the architecture exception path from safely returning. */
     if (eoi_status != SYNTRA_STATUS_OK)
         return eoi_status;
 
-    return dispatch_status;
+    if (dispatch_status != SYNTRA_STATUS_OK)
+        return SYNTRA_STATUS_OK;
+
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t interrupt_get_info(
