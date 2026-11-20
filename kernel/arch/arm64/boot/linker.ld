@@ -12,6 +12,17 @@ MEMORY
                LENGTH = KERNEL_RAM_SIZE
 }
 
+/*
+ * Keep executable code, read-only data and writable data in
+ * separate ELF LOAD segments. This avoids a single RWX segment.
+ */
+PHDRS
+{
+    text   PT_LOAD FLAGS(5); /* Read + Execute */
+    rodata PT_LOAD FLAGS(4); /* Read only */
+    data   PT_LOAD FLAGS(6); /* Read + Write */
+}
+
 SECTIONS
 {
     . = ORIGIN(RAM);
@@ -26,7 +37,7 @@ SECTIONS
 
         *(.text)
         *(.text.*)
-    } > RAM
+    } > RAM :text
 
     .rodata :
     {
@@ -34,7 +45,7 @@ SECTIONS
 
         *(.rodata)
         *(.rodata.*)
-    } > RAM
+    } > RAM :rodata
 
     .data :
     {
@@ -42,7 +53,7 @@ SECTIONS
 
         *(.data)
         *(.data.*)
-    } > RAM
+    } > RAM :data
 
     .bss (NOLOAD) :
     {
@@ -57,7 +68,7 @@ SECTIONS
         . = ALIGN(8);
 
         __bss_end = .;
-    } > RAM
+    } > RAM :data
 
     .stack (NOLOAD) :
     {
@@ -70,7 +81,7 @@ SECTIONS
         . = ALIGN(16);
 
         __stack_top = .;
-    } > RAM
+    } > RAM :data
 
     __kernel_end = .;
 
