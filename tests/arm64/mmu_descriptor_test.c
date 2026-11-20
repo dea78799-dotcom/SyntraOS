@@ -126,7 +126,7 @@ static void test_translation_indices(void)
         0x0000000040201234ULL, indices) == SYNTRA_STATUS_OK);
     assert(indices[0] == 1U);
     assert(indices[1] == 1U);
-    assert(indices[2] == 2U);
+    assert(indices[2] == 1U);
     assert(indices[3] == 0x234U);
 
     assert(syntra_arm64_mmu_get_table_indices(
