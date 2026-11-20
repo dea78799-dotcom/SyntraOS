@@ -829,7 +829,56 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
     syntra_uart_puts(" root=");
     syntra_uart_put_hex(page_table.root_physical_address);
     syntra_uart_puts("\n");
-    syntra_uart_puts("SCTLR_EL1.M remains disabled; activation deferred\n");
+
+    /* Configure translation registers only after the complete table audit. */
+    status = syntra_arm64_mmu_prepare(page_table.root_physical_address);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("MMU prepare failed; translation remains disabled\n");
+        return status;
+    }
+
+    status = syntra_arm64_mmu_enable();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("MMU enable failed\n");
+        return status;
+    }
+
+    {
+        syntra_arm64_mmu_registers_t registers;
+        status = syntra_arm64_mmu_read_registers(&registers);
+        if (status != SYNTRA_STATUS_OK ||
+            (registers.sctlr_el1 & 1ULL) == 0ULL ||
+            (registers.ttbr0_el1 & SYNTRA_ARM64_MMU_PA_MASK) !=
+                page_table.root_physical_address)
+        {
+            syntra_uart_puts("MMU activation register verification: FAIL\n");
+            return SYNTRA_STATUS_ERROR;
+        }
+    }
+
+    /* Re-walk every planned range after enabling translation. */
+    for (index = 0U; index < plan.count; ++index)
+    {
+        const syntra_arm64_mmu_mapping_t *mapping = &plan.mappings[index];
+        status = syntra_arm64_page_table_verify(
+            &page_table, mapping->virtual_address,
+            mapping->physical_address, mapping->size,
+            mapping->memory_type, mapping->access, mapping->executable);
+        if (status != SYNTRA_STATUS_OK)
+        {
+            syntra_uart_puts("Post-MMU software-walker verification failed index=");
+            syntra_uart_put_hex((uint64_t)index);
+            syntra_uart_puts("\n");
+            return status;
+        }
+    }
+
+    syntra_uart_puts("MMU activation: PASS SCTLR_EL1.M=1 TTBR0_EL1=");
+    syntra_uart_put_hex(page_table.root_physical_address);
+    syntra_uart_puts("\n");
+    syntra_uart_puts("MMU post-activation mapping verification: PASS\n");
     return SYNTRA_STATUS_OK;
 }
 
