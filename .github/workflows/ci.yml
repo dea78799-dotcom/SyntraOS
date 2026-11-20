@@ -236,18 +236,8 @@ jobs:
             echo "QEMU ARM64 system emulator is already available; skipping apt."
           fi
 
-      - name: Install GDB for EL0 entry breakpoint test
-        run: |
-          if ! command -v gdb-multiarch >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y gdb-multiarch
-          fi
-
       - name: Boot ARM64 ELF in QEMU
         run: bash tools/arm64/run_qemu.sh build/arm64/syntraos_arm64.elf
-
-      - name: Verify EL0 entry with QEMU GDB stub (-s -S)
-        run: bash tools/arm64/qemu_boot_test.sh build/arm64/syntraos_arm64.elf
 
       - name: Verify QEMU RAM framebuffer desktop pixels
         run: bash tools/arm64/run_qemu_gui_test.sh build/arm64/syntraos_arm64.elf

@@ -4,9 +4,6 @@
 .type syntra_arm64_enter_user_context, %function
 /* x0 = prepared frame; x1 = dedicated EL1 exception stack top. */
 syntra_arm64_enter_user_context:
-    /* Keep asynchronous exceptions masked until the first EL0 instruction. */
-    msr daifset, #0xf
-    isb
     stp x19, x20, [sp, #-16]!
     stp x21, x22, [sp, #-16]!
     stp x23, x24, [sp, #-16]!

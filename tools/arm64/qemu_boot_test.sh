@@ -4,7 +4,7 @@ set -euo pipefail
 ELF_PATH="${1:-build/arm64/syntraos_arm64.elf}"
 QEMU_BIN="${QEMU_BIN:-qemu-system-aarch64}"
 GDB_BIN="${GDB_BIN:-gdb-multiarch}"
-GDB_PORT="${GDB_PORT:-1234}"
+GDB_PORT="1234"
 
 if [[ ! -f "$ELF_PATH" ]]; then
     echo "ARM64 ELF not found: $ELF_PATH" >&2
@@ -60,7 +60,7 @@ echo "Waiting for SyntraOS boot stage to return from QEMU virt..."
 GDB_OUTPUT="$(timeout 30s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "set architecture aarch64" \
     -ex "target remote 127.0.0.1:$GDB_PORT" \
-    -ex "break *0x10000000" \
+    -ex "hbreak *0x10000000" \
     -ex "continue" \
     -ex 'printf "EL0 entry breakpoint hit: PC=%#lx PSTATE=%#lx\\n", $pc, $cpsr' \
     -ex "break syntra_arm64_boot_returned" \
