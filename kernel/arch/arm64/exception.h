@@ -22,8 +22,8 @@
  * For an exception taken from EL1 using SPx, the interrupted SP_EL1
  * is the address immediately above this frame on the same stack.
  *
- * The frame size is a multiple of 16 bytes, preserving AArch64 stack
- * alignment when allocated from an already aligned exception stack.
+ * The assembly allocation is 304 bytes, preserving 16-byte stack alignment.
+ * vector_index identifies the originating slot in the architectural table.
  */
 typedef struct
 {
@@ -33,6 +33,8 @@ typedef struct
     uint64_t spsr_el1;
     uint64_t esr_el1;
     uint64_t far_el1;
+    uint64_t vector_index;
+    uint64_t reserved;
 
 } syntra_arm64_exception_context_t;
 
@@ -43,7 +45,9 @@ typedef struct
 #define SYNTRA_ARM64_CONTEXT_SPSR_EL1_OFFSET 264U
 #define SYNTRA_ARM64_CONTEXT_ESR_EL1_OFFSET 272U
 #define SYNTRA_ARM64_CONTEXT_FAR_EL1_OFFSET 280U
-#define SYNTRA_ARM64_CONTEXT_SIZE 288U
+#define SYNTRA_ARM64_CONTEXT_VECTOR_INDEX_OFFSET 288U
+#define SYNTRA_ARM64_CONTEXT_RESERVED_OFFSET 296U
+#define SYNTRA_ARM64_CONTEXT_SIZE 304U
 
 _Static_assert(
     offsetof(syntra_arm64_exception_context_t, registers) ==
@@ -82,10 +86,45 @@ _Static_assert(
 );
 
 _Static_assert(
+    offsetof(syntra_arm64_exception_context_t, vector_index) ==
+        SYNTRA_ARM64_CONTEXT_VECTOR_INDEX_OFFSET,
+    "ARM64 exception vector index offset mismatch"
+);
+
+_Static_assert(
+    offsetof(syntra_arm64_exception_context_t, reserved) ==
+        SYNTRA_ARM64_CONTEXT_RESERVED_OFFSET,
+    "ARM64 exception reserved offset mismatch"
+);
+
+_Static_assert(
     sizeof(syntra_arm64_exception_context_t) ==
         SYNTRA_ARM64_CONTEXT_SIZE,
     "ARM64 exception context size mismatch"
 );
+
+/*
+ * Architectural vector slot indices, grouped by origin and exception type.
+ */
+typedef enum
+{
+    SYNTRA_ARM64_VECTOR_CURRENT_SP0_SYNC = 0,
+    SYNTRA_ARM64_VECTOR_CURRENT_SP0_IRQ = 1,
+    SYNTRA_ARM64_VECTOR_CURRENT_SP0_FIQ = 2,
+    SYNTRA_ARM64_VECTOR_CURRENT_SP0_SERROR = 3,
+    SYNTRA_ARM64_VECTOR_CURRENT_SPX_SYNC = 4,
+    SYNTRA_ARM64_VECTOR_CURRENT_SPX_IRQ = 5,
+    SYNTRA_ARM64_VECTOR_CURRENT_SPX_FIQ = 6,
+    SYNTRA_ARM64_VECTOR_CURRENT_SPX_SERROR = 7,
+    SYNTRA_ARM64_VECTOR_LOWER_AARCH64_SYNC = 8,
+    SYNTRA_ARM64_VECTOR_LOWER_AARCH64_IRQ = 9,
+    SYNTRA_ARM64_VECTOR_LOWER_AARCH64_FIQ = 10,
+    SYNTRA_ARM64_VECTOR_LOWER_AARCH64_SERROR = 11,
+    SYNTRA_ARM64_VECTOR_LOWER_AARCH32_SYNC = 12,
+    SYNTRA_ARM64_VECTOR_LOWER_AARCH32_IRQ = 13,
+    SYNTRA_ARM64_VECTOR_LOWER_AARCH32_FIQ = 14,
+    SYNTRA_ARM64_VECTOR_LOWER_AARCH32_SERROR = 15
+} syntra_arm64_vector_index_t;
 
 typedef enum
 {
@@ -113,6 +152,7 @@ typedef struct
     uint64_t saved_processor_state;
 
     syntra_arm64_exception_class_t exception_class;
+    syntra_arm64_vector_index_t vector_index;
 
 } syntra_arm64_exception_info_t;
 
