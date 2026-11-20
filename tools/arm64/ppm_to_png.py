@@ -17,11 +17,11 @@ def png_chunk(kind, data):
 def write_png(path, width, height, pixels):
     stride = width * 3
     scanlines = b"".join(
-        b"\\x00" + pixels[row * stride:(row + 1) * stride]
+        b"\x00" + pixels[row * stride:(row + 1) * stride]
         for row in range(height)
     )
     png = (
-        b"\\x89PNG\\r\\n\\x1a\\n"
+        b"\x89PNG\r\n\x1a\n"
         + png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
         + png_chunk(b"IDAT", zlib.compress(scanlines, level=9))
         + png_chunk(b"IEND", b"")
@@ -38,7 +38,7 @@ def main():
     os.makedirs(os.path.dirname(os.path.abspath(destination)), exist_ok=True)
     write_png(destination, width, height, pixels)
     with open(destination, "rb") as image_file:
-        if image_file.read(8) != b"\\x89PNG\\r\\n\\x1a\\n":
+        if image_file.read(8) != b"\x89PNG\r\n\x1a\n":
             raise RuntimeError("PNG signature verification failed")
     print(f"PASS: converted {width}x{height} PPM to PNG: {destination}")
 
