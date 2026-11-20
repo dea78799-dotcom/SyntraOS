@@ -105,7 +105,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install ARM64 cross-compilation tools
-        timeout-minutes: 15
+        timeout-minutes: 25
         shell: bash
         run: |
           set -euo pipefail
@@ -176,6 +176,25 @@ jobs:
           aarch64-linux-gnu-readelf -h build/arm64/syntraos_arm64.elf
           aarch64-linux-gnu-readelf -h build/arm64/syntraos_arm64.elf \
             | grep -q "AArch64"
+
+      - name: Install QEMU only after ELF verification
+        timeout-minutes: 12
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          MISSING_PACKAGES=()
+          if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then
+            MISSING_PACKAGES+=(qemu-system-arm)
+          fi
+          if ! dpkg-query -W -f='${Status}' qemu-efi-aarch64 2>/dev/null | grep -q "install ok installed"; then
+            MISSING_PACKAGES+=(qemu-efi-aarch64)
+          fi
+
+          if [ "${#MISSING_PACKAGES[@]}" -gt 0 ]; then
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install --no-install-recommends -y "${MISSING_PACKAGES[@]}"
+          fi
 
       - name: Boot ARM64 ELF in QEMU
         run: bash tools/arm64/run_qemu.sh build/arm64/syntraos_arm64.elf
