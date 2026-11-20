@@ -235,14 +235,22 @@ syntra_arm64_exception_entry:
     mov x0, sp
     bl syntra_arm64_exception_handle
 
-    /* Return only from the explicitly validated SVC test exception. */
+    /* Return only from validated SVC or acknowledged IRQ handlers. */
     ldr x9, [sp, #296]
     movz x10, #0x5254
     movk x10, #0x5241, lsl #16
     movk x10, #0x4e54, lsl #32
     movk x10, #0x5359, lsl #48
     cmp x9, x10
+    b.eq .Lexception_return
+    movz x10, #0x5552
+    movk x10, #0x4554, lsl #16
+    movk x10, #0x5152, lsl #32
+    movk x10, #0x4952, lsl #48
+    cmp x9, x10
     b.ne .Lexception_halt
+
+.Lexception_return:
 
     ldr x9, [sp, #264]
     msr spsr_el1, x9

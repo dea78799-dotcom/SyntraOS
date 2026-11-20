@@ -5,6 +5,8 @@
 #include "fdt.h"
 #include "../exception.h"
 #include "../gic.h"
+#include "../timer.h"
+#include "../../../timer/timer.h"
 
 /*
  * SyntraOS ARM64 Boot Stage
@@ -220,6 +222,61 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
     return syntra_arm64_gic_discover(&fdt);
 }
 
+static syntra_status_t syntra_arm64_generic_timer_irq_test(void)
+{
+    uint64_t start;
+    uint64_t timeout_ticks;
+    syntra_status_t status;
+
+    status = syntra_arm64_gic_init();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("GICv3 initialization failed; IRQs remain masked\n");
+        return status;
+    }
+
+    status = syntra_arm64_timer_init(SYNTRA_ARM64_TIMER_DEFAULT_HZ);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("Generic Timer initialization failed\n");
+        return status;
+    }
+
+    status = syntra_arm64_timer_enable();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("Generic Timer enable failed\n");
+        return status;
+    }
+
+    start = syntra_arm64_timer_read_counter();
+    timeout_ticks = syntra_arm64_timer_read_frequency() * 2U;
+    __asm__ volatile("dsb sy" ::: "memory");
+    __asm__ volatile("msr daifclr, #2" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+
+    while (timer_get_ticks() < 3ULL)
+    {
+        uint64_t now = syntra_arm64_timer_read_counter();
+        if ((now - start) > timeout_ticks)
+        {
+            __asm__ volatile("msr daifset, #2" ::: "memory");
+            (void)syntra_arm64_timer_disable();
+            syntra_uart_puts("FAIL: Generic Timer IRQ timeout\n");
+            return SYNTRA_STATUS_ERROR;
+        }
+    }
+
+    __asm__ volatile("msr daifset, #2" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+    status = syntra_arm64_timer_disable();
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    if (timer_get_ticks() < 3ULL) return SYNTRA_STATUS_ERROR;
+    syntra_uart_puts("PASS: ARM64 Generic Timer IRQ delivered 3 ticks\n");
+    return SYNTRA_STATUS_OK;
+}
+
 static syntra_status_t syntra_arm64_svc_vector_test(void)
 {
     const syntra_arm64_exception_info_t *info;
@@ -299,6 +356,13 @@ syntra_status_t syntra_arm64_boot_main(
     if (status != SYNTRA_STATUS_OK)
     {
         syntra_uart_puts("SyntraOS boot failed: SVC/ERET test\n");
+        return status;
+    }
+
+    status = syntra_arm64_generic_timer_irq_test();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("SyntraOS boot failed: GICv3/Generic Timer IRQ test\n");
         return status;
     }
 

@@ -38,8 +38,9 @@ set -e
 
 cat "$LOG_FILE"
 
-if grep -Fq "SyntraOS boot OK" "$LOG_FILE"; then
-    echo "PASS: UART PL011 emitted 'SyntraOS boot OK' from the running kernel."
+if grep -Fq "SyntraOS boot OK" "$LOG_FILE" &&
+   grep -Fq "PASS: ARM64 Generic Timer IRQ delivered 3 ticks" "$LOG_FILE"; then
+    echo "PASS: UART PL011 confirmed boot and three Generic Timer IRQ ticks."
     exit 0
 fi
 

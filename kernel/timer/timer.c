@@ -4,7 +4,7 @@
 #include <limits.h>
 #include <stddef.h>
 
-static unsigned long long timer_ticks;
+static volatile unsigned long long timer_ticks;
 static unsigned int timer_frequency;
 static int timer_initialized;
 
