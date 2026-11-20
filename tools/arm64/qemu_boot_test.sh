@@ -65,7 +65,7 @@ GDB_OUTPUT="$(timeout 30s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "target remote 127.0.0.1:$GDB_PORT" \
     -ex "hbreak *0x10000000" \
     -ex "continue" \
-    -ex "printf \\"EL0_ENTRY_STOP PC=%#lx\\\\n\\", \\$pc" \
+    -ex 'printf "EL0_ENTRY_STOP PC=%#lx\n", $pc' \
     -ex "detach" 2>&1)" || { \
         printf '%s\\n' "$GDB_OUTPUT" >&2; \
         echo "GDB failed before EL0 entry was verified." >&2; \
@@ -93,7 +93,7 @@ if ! grep -Fq 'PASS: ARM64 Scheduler switched between two threads' "$UART_LOG"; 
     exit 1
 fi
 
-if ! grep -Fq 'EL0_ENTRY_STOP PC=0x10000000' <<<"$GDB_OUTPUT"; then
+    -ex 'printf "EL0_ENTRY_STOP PC=%#lx\n", $pc' \
     echo "GDB did not stop at EL0 entry PC 0x10000000." >&2
     exit 1
 fi
