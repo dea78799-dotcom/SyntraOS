@@ -149,6 +149,15 @@ typedef enum
 
 } syntra_arm64_exception_class_t;
 
+typedef enum
+{
+    SYNTRA_ARM64_EXCEPTION_ORIGIN_UNKNOWN = 0,
+    SYNTRA_ARM64_EXCEPTION_ORIGIN_EL1_SP0,
+    SYNTRA_ARM64_EXCEPTION_ORIGIN_EL1_SPX,
+    SYNTRA_ARM64_EXCEPTION_ORIGIN_EL0_AARCH64,
+    SYNTRA_ARM64_EXCEPTION_ORIGIN_LOWER_AARCH32
+} syntra_arm64_exception_origin_t;
+
 typedef struct
 {
     uint64_t syndrome;
@@ -158,8 +167,19 @@ typedef struct
 
     syntra_arm64_exception_class_t exception_class;
     syntra_arm64_vector_index_t vector_index;
+    syntra_arm64_exception_origin_t origin;
 
 } syntra_arm64_exception_info_t;
+
+/*
+ * Validate vector provenance against the saved PSTATE.M[3:0] mode.
+ * Lower AArch32 is identified but deliberately unsupported.
+ */
+syntra_status_t syntra_arm64_exception_classify_origin(
+    uint64_t vector_index,
+    uint64_t saved_processor_state,
+    syntra_arm64_exception_origin_t *origin
+);
 
 /*
  * Decode ARM64 Exception Syndrome Register (ESR).

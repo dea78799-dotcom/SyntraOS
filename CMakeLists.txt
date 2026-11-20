@@ -453,6 +453,13 @@ add_executable(arm64_context_test
 target_link_libraries(arm64_context_test PRIVATE syntra_kernel)
 add_test(NAME ARM64ContextFrameTest COMMAND arm64_context_test)
 
+# ARM64 exception vector-origin validation tests
+add_executable(arm64_exception_origin_test
+    tests/arm64/exception_origin_test.c
+)
+target_link_libraries(arm64_exception_origin_test PRIVATE syntra_kernel)
+add_test(NAME ARM64ExceptionOriginTest COMMAND arm64_exception_origin_test)
+
 # ARM64 Current Exception Level decoder tests
 add_executable(arm64_registers_test
     tests/arm64/registers_test.c

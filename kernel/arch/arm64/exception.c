@@ -34,6 +34,7 @@ syntra_status_t syntra_arm64_exception_decode(
     info->exception_return_address = elr;
     info->saved_processor_state = spsr;
 
+    info->origin = SYNTRA_ARM64_EXCEPTION_ORIGIN_UNKNOWN;
     info->exception_class =
         (syntra_arm64_exception_class_t)(
             (esr >> SYNTRA_ARM64_EXCEPTION_CLASS_SHIFT)
@@ -42,6 +43,44 @@ syntra_status_t syntra_arm64_exception_decode(
     info->vector_index = SYNTRA_ARM64_VECTOR_UNKNOWN;
 
     return SYNTRA_STATUS_OK;
+}
+
+
+syntra_status_t syntra_arm64_exception_classify_origin(
+    uint64_t vector_index,
+    uint64_t saved_processor_state,
+    syntra_arm64_exception_origin_t *origin)
+{
+    uint64_t mode = saved_processor_state & 0xFULL;
+    syntra_arm64_exception_origin_t decoded;
+
+    if (origin == NULL || vector_index >= 16U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    if (vector_index <= SYNTRA_ARM64_VECTOR_CURRENT_SP0_SERROR)
+    {
+        if (mode != 0x4U) return SYNTRA_STATUS_INVALID_ARGUMENT;
+        decoded = SYNTRA_ARM64_EXCEPTION_ORIGIN_EL1_SP0;
+    }
+    else if (vector_index <= SYNTRA_ARM64_VECTOR_CURRENT_SPX_SERROR)
+    {
+        if (mode != 0x5U) return SYNTRA_STATUS_INVALID_ARGUMENT;
+        decoded = SYNTRA_ARM64_EXCEPTION_ORIGIN_EL1_SPX;
+    }
+    else if (vector_index <= SYNTRA_ARM64_VECTOR_LOWER_AARCH64_SERROR)
+    {
+        if (mode != 0x0U) return SYNTRA_STATUS_INVALID_ARGUMENT;
+        decoded = SYNTRA_ARM64_EXCEPTION_ORIGIN_EL0_AARCH64;
+    }
+    else
+    {
+        decoded = SYNTRA_ARM64_EXCEPTION_ORIGIN_LOWER_AARCH32;
+    }
+
+    *origin = decoded;
+    return decoded == SYNTRA_ARM64_EXCEPTION_ORIGIN_LOWER_AARCH32
+        ? SYNTRA_STATUS_NOT_IMPLEMENTED
+        : SYNTRA_STATUS_OK;
 }
 
 syntra_status_t syntra_arm64_exception_handle(
@@ -89,6 +128,21 @@ syntra_status_t syntra_arm64_exception_handle(
 
     last_exception_info.vector_index =
         (syntra_arm64_vector_index_t)context->vector_index;
+
+    status = syntra_arm64_exception_classify_origin(
+        context->vector_index, context->spsr_el1,
+        &last_exception_info.origin);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    /*
+     * EL0 SVC/IRQ/abort dispatch is intentionally fail-closed until the
+     * syscall ABI, user fault policy, and user-thread return validation exist.
+     * Do not set either assembly return marker for a lower-EL exception.
+     */
+    if (last_exception_info.origin ==
+        SYNTRA_ARM64_EXCEPTION_ORIGIN_EL0_AARCH64)
+        return SYNTRA_STATUS_NOT_IMPLEMENTED;
 
     if (context->vector_index == SYNTRA_ARM64_VECTOR_CURRENT_SPX_IRQ)
     {
