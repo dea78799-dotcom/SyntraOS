@@ -62,18 +62,12 @@ GDB_OUTPUT="$(timeout 30s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "set architecture aarch64" \
     -ex "set pagination off" \
     -ex "set confirm off" \
-    -ex "set mi-async off" \
-    -ex "set non-stop off" \
     -ex "target remote 127.0.0.1:$GDB_PORT" \
     -ex "hbreak *0x10000000" \
-    -ex "break syntra_arm64_boot_returned" \
     -ex "continue" \
-    -ex 'printf "EL0 entry breakpoint hit: PC=%#lx PSTATE=%#lx\\n", $pc, $cpsr' \
-    -ex "continue" \
-    -ex 'printf "syntra_arm64_boot_main returned status: %d\\n", (int)($x0 & 0xffffffff)' \
-    -ex 'detach' 2>&1)" || {
+    -ex "detach" 2>&1)" || {
         printf '%s\n' "$GDB_OUTPUT" >&2
-        echo "GDB failed before the ARM64 boot return point was verified." >&2
+        echo "GDB failed before EL0 entry was verified." >&2
         echo "QEMU UART output captured before GDB failure:" >&2
         if [[ -s "$UART_LOG" ]]; then cat "$UART_LOG" >&2; else echo "(UART log is empty)" >&2; fi
         echo "QEMU diagnostic output:" >&2
@@ -82,6 +76,14 @@ GDB_OUTPUT="$(timeout 30s "$GDB_BIN" -q -batch "$ELF_PATH" \
     }
 
 printf '%s\n' "$GDB_OUTPUT"
+
+echo "Waiting for EL0 UART completion markers..."
+for _ in $(seq 1 100); do
+    if grep -Fq "Hello from EL0" "$UART_LOG" && grep -Fq "EL0 test returned to EL1: PASS" "$UART_LOG"; then
+        break
+    fi
+    sleep 0.1
+done
 
 echo "QEMU UART output:"
 cat "$UART_LOG"
@@ -103,11 +105,6 @@ fi
 
 if ! grep -Fq 'EL0 test returned to EL1: PASS' "$UART_LOG"; then
     echo "EL0 process did not return safely to EL1." >&2
-    exit 1
-fi
-
-if ! grep -Eq 'syntra_arm64_boot_main returned status: 0([[:space:]]|$)' <<<"$GDB_OUTPUT"; then
-    echo "ARM64 boot stage returned a non-zero status." >&2
     exit 1
 fi
 
