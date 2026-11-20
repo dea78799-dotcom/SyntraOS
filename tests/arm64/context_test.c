@@ -102,8 +102,12 @@ int main(void)
             (user_context->sp_el0 & 15U) == 0U &&
             user_context->sp_el0 ==
                 (uint64_t)(uintptr_t)(user_stack + sizeof(user_stack)));
-        check("Initial EL0 return state masks DAIF",
-            user_context != NULL && user_context->spsr_el1 == 0x3C0U);
+        check("Initial EL0 return state is EL0t with DAIF masked",
+            user_context != NULL && user_context->spsr_el1 == 0x3C0U &&
+            (user_context->spsr_el1 & 0xFU) == 0U);
+        check("EL0 entry address is copied to ELR_EL1",
+            user_context != NULL &&
+            user_context->elr_el1 == (uint64_t)(uintptr_t)test_entry);
         check("EL0 entry and return trampoline are populated",
             user_context != NULL &&
             user_context->elr_el1 == (uint64_t)(uintptr_t)test_entry &&

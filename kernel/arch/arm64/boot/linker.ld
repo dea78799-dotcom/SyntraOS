@@ -39,8 +39,17 @@ SECTIONS
         *(.text.*)
 
         . = ALIGN(4096);
-        __text_end = .;
     } > RAM :text
+
+    /* Dedicated page containing position-independent EL0 test instructions. */
+    .user_text ALIGN(4096) :
+    {
+        __user_text_start = .;
+        KEEP(*(.user.text))
+        . = ALIGN(4096);
+        __user_text_end = .;
+    } > RAM :text
+    __text_end = .;
 
     .rodata ALIGN(4096) :
     {
@@ -73,7 +82,11 @@ SECTIONS
         *(COMMON)
 
         . = ALIGN(4096);
+        __user_stack_bottom = .;
+        . += 4096;
+        __user_stack_top = .;
 
+        . = ALIGN(4096);
         __bss_end = .;
     } > RAM :data
 

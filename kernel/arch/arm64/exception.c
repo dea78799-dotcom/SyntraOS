@@ -135,14 +135,43 @@ syntra_status_t syntra_arm64_exception_handle(
     if (status != SYNTRA_STATUS_OK)
         return status;
 
-    /*
-     * EL0 SVC/IRQ/abort dispatch is intentionally fail-closed until the
-     * syscall ABI, user fault policy, and user-thread return validation exist.
-     * Do not set either assembly return marker for a lower-EL exception.
-     */
     if (last_exception_info.origin ==
         SYNTRA_ARM64_EXCEPTION_ORIGIN_EL0_AARCH64)
-        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+    {
+        syntra_arm64_exception_context_t *mutable_context =
+            (syntra_arm64_exception_context_t *)context;
+
+        if (context->vector_index != SYNTRA_ARM64_VECTOR_LOWER_AARCH64_SYNC)
+            return SYNTRA_STATUS_NOT_IMPLEMENTED;
+
+        if (last_exception_info.exception_class == SYNTRA_ARM64_EXCEPTION_SVC_AARCH64)
+        {
+            if ((context->esr_el1 & 0xFFFFULL) == 0x44ULL)
+                syntra_arm64_exception_uart_puts("Hello from EL0\\n");
+            else
+                syntra_arm64_exception_uart_puts("EL0 SVC: unknown immediate\\n");
+            mutable_context->reserved = SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC;
+        }
+        else if (last_exception_info.exception_class == SYNTRA_ARM64_EXCEPTION_DATA_ABORT_LOWER ||
+                 last_exception_info.exception_class == SYNTRA_ARM64_EXCEPTION_INSTRUCTION_ABORT_LOWER)
+        {
+            uintptr_t halt_offset = (uintptr_t)syntra_arm64_user_fault_halt -
+                (uintptr_t)__user_text_start;
+            if (last_exception_info.exception_class == SYNTRA_ARM64_EXCEPTION_DATA_ABORT_LOWER)
+                syntra_arm64_exception_uart_puts("EL0 Data Abort: caught; stopping user task\\n");
+            else
+                syntra_arm64_exception_uart_puts("EL0 Instruction Abort: caught; stopping user task\\n");
+            mutable_context->elr_el1 = 0x10000000ULL + halt_offset;
+            mutable_context->reserved = SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC;
+        }
+        else
+            return SYNTRA_STATUS_NOT_IMPLEMENTED;
+
+        last_exception_context.elr_el1 = mutable_context->elr_el1;
+        last_exception_context.reserved = mutable_context->reserved;
+        last_exception_valid = 1;
+        return SYNTRA_STATUS_OK;
+    }
 
     if (context->vector_index == SYNTRA_ARM64_VECTOR_CURRENT_SPX_IRQ)
     {

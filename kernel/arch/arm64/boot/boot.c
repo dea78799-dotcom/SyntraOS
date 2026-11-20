@@ -16,6 +16,8 @@
 
 /* Optional QEMU fw_cfg MMIO window, discovered from the supplied FDT. */
 static uintptr_t syntra_fw_cfg_base;
+static syntra_arm64_page_table_t syntra_active_page_table;
+static _Alignas(4096) uint8_t syntra_el0_kernel_stack[4096];
 static size_t syntra_fw_cfg_size;
 #include "../timer.h"
 #include "../../../timer/timer.h"
@@ -52,6 +54,15 @@ extern char __bss_start[];
 extern char __bss_end[];
 extern char __stack_bottom[];
 extern char __stack_top[];
+extern char __user_text_start[];
+extern char __user_text_end[];
+extern char __user_stack_bottom[];
+extern char __user_stack_top[];
+extern void syntra_arm64_user_fault_halt(void);
+extern void syntra_arm64_enter_user_context(syntra_arm64_exception_context_t *, uintptr_t);
+
+#define SYNTRA_EL0_CODE_VA  0x10000000ULL
+#define SYNTRA_EL0_STACK_VA 0x10001000ULL
 
 static void syntra_uart_init(void)
 {
@@ -83,6 +94,8 @@ static void syntra_uart_puts(const char *message)
 }
 
 
+
+void syntra_arm64_exception_uart_puts(const char *message) { syntra_uart_puts(message); }
 
 static void syntra_uart_put_hex(uint64_t value)
 {
@@ -955,6 +968,8 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
         }
     }
 
+    syntra_active_page_table = page_table;
+
     /* Re-walk every planned range after enabling translation. */
     for (index = 0U; index < plan.count; ++index)
     {
@@ -993,6 +1008,80 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
         return status;
     }
     return SYNTRA_STATUS_OK;
+}
+
+static syntra_status_t syntra_arm64_run_el0_hello_test(void)
+{
+    syntra_status_t status;
+    syntra_arm64_mmu_translation_t code, stack;
+    syntra_arm64_exception_context_t *context = NULL;
+    uintptr_t text_pa = (uintptr_t)__user_text_start;
+    uintptr_t stack_pa = (uintptr_t)__user_stack_bottom;
+    uintptr_t text_size = (uintptr_t)__user_text_end - text_pa;
+    uintptr_t fault_pa = (uintptr_t)syntra_arm64_user_fault_halt;
+    uintptr_t fault_va;
+
+    if (text_size != SYNTRA_ARM64_MMU_PAGE_SIZE ||
+        (text_pa & (SYNTRA_ARM64_MMU_PAGE_SIZE - 1U)) != 0U ||
+        (stack_pa & (SYNTRA_ARM64_MMU_PAGE_SIZE - 1U)) != 0U ||
+        fault_pa < text_pa || fault_pa >= text_pa + text_size)
+        return SYNTRA_STATUS_ERROR;
+
+    status = syntra_arm64_page_table_map_user(
+        &syntra_active_page_table, SYNTRA_EL0_CODE_VA, text_pa,
+        SYNTRA_ARM64_MMU_PAGE_SIZE, SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 1);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = syntra_arm64_page_table_map_user(
+        &syntra_active_page_table, SYNTRA_EL0_STACK_VA, stack_pa,
+        SYNTRA_ARM64_MMU_PAGE_SIZE, SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = syntra_arm64_page_table_verify_user(
+        &syntra_active_page_table, SYNTRA_EL0_CODE_VA, text_pa,
+        SYNTRA_ARM64_MMU_PAGE_SIZE, SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 1);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_arm64_page_table_verify_user(
+        &syntra_active_page_table, SYNTRA_EL0_STACK_VA, stack_pa,
+        SYNTRA_ARM64_MMU_PAGE_SIZE, SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    if (syntra_arm64_mmu_walk(syntra_active_page_table.root_physical_address,
+            SYNTRA_EL0_CODE_VA, syntra_boot_page_table_resolve, NULL, &code)
+            != SYNTRA_STATUS_OK ||
+        !code.user_read || code.user_write || !code.user_execute ||
+        syntra_arm64_mmu_walk(syntra_active_page_table.root_physical_address,
+            SYNTRA_EL0_STACK_VA, syntra_boot_page_table_resolve, NULL, &stack)
+            != SYNTRA_STATUS_OK ||
+        !stack.user_read || !stack.user_write || stack.user_execute)
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+
+    fault_va = SYNTRA_EL0_CODE_VA + (fault_pa - text_pa);
+    __asm__ volatile("dsb ishst" ::: "memory");
+    __asm__ volatile("tlbi vmalle1" ::: "memory");
+    __asm__ volatile("dsb ish" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+
+    syntra_uart_puts("EL0 page permissions: code=RO+UX stack=RW+UXN PASS\\n");
+    status = syntra_arm64_user_context_initialize(
+        syntra_el0_kernel_stack, sizeof(syntra_el0_kernel_stack),
+        (void *)(uintptr_t)SYNTRA_EL0_STACK_VA,
+        SYNTRA_ARM64_MMU_PAGE_SIZE,
+        (void (*)(void *))(uintptr_t)SYNTRA_EL0_CODE_VA,
+        (void (*)(void))fault_va, NULL, &context);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    if (context->spsr_el1 != 0x3C0ULL ||
+        (context->spsr_el1 & 0xFULL) != 0ULL ||
+        context->elr_el1 != SYNTRA_EL0_CODE_VA ||
+        context->sp_el0 != SYNTRA_EL0_STACK_VA + SYNTRA_ARM64_MMU_PAGE_SIZE)
+        return SYNTRA_STATUS_ERROR;
+
+    syntra_uart_puts("EL0 context: SPSR_EL1=0x3c0 ELR_EL1=0x10000000 SP_EL0=0x10002000 PASS\\n");
+    syntra_uart_puts("EL0 transition: ERET\\n");
+    syntra_arm64_enter_user_context(context,
+        (uintptr_t)(syntra_el0_kernel_stack + sizeof(syntra_el0_kernel_stack)));
+    return SYNTRA_STATUS_ERROR;
 }
 
 syntra_status_t syntra_arm64_boot_main(
@@ -1070,6 +1159,13 @@ syntra_status_t syntra_arm64_boot_main(
     if (status != SYNTRA_STATUS_OK)
     {
         syntra_uart_puts("SyntraOS boot failed: MMU mapping audit\n");
+        return status;
+    }
+
+    status = syntra_arm64_run_el0_hello_test();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("SyntraOS boot failed: first EL0 process\\n");
         return status;
     }
 
