@@ -180,6 +180,10 @@ static void test_fdt_and_gic_discovery(void)
     assert(info.config.version == SYNTRA_ARM64_GIC_VERSION_3);
     assert(info.config.distributor_base == (uintptr_t)0x08000000U);
     assert(info.config.redistributor_base == (uintptr_t)0x080A0000U);
+    assert(syntra_arm64_gic_init() == SYNTRA_STATUS_NOT_IMPLEMENTED);
+    assert(syntra_arm64_gic_get_info(&info) == SYNTRA_STATUS_OK);
+    assert(info.initialized == 0);
+    assert(info.hardware_access_enabled == 0);
 }
 
 
@@ -199,6 +203,10 @@ static void test_gic_v2_discovery(void)
     assert(info.config.distributor_base == (uintptr_t)0x08000000U);
     assert(info.config.cpu_interface_base == (uintptr_t)0x08010000U);
     assert(info.config.cpu_interface_size == (size_t)0x1000U);
+    assert(syntra_arm64_gic_init() == SYNTRA_STATUS_NOT_IMPLEMENTED);
+    assert(syntra_arm64_gic_get_info(&info) == SYNTRA_STATUS_OK);
+    assert(info.initialized == 0);
+    assert(info.hardware_access_enabled == 0);
 }
 
 static void test_rejects_invalid_reg_index_and_truncation(void)
