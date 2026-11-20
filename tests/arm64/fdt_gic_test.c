@@ -223,7 +223,7 @@ static void test_rejects_invalid_reg_index_and_truncation(void)
 
     assert(syntra_fdt_get_reg(
         &fdt, &node, 2U, &base, &size) == SYNTRA_STATUS_ERROR);
-    assert(syntra_fdt_open(blob, 20U, &fdt) == SYNTRA_STATUS_ERROR);
+    assert(syntra_fdt_open(blob, 20U, &fdt) == SYNTRA_STATUS_INVALID_ARGUMENT);
 }
 
 static void test_rejects_bad_magic(void)
