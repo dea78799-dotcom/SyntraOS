@@ -24,6 +24,10 @@ static void test_entry(void *argument)
     (void)argument;
 }
 
+static void test_user_return_trampoline(void)
+{
+}
+
 static _Alignas(16) unsigned char test_stack[4096];
 static int test_argument;
 
@@ -86,7 +90,7 @@ int main(void)
             syntra_arm64_user_context_initialize(
                 kernel_stack, sizeof(kernel_stack),
                 user_stack, sizeof(user_stack),
-                test_entry, syntra_arm64_thread_exit,
+                test_entry, test_user_return_trampoline,
                 &test_argument, &user_context) == SYNTRA_STATUS_OK);
         check("EL0 frame is stored on the kernel stack",
             user_context != NULL &&
@@ -111,7 +115,7 @@ int main(void)
             syntra_arm64_user_context_initialize(
                 kernel_stack, sizeof(kernel_stack),
                 kernel_stack, sizeof(kernel_stack),
-                test_entry, syntra_arm64_thread_exit,
+                test_entry, test_user_return_trampoline,
                 NULL, &user_context) == SYNTRA_STATUS_INVALID_ARGUMENT);
     }
 

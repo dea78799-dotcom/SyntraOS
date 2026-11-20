@@ -58,6 +58,13 @@ typedef const uint64_t *(*syntra_arm64_mmu_table_resolver_t)(
 
 syntra_status_t syntra_arm64_mmu_make_table_descriptor(
     uint64_t table_physical_address, uint64_t *descriptor);
+/* User mappings are normal-memory 4-KiB pages; PXN is always set. */
+syntra_status_t syntra_arm64_mmu_make_user_page_descriptor(
+    uint64_t physical_address,
+    syntra_arm64_mmu_access_t access,
+    int executable,
+    uint64_t *descriptor
+);
 syntra_status_t syntra_arm64_mmu_make_page_descriptor(
     uint64_t physical_address, syntra_arm64_mmu_memory_type_t memory_type,
     syntra_arm64_mmu_access_t access, int executable, uint64_t *descriptor);

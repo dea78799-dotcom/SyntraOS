@@ -253,6 +253,95 @@ syntra_status_t syntra_arm64_page_table_map(
     return SYNTRA_STATUS_OK;
 }
 
+
+syntra_status_t syntra_arm64_page_table_map_user(
+    syntra_arm64_page_table_t *table,
+    uint64_t va, uint64_t pa, uint64_t size,
+    syntra_arm64_mmu_access_t access, int executable)
+{
+    uint64_t end;
+    if (table == NULL || table->root_physical_address == 0ULL ||
+        table->allocate == NULL || table->resolve == NULL ||
+        (access != SYNTRA_ARM64_MMU_ACCESS_READ_WRITE &&
+         access != SYNTRA_ARM64_MMU_ACCESS_READ_ONLY) ||
+        (executable != 0 && executable != 1) ||
+        syntra_arm64_mmu_validate_mapping_range(va, pa, size) !=
+            SYNTRA_STATUS_OK)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    end = va + size;
+    /* User mappings are deliberately page-only; preflight prevents overlaps. */
+    for (uint64_t check_va = va; check_va < end;
+         check_va += SYNTRA_ARM64_MMU_PAGE_SIZE)
+    {
+        syntra_status_t status = page_is_unmapped(table, check_va);
+        if (status != SYNTRA_STATUS_OK) return status;
+    }
+
+    while (va < end)
+    {
+        uint16_t indices[4];
+        uint64_t *l1, *l2, *l3, descriptor;
+        syntra_status_t status = syntra_arm64_mmu_get_table_indices(va, indices);
+        if (status != SYNTRA_STATUS_OK) return status;
+        l1 = get_table(table, table->root_physical_address);
+        if (l1 == NULL) return SYNTRA_STATUS_ERROR;
+        status = ensure_child(table, l1, indices[0], &l2);
+        if (status != SYNTRA_STATUS_OK) return status;
+        status = ensure_child(table, l2, indices[1], &l3);
+        if (status != SYNTRA_STATUS_OK) return status;
+        status = syntra_arm64_mmu_make_user_page_descriptor(
+            pa, access, executable, &descriptor);
+        if (status != SYNTRA_STATUS_OK) return status;
+        if ((l3[indices[2]] & DESC_VALID) != 0ULL)
+            return SYNTRA_STATUS_ERROR;
+        l3[indices[2]] = descriptor;
+        va += SYNTRA_ARM64_MMU_PAGE_SIZE;
+        pa += SYNTRA_ARM64_MMU_PAGE_SIZE;
+    }
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t syntra_arm64_page_table_verify_user(
+    syntra_arm64_page_table_t *table,
+    uint64_t va, uint64_t pa, uint64_t size,
+    syntra_arm64_mmu_access_t access, int executable)
+{
+    uint64_t end;
+    if (table == NULL || table->root_physical_address == 0ULL ||
+        table->resolve == NULL ||
+        (access != SYNTRA_ARM64_MMU_ACCESS_READ_WRITE &&
+         access != SYNTRA_ARM64_MMU_ACCESS_READ_ONLY) ||
+        (executable != 0 && executable != 1) ||
+        syntra_arm64_mmu_validate_mapping_range(va, pa, size) !=
+            SYNTRA_STATUS_OK)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    end = va + size;
+    while (va < end)
+    {
+        syntra_arm64_mmu_translation_t translation;
+        if (syntra_arm64_mmu_walk(table->root_physical_address, va,
+                walk_resolve, table, &translation) != SYNTRA_STATUS_OK)
+            return SYNTRA_STATUS_ERROR;
+        if (translation.physical_address != pa ||
+            translation.page_size != SYNTRA_ARM64_MMU_PAGE_SIZE ||
+            translation.memory_type != SYNTRA_ARM64_MMU_MEMORY_NORMAL ||
+            translation.privileged_read == 0U ||
+            translation.privileged_write != (uint8_t)(
+                access == SYNTRA_ARM64_MMU_ACCESS_READ_WRITE) ||
+            translation.privileged_execute != 0U ||
+            translation.user_read != 1U ||
+            translation.user_write != (uint8_t)(
+                access == SYNTRA_ARM64_MMU_ACCESS_READ_WRITE) ||
+            translation.user_execute != (uint8_t)(executable != 0))
+            return SYNTRA_STATUS_ERROR;
+        va += SYNTRA_ARM64_MMU_PAGE_SIZE;
+        pa += SYNTRA_ARM64_MMU_PAGE_SIZE;
+    }
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_arm64_page_table_verify(
     syntra_arm64_page_table_t *table,
     uint64_t va,

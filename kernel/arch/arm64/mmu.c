@@ -56,6 +56,35 @@ syntra_status_t syntra_arm64_mmu_make_table_descriptor(
     return SYNTRA_STATUS_OK;
 }
 
+
+syntra_status_t syntra_arm64_mmu_make_user_page_descriptor(
+    uint64_t physical_address,
+    syntra_arm64_mmu_access_t access,
+    int executable,
+    uint64_t *descriptor)
+{
+    uint64_t value;
+    if (descriptor == NULL ||
+        !physical_address_is_valid(physical_address) ||
+        (access != SYNTRA_ARM64_MMU_ACCESS_READ_WRITE &&
+         access != SYNTRA_ARM64_MMU_ACCESS_READ_ONLY) ||
+        (executable != 0 && executable != 1))
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    /* AP=01 grants EL0+EL1 access; AP[1] adds read-only protection. */
+    value = (physical_address & DESC_ADDR_MASK) | DESC_VALID | DESC_TYPE |
+        (MMU_ATTR_INDEX_NORMAL << DESC_ATTR_SHIFT) |
+        (MMU_SH_INNER_SHAREABLE << DESC_SH_SHIFT) | DESC_AF |
+        (1ULL << DESC_AP_SHIFT) | DESC_PXN;
+    if (access == SYNTRA_ARM64_MMU_ACCESS_READ_ONLY)
+        value |= (1ULL << 7U);
+    if (!executable)
+        value |= DESC_UXN;
+
+    *descriptor = value;
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_arm64_mmu_make_page_descriptor(
     uint64_t physical_address, syntra_arm64_mmu_memory_type_t memory_type,
     syntra_arm64_mmu_access_t access, int executable, uint64_t *descriptor)

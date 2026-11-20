@@ -65,6 +65,53 @@ static void test_build_and_walk_verify(void)
         SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 1) == SYNTRA_STATUS_ERROR);
 }
 
+
+static void test_user_page_mappings(void)
+{
+    syntra_arm64_page_table_t pt;
+    syntra_arm64_mmu_translation_t translation;
+    reset();
+    assert(syntra_arm64_page_table_init(
+        &pt, alloc_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+
+    /* User code: EL0 read/execute, never EL1 execute, read-only. */
+    assert(syntra_arm64_page_table_map_user(
+        &pt, 0x50000000ULL, 0x80000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 1) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_verify_user(
+        &pt, 0x50000000ULL, 0x80000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 1) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_mmu_walk(pt.root_physical_address, 0x50000000ULL,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_OK);
+    assert(translation.user_read == 1U && translation.user_write == 0U);
+    assert(translation.user_execute == 1U);
+    assert(translation.privileged_execute == 0U);
+
+    /* User stack: EL0 read/write, execute-never. */
+    assert(syntra_arm64_page_table_map_user(
+        &pt, 0x50001000ULL, 0x80001000ULL, 0x2000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_verify_user(
+        &pt, 0x50001000ULL, 0x80001000ULL, 0x2000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_mmu_walk(pt.root_physical_address, 0x50001000ULL,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_OK);
+    assert(translation.user_read == 1U && translation.user_write == 1U);
+    assert(translation.user_execute == 0U);
+    assert(translation.privileged_execute == 0U);
+
+    /* Kernel-only verifier must reject a user-accessible leaf. */
+    assert(syntra_arm64_page_table_verify(
+        &pt, 0x50000000ULL, 0x80000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 1) == SYNTRA_STATUS_ERROR);
+    assert(syntra_arm64_page_table_map_user(
+        &pt, 0x50000000ULL, 0x90000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 1) == SYNTRA_STATUS_ERROR);
+}
+
 static void test_device_mapping_and_invalid_inputs(void)
 {
     syntra_arm64_page_table_t pt;
@@ -147,6 +194,7 @@ static void test_partial_overlap_preflight(void)
 int main(void)
 {
     test_build_and_walk_verify();
+    test_user_page_mappings();
     test_block_mapping();
     test_block_page_conflict();
     test_partial_overlap_preflight();

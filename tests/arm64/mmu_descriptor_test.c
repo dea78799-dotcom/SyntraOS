@@ -79,6 +79,40 @@ static void test_normal_page_descriptors(void)
     assert((descriptor & DESC_UXN) != 0ULL);
 }
 
+
+static void test_user_page_descriptors(void)
+{
+    uint64_t descriptor = 0ULL;
+    assert(syntra_arm64_mmu_make_user_page_descriptor(
+        0x80000000ULL, SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 1,
+        &descriptor) == SYNTRA_STATUS_OK);
+    assert((descriptor & (1ULL << 6U)) != 0ULL); /* EL0 permitted */
+    assert((descriptor & (1ULL << 7U)) != 0ULL); /* read-only */
+    assert((descriptor & DESC_PXN) != 0ULL);     /* EL1 cannot execute */
+    assert((descriptor & DESC_UXN) == 0ULL);     /* EL0 can execute */
+
+    assert(syntra_arm64_mmu_make_user_page_descriptor(
+        0x80001000ULL, SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0,
+        &descriptor) == SYNTRA_STATUS_OK);
+    assert((descriptor & (1ULL << 6U)) != 0ULL);
+    assert((descriptor & (1ULL << 7U)) == 0ULL);
+    assert((descriptor & (DESC_PXN | DESC_UXN)) ==
+           (DESC_PXN | DESC_UXN));
+
+    assert(syntra_arm64_mmu_make_user_page_descriptor(
+        0x80000001ULL, SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 1,
+        &descriptor) == SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_mmu_make_user_page_descriptor(
+        0x80000000ULL, (syntra_arm64_mmu_access_t)9, 1,
+        &descriptor) == SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_mmu_make_user_page_descriptor(
+        0x80000000ULL, SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 2,
+        &descriptor) == SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_mmu_make_user_page_descriptor(
+        0x80000000ULL, SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 1,
+        NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
+}
+
 static void test_device_page_descriptor(void)
 {
     uint64_t descriptor = 0U;
@@ -193,6 +227,7 @@ int main(void)
     test_table_descriptor();
     test_block_descriptor();
     test_normal_page_descriptors();
+    test_user_page_descriptors();
     test_device_page_descriptor();
     test_invalid_page_arguments();
     test_translation_indices();

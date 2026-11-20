@@ -34,6 +34,24 @@ syntra_status_t syntra_arm64_page_table_map(
     syntra_arm64_mmu_access_t access,
     int executable);
 
+/* Map normal-memory EL0-accessible 4-KiB pages (no block descriptors). */
+syntra_status_t syntra_arm64_page_table_map_user(
+    syntra_arm64_page_table_t *table,
+    uint64_t virtual_address,
+    uint64_t physical_address,
+    uint64_t size,
+    syntra_arm64_mmu_access_t access,
+    int executable);
+
+/* Verify EL0 and EL1 permission attributes for a user mapping. */
+syntra_status_t syntra_arm64_page_table_verify_user(
+    syntra_arm64_page_table_t *table,
+    uint64_t virtual_address,
+    uint64_t physical_address,
+    uint64_t size,
+    syntra_arm64_mmu_access_t access,
+    int executable);
+
 /* Verify each mapping with the software walker and its expected permissions. */
 syntra_status_t syntra_arm64_page_table_verify(
     syntra_arm64_page_table_t *table,
