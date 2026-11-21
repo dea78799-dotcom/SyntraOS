@@ -91,9 +91,10 @@ except socket.timeout:
 sock.sendall(b"sendkey a 120\n")
 time.sleep(0.15)
 try:
-    sock.recv(4096)
+    response = sock.recv(4096)
+    print("QEMU monitor response:", response.decode(errors="replace").strip())
 except socket.timeout:
-    pass
+    print("QEMU monitor response timed out after key injection")
 sock.close()
 PY
 
