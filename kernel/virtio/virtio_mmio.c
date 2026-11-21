@@ -515,7 +515,17 @@ syntra_status_t syntra_virtio_mmio_start_input_mapped(
 
     if (identity == NULL || queue == NULL || queue->ready != 1 ||
         identity->function != SYNTRA_VIRTIO_MMIO_FUNCTION_INPUT ||
+        identity->device_id != SYNTRA_VIRTIO_MMIO_DEVICE_ID_INPUT ||
         identity->version != SYNTRA_VIRTIO_MMIO_VERSION_LEGACY ||
+        queue->mapped_memory == NULL || queue->physical_base == 0U ||
+        queue->queue_size != SYNTRA_VIRTIO_INPUT_EVENT_QUEUE_SIZE ||
+        queue->used_ring_offset > queue->memory_size ||
+        queue->memory_size - queue->used_ring_offset <
+            4U + (size_t)queue->queue_size *
+                 SYNTRA_VIRTIO_SPLIT_USED_ELEMENT_SIZE ||
+        queue->event_buffer_offset > queue->memory_size ||
+        queue->memory_size - queue->event_buffer_offset <
+            (size_t)queue->queue_size * SYNTRA_VIRTIO_INPUT_EVENT_SIZE ||
         mapped_size < SYNTRA_VIRTIO_MMIO_INTERRUPT_REGISTERS_SIZE)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
@@ -559,7 +569,15 @@ syntra_status_t syntra_virtio_mmio_handle_input_irq(
     syntra_status_t status;
 
     if (queue == NULL || input_state == NULL || queue->ready != 1 ||
+        queue->mapped_memory == NULL || queue->physical_base == 0U ||
         queue->queue_size != SYNTRA_VIRTIO_INPUT_EVENT_QUEUE_SIZE ||
+        queue->used_ring_offset > queue->memory_size ||
+        queue->memory_size - queue->used_ring_offset <
+            4U + (size_t)queue->queue_size *
+                 SYNTRA_VIRTIO_SPLIT_USED_ELEMENT_SIZE ||
+        queue->event_buffer_offset > queue->memory_size ||
+        queue->memory_size - queue->event_buffer_offset <
+            (size_t)queue->queue_size * SYNTRA_VIRTIO_INPUT_EVENT_SIZE ||
         mapped_size < SYNTRA_VIRTIO_MMIO_INTERRUPT_REGISTERS_SIZE)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
@@ -612,7 +630,7 @@ syntra_status_t syntra_virtio_mmio_handle_input_irq(
         event_offset = queue->event_buffer_offset +
             ((size_t)descriptor_id * SYNTRA_VIRTIO_INPUT_EVENT_SIZE);
 
-        if (event_length < SYNTRA_VIRTIO_INPUT_EVENT_SIZE)
+        if (event_length != SYNTRA_VIRTIO_INPUT_EVENT_SIZE)
         {
             queue->dropped_event_count++;
         }
