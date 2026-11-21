@@ -56,6 +56,42 @@ cat "$UART_LOG"
 echo "=== QEMU exception trace (last 250 lines) ==="
 tail -n 250 "$QEMU_INT_LOG" || true
 
+# Resolve the first EL1 Data Abort from QEMU's architectural trace.
+FAULT_ELR="$(awk '
+    /Taking exception 4 \\[Data Abort\\]/ { in_abort=1; next }
+    in_abort && /\\.\\.\\.with ELR / {
+        sub(/^.*\\.\\.\\.with ELR /, "")
+        print
+        exit
+    }
+' "$QEMU_INT_LOG" | tr -d '\\r')"
+FAULT_FAR="$(awk '
+    /Taking exception 4 \\[Data Abort\\]/ { in_abort=1; next }
+    in_abort && /\\.\\.\\.with FAR / {
+        sub(/^.*\\.\\.\\.with FAR /, "")
+        print
+        exit
+    }
+' "$QEMU_INT_LOG" | tr -d '\\r')"
+
+if [[ -n "$FAULT_ELR" ]]; then
+    echo "=== First EL1 Data Abort address resolution ==="
+    echo "ELR=$FAULT_ELR FAR=${FAULT_FAR:-unknown}"
+    if command -v aarch64-linux-gnu-addr2line >/dev/null 2>&1; then
+        aarch64-linux-gnu-addr2line -e "$ELF_PATH" -f -C "$FAULT_ELR" ${FAULT_FAR:+"$FAULT_FAR"} || true
+    else
+        echo "addr2line is unavailable on this runner."
+    fi
+    if command -v aarch64-linux-gnu-objdump >/dev/null 2>&1; then
+        FAULT_DECIMAL=$((FAULT_ELR))
+        START_ADDR=$(printf '0x%x' "$((FAULT_DECIMAL > 32 ? FAULT_DECIMAL - 32 : 0))")
+        END_ADDR=$(printf '0x%x' "$((FAULT_DECIMAL + 48))")
+        aarch64-linux-gnu-objdump -d --start-address="$START_ADDR" --stop-address="$END_ADDR" "$ELF_PATH" || true
+    fi
+else
+    echo "No EL1 Data Abort ELR found in QEMU exception trace."
+fi
+
 check_marker() {
     local marker="$1"
     if grep -Fq "$marker" "$UART_LOG"; then
