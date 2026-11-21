@@ -124,6 +124,13 @@ for _ in $(seq 1 50); do
 done
 
 if [[ "$INPUT_READY" -ne 1 ]]; then
+    # Wait briefly for the kernel's bounded diagnostic observation window.
+    for _ in $(seq 1 30); do
+        if grep -Fq "VirtIO Input diagnostic: irq_status=" "$LOG_FILE" 2>/dev/null; then
+            break
+        fi
+        sleep 0.1
+    done
     echo "FAIL: QEMU injected KEY_A but SyntraOS did not confirm the input event." >&2
     cat "$LOG_FILE" 2>/dev/null || true
     exit 1
