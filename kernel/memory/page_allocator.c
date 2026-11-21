@@ -12,6 +12,7 @@ static uint8_t free_bitmap[SYNTRA_BITMAP_BYTES];
 static uint8_t allocated_bitmap[SYNTRA_BITMAP_BYTES];
 static size_t total_pages;
 static size_t free_pages;
+static size_t allocation_cursor;
 static int initialized;
 
 static int bitmap_test(const uint8_t *bitmap, size_t index)
@@ -50,6 +51,7 @@ syntra_status_t syntra_page_allocator_init(void)
 
     total_pages = 0U;
     free_pages = 0U;
+    allocation_cursor = 0U;
     initialized = 0;
 
     for (index = 0U; index < syntra_memory_region_count(); ++index)
@@ -79,8 +81,7 @@ syntra_status_t syntra_page_allocator_init(void)
 
         /*
          * V1 manages only physical addresses below 4 GiB. Clip crossing
-         * regions and ignore regions wholly above the supported window,
-         * rather than failing initialization for otherwise usable RAM.
+         * regions and ignore regions wholly above the supported window.
          */
         if (region.base >=
                 (uintptr_t)SYNTRA_PAGE_ALLOCATOR_MAX_PHYSICAL_ADDRESS)
@@ -144,20 +145,37 @@ syntra_status_t syntra_page_alloc(uintptr_t *physical_address)
         return SYNTRA_STATUS_OUT_OF_MEMORY;
     }
 
-    for (index = 0U; index < SYNTRA_PAGE_COUNT; ++index)
+    /* Search from the cursor first, then wrap to the beginning. */
+    for (index = allocation_cursor; index < SYNTRA_PAGE_COUNT; ++index)
     {
         if (bitmap_test(free_bitmap, index))
         {
-            bitmap_clear(free_bitmap, index);
-            bitmap_set(allocated_bitmap, index);
-            free_pages--;
-            *physical_address =
-                (uintptr_t)(index * SYNTRA_PAGE_SIZE);
-            return SYNTRA_STATUS_OK;
+            goto found;
+        }
+    }
+
+    for (index = 0U; index < allocation_cursor; ++index)
+    {
+        if (bitmap_test(free_bitmap, index))
+        {
+            goto found;
         }
     }
 
     return SYNTRA_STATUS_ERROR;
+
+found:
+    bitmap_clear(free_bitmap, index);
+    bitmap_set(allocated_bitmap, index);
+    free_pages--;
+    allocation_cursor = index + 1U;
+    if (allocation_cursor == SYNTRA_PAGE_COUNT)
+    {
+        allocation_cursor = 0U;
+    }
+    *physical_address =
+        (uintptr_t)(index * SYNTRA_PAGE_SIZE);
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t syntra_page_free(uintptr_t physical_address)
@@ -181,6 +199,10 @@ syntra_status_t syntra_page_free(uintptr_t physical_address)
     bitmap_clear(allocated_bitmap, index);
     bitmap_set(free_bitmap, index);
     free_pages++;
+    if (index < allocation_cursor)
+    {
+        allocation_cursor = index;
+    }
     return SYNTRA_STATUS_OK;
 }
 
