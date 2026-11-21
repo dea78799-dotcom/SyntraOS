@@ -19,6 +19,7 @@ add_library(syntra_gui STATIC
     kernel/gui/desktop.c
     kernel/gui/ramfb.c
     kernel/gui/desktop_session.c
+    kernel/gui/window_manager.c
     kernel/input/input.c
 )
 target_include_directories(syntra_gui PUBLIC
@@ -131,6 +132,11 @@ add_executable(gui_desktop_test
 )
 target_link_libraries(gui_desktop_test PRIVATE syntra_gui)
 add_test(NAME GUIDesktopRendererTest COMMAND gui_desktop_test)
+
+# SyntraOS bounded GUI window manager test
+add_executable(gui_window_manager_test tests/gui/window_manager_test.c)
+target_link_libraries(gui_window_manager_test PRIVATE syntra_gui)
+add_test(NAME GUIWindowManagerTest COMMAND gui_window_manager_test)
 
 
 # QEMU ramfb firmware-directory and wire-format tests
