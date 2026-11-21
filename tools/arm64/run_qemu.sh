@@ -24,7 +24,7 @@ command -v python3 >/dev/null 2>&1 || {
 
 TMP_DIR="$(mktemp -d)"
 LOG_FILE="$TMP_DIR/serial.log"
-MONITOR_SOCKET="$TMP_DIR/monitor.sock"
+QMP_SOCKET="$TMP_DIR/qmp.sock"
 QEMU_PID=""
 
 cleanup() {
@@ -49,7 +49,7 @@ timeout --signal=TERM --kill-after=2 "${TIMEOUT_SECONDS}s" "$QEMU_BIN" \
     -kernel "$ELF_PATH" \
     -display none \
     -serial "file:$LOG_FILE" \
-    -monitor "unix:$MONITOR_SOCKET,server=on,wait=off" \
+    -qmp "unix:$QMP_SOCKET,server=on,wait=off" \
     -no-reboot \
     -no-shutdown &
 QEMU_PID=$!
@@ -74,27 +74,42 @@ if [[ "$BOOT_READY" -ne 1 ]]; then
     exit 1
 fi
 
-# Inject a short KEY_A press through QEMU's monitor into its VirtIO keyboard.
-python3 - "$MONITOR_SOCKET" <<'PY'
+# Inject KEY_A through QMP so the event is delivered to the virtual keyboard.
+python3 - "$QMP_SOCKET" <<'PY'
+import json
 import socket
 import sys
 import time
 
-path = sys.argv[1]
 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-sock.settimeout(2)
-sock.connect(path)
-try:
-    sock.recv(4096)  # monitor greeting/prompt
-except socket.timeout:
-    pass
-sock.sendall(b"sendkey a 120\n")
-time.sleep(0.15)
-try:
-    response = sock.recv(4096)
-    print("QEMU monitor response:", response.decode(errors="replace").strip())
-except socket.timeout:
-    print("QEMU monitor response timed out after key injection")
+sock.settimeout(3)
+sock.connect(sys.argv[1])
+stream = sock.makefile("rwb", buffering=0)
+greeting = json.loads(stream.readline())
+print("QMP greeting received:", "QMP" in greeting)
+stream.write(b'{"execute":"qmp_capabilities"}\r\n')
+print("QMP capabilities:", stream.readline().decode().strip())
+
+def send_key(down):
+    payload = {
+        "execute": "input-send-event",
+        "arguments": {
+            "events": [{
+                "type": "key",
+                "data": {
+                    "down": down,
+                    "key": {"type": "qcode", "value": "a"}
+                }
+            }]
+        }
+    }
+    stream.write((json.dumps(payload) + "\r\n").encode())
+    print("QMP key", "down" if down else "up", stream.readline().decode().strip())
+
+send_key(True)
+time.sleep(0.2)
+send_key(False)
+stream.close()
 sock.close()
 PY
 
