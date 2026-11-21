@@ -340,16 +340,16 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
             syntra_uart_put_hex((uint64_t)virtio_device.base);
             syntra_uart_puts(" size=");
             syntra_uart_put_hex((uint64_t)virtio_device.region_size);
-            syntra_uart_puts("\\n");
+            syntra_uart_puts("\n");
         }
         else if (status == SYNTRA_STATUS_NOT_IMPLEMENTED)
         {
-            syntra_uart_puts("FDT VirtIO-MMIO: NOT FOUND\\n");
+            syntra_uart_puts("FDT VirtIO-MMIO: NOT FOUND\n");
         }
         else
         {
             /* Input is optional; malformed discovery must not break UART boot. */
-            syntra_uart_puts("FDT VirtIO-MMIO discovery: UNAVAILABLE\\n");
+            syntra_uart_puts("FDT VirtIO-MMIO discovery: UNAVAILABLE\n");
         }
     }
 
@@ -402,7 +402,7 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
         status = syntra_arm64_boot_memory_metadata_set(&metadata);
         if (status != SYNTRA_STATUS_OK)
         {
-            syntra_uart_puts("Boot memory metadata validation failed\\n");
+            syntra_uart_puts("Boot memory metadata validation failed\n");
             return status;
         }
 
@@ -418,7 +418,7 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
         syntra_uart_put_hex((uint64_t)metadata.dtb_start);
         syntra_uart_puts(" size=");
         syntra_uart_put_hex((uint64_t)metadata.dtb_size);
-        syntra_uart_puts("\\n");
+        syntra_uart_puts("\n");
     }
 
     status = syntra_arm64_memory_map_discover(
@@ -686,7 +686,7 @@ static syntra_status_t syntra_arm64_post_mmu_timer_irq_test(void)
     if ((timer_get_ticks() - initial_ticks) < 3ULL)
         return SYNTRA_STATUS_ERROR;
 
-    syntra_uart_puts("Post-MMU Generic Timer IRQ: PASS ticks=3+\\n");
+    syntra_uart_puts("Post-MMU Generic Timer IRQ: PASS ticks=3+\n");
     return SYNTRA_STATUS_OK;
 }
 
@@ -1103,7 +1103,7 @@ static syntra_status_t syntra_arm64_run_el0_hello_test(void)
     syntra_uart_put_hex((code.page_descriptor >> 8U) & 3U);
     syntra_uart_puts(" UXN=");
     syntra_uart_put_hex((code.page_descriptor >> 54U) & 1U);
-    syntra_uart_puts("\\nEL0 stack descriptor: ");
+    syntra_uart_puts("\nEL0 stack descriptor: ");
     syntra_uart_put_hex(stack.page_descriptor);
     syntra_uart_puts(" AF=");
     syntra_uart_put_hex((stack.page_descriptor >> 10U) & 1U);
@@ -1113,7 +1113,7 @@ static syntra_status_t syntra_arm64_run_el0_hello_test(void)
     syntra_uart_put_hex((stack.page_descriptor >> 8U) & 3U);
     syntra_uart_puts(" UXN=");
     syntra_uart_put_hex((stack.page_descriptor >> 54U) & 1U);
-    syntra_uart_puts("\\n");
+    syntra_uart_puts("\n");
     if (((code.page_descriptor >> 10U) & 1U) != 1U ||
         ((code.page_descriptor >> 6U) & 3U) != 3U ||
         ((code.page_descriptor >> 8U) & 3U) != 3U ||
@@ -1123,11 +1123,11 @@ static syntra_status_t syntra_arm64_run_el0_hello_test(void)
         ((stack.page_descriptor >> 8U) & 3U) != 3U ||
         ((stack.page_descriptor >> 54U) & 1U) != 1U)
     {
-        syntra_uart_puts("EL0 descriptor attributes: FAIL\\n");
+        syntra_uart_puts("EL0 descriptor attributes: FAIL\n");
         return SYNTRA_STATUS_PERMISSION_DENIED;
     }
-    syntra_uart_puts("EL0 descriptor attributes: PASS\\n");
-    syntra_uart_puts("EL0 page permissions: code=RO+UX stack=RW+UXN PASS\\n");
+    syntra_uart_puts("EL0 descriptor attributes: PASS\n");
+    syntra_uart_puts("EL0 page permissions: code=RO+UX stack=RW+UXN PASS\n");
     status = syntra_arm64_user_context_initialize(
         syntra_el0_kernel_stack, sizeof(syntra_el0_kernel_stack),
         (void *)(uintptr_t)SYNTRA_EL0_STACK_VA,
@@ -1142,8 +1142,8 @@ static syntra_status_t syntra_arm64_run_el0_hello_test(void)
         context->sp_el0 != SYNTRA_EL0_STACK_VA + SYNTRA_ARM64_MMU_PAGE_SIZE)
         return SYNTRA_STATUS_ERROR;
 
-    syntra_uart_puts("EL0 context: SPSR_EL1=0x3c0 ELR_EL1=0x10000000 SP_EL0=0x10002000 PASS\\n");
-    syntra_uart_puts("EL0 transition: ERET\\n");
+    syntra_uart_puts("EL0 context: SPSR_EL1=0x3c0 ELR_EL1=0x10000000 SP_EL0=0x10002000 PASS\n");
+    syntra_uart_puts("EL0 transition: ERET\n");
     syntra_arm64_enter_user_context(context,
         (uintptr_t)(syntra_el0_kernel_stack + sizeof(syntra_el0_kernel_stack)));
     syntra_uart_puts("EL0 test returned to EL1: PASS\n");
@@ -1231,7 +1231,7 @@ syntra_status_t syntra_arm64_boot_main(
     status = syntra_arm64_run_el0_hello_test();
     if (status != SYNTRA_STATUS_OK)
     {
-        syntra_uart_puts("SyntraOS boot failed: first EL0 process\\n");
+        syntra_uart_puts("SyntraOS boot failed: first EL0 process\n");
         return status;
     }
 
