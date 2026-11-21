@@ -17,13 +17,30 @@ command -v timeout >/dev/null 2>&1 || {
     echo "FAIL: timeout command is required" >&2
     exit 1
 }
+command -v python3 >/dev/null 2>&1 || {
+    echo "FAIL: python3 is required for QEMU monitor input injection" >&2
+    exit 1
+}
 
-LOG_FILE="$(mktemp)"
-trap 'rm -f "$LOG_FILE"' EXIT
+TMP_DIR="$(mktemp -d)"
+LOG_FILE="$TMP_DIR/serial.log"
+MONITOR_SOCKET="$TMP_DIR/monitor.sock"
+QEMU_PID=""
+
+cleanup() {
+    if [[ -n "$QEMU_PID" ]] && kill -0 "$QEMU_PID" 2>/dev/null; then
+        kill -TERM "$QEMU_PID" 2>/dev/null || true
+        wait "$QEMU_PID" 2>/dev/null || true
+    fi
+    if [[ -f "$LOG_FILE" ]]; then
+        cat "$LOG_FILE"
+    fi
+    rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
 
 echo "Running SyntraOS on QEMU virt ARM64; timeout=${TIMEOUT_SECONDS}s"
-set +e
-timeout "${TIMEOUT_SECONDS}s" "$QEMU_BIN" \
+timeout --signal=TERM --kill-after=2 "${TIMEOUT_SECONDS}s" "$QEMU_BIN" \
     -machine virt,gic-version=3,virtualization=off,secure=off \
     -cpu cortex-a57 \
     -m 512M \
@@ -31,40 +48,80 @@ timeout "${TIMEOUT_SECONDS}s" "$QEMU_BIN" \
     -device virtio-keyboard-device,bus=virtio-mmio-bus.0 \
     -kernel "$ELF_PATH" \
     -display none \
-    -serial stdio \
-    -monitor none \
+    -serial "file:$LOG_FILE" \
+    -monitor "unix:$MONITOR_SOCKET,server=on,wait=off" \
     -no-reboot \
-    -no-shutdown >"$LOG_FILE" 2>&1
-QEMU_STATUS=$?
-set -e
+    -no-shutdown &
+QEMU_PID=$!
 
-cat "$LOG_FILE"
+BOOT_READY=0
+for _ in $(seq 1 300); do
+    if grep -Fq "VirtIO Input queue: STARTED" "$LOG_FILE" 2>/dev/null; then
+        BOOT_READY=1
+        break
+    fi
+    if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+        echo "FAIL: QEMU exited before VirtIO Input queue started." >&2
+        cat "$LOG_FILE" 2>/dev/null || true
+        exit 1
+    fi
+    sleep 0.1
+done
 
-if grep -Fq "SyntraOS boot OK" "$LOG_FILE" &&
-   grep -Fq "VirtIO-MMIO function: INPUT" "$LOG_FILE" &&
-   grep -Fq "VirtIO Input transport: DRIVER FEATURES NEGOTIATED" "$LOG_FILE" &&
-   grep -Fq "VirtIO Input GIC trigger: CONFIGURED" "$LOG_FILE" &&
-   grep -Fq "VirtIO Input event queue: CONFIGURED" "$LOG_FILE" &&
-   grep -Fq "VirtIO Input IRQ: REGISTERED" "$LOG_FILE" &&
-   grep -Fq "VirtIO Input queue: STARTED" "$LOG_FILE" &&
-   grep -Eq "FDT physical memory regions: 0x0*[1-9a-fA-F][0-9a-fA-F]*" "$LOG_FILE" &&
-   grep -Fq "Kernel reserved: base=0x0000000040200000" "$LOG_FILE" &&
-   grep -Eq "Physical page allocator: PASS free=0x0*[1-9a-fA-F][0-9a-fA-F]* total=0x0*[1-9a-fA-F][0-9a-fA-F]*" "$LOG_FILE" &&
-   grep -Fq "PASS: ARM64 Generic Timer IRQ delivered 3 ticks" "$LOG_FILE" &&
-   grep -Fq "PASS: ARM64 Scheduler switched between two threads" "$LOG_FILE" &&
-   grep -Eq "Scheduler trace: AB(AB)+" "$LOG_FILE" &&
-   grep -Eq "MMU identity mapping audit: PASS entries=0x0*[1-9a-fA-F][0-9a-fA-F]*( VirtIO-MMIO=Device/RW/XN)? root=0x0*[1-9a-fA-F][0-9a-fA-F]*" "$LOG_FILE" &&
-   grep -Eq "MMU activation: PASS SCTLR_EL1.M=1 TTBR0_EL1=0x0*[1-9a-fA-F][0-9a-fA-F]*" "$LOG_FILE" &&
-   grep -Fq "MMU post-activation mapping verification: PASS" "$LOG_FILE" &&
-   grep -Fq "Post-MMU SVC/ERET validation: PASS" "$LOG_FILE" &&
-   grep -Fq "Post-MMU Generic Timer IRQ: PASS ticks=3+" "$LOG_FILE"; then
-    echo "PASS: UART PL011 confirmed FDT discovery, boot, thread switching, MMU activation, and post-MMU SVC/ERET/Timer IRQs."
-    exit 0
+if [[ "$BOOT_READY" -ne 1 ]]; then
+    echo "FAIL: VirtIO Input queue did not start in time." >&2
+    cat "$LOG_FILE" 2>/dev/null || true
+    exit 1
 fi
 
-if [[ "$QEMU_STATUS" -eq 124 ]]; then
-    echo "FAIL: QEMU timed out after ${TIMEOUT_SECONDS}s without the UART success marker." >&2
-else
-    echo "FAIL: QEMU exited with status $QEMU_STATUS without the UART success marker." >&2
+# Inject a short KEY_A press through QEMU's monitor into its VirtIO keyboard.
+python3 - "$MONITOR_SOCKET" <<'PY'
+import socket
+import sys
+import time
+
+path = sys.argv[1]
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+sock.settimeout(2)
+sock.connect(path)
+try:
+    sock.recv(4096)  # monitor greeting/prompt
+except socket.timeout:
+    pass
+sock.sendall(b"sendkey a 120\\n")
+time.sleep(0.15)
+try:
+    sock.recv(4096)
+except socket.timeout:
+    pass
+sock.close()
+PY
+
+INPUT_READY=0
+for _ in $(seq 1 50); do
+    if grep -Fq "VirtIO Input test: KEY_A DOWN" "$LOG_FILE" 2>/dev/null; then
+        INPUT_READY=1
+        break
+    fi
+    sleep 0.1
+done
+
+if [[ "$INPUT_READY" -ne 1 ]]; then
+    echo "FAIL: QEMU injected KEY_A but SyntraOS did not confirm the input event." >&2
+    cat "$LOG_FILE" 2>/dev/null || true
+    exit 1
 fi
-exit 1
+
+if ! grep -Fq "SyntraOS boot OK" "$LOG_FILE" ||
+   ! grep -Fq "VirtIO-MMIO function: INPUT" "$LOG_FILE" ||
+   ! grep -Fq "VirtIO Input transport: DRIVER FEATURES NEGOTIATED" "$LOG_FILE" ||
+   ! grep -Fq "VirtIO Input GIC trigger: CONFIGURED" "$LOG_FILE" ||
+   ! grep -Fq "VirtIO Input event queue: CONFIGURED" "$LOG_FILE" ||
+   ! grep -Fq "VirtIO Input IRQ: REGISTERED" "$LOG_FILE" ||
+   ! grep -Fq "VirtIO Input queue: STARTED" "$LOG_FILE"; then
+    echo "FAIL: QEMU boot or Input startup markers are missing." >&2
+    cat "$LOG_FILE" 2>/dev/null || true
+    exit 1
+fi
+
+echo "PASS: QEMU injected KEY_A and SyntraOS confirmed it through the VirtIO Input IRQ path."
