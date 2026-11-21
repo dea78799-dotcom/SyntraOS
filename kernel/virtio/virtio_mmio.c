@@ -184,14 +184,19 @@ syntra_status_t syntra_virtio_mmio_prepare_input_mapped(
         device, mapped_base, mapped_size,
         SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES, 0U);
     if (status != SYNTRA_STATUS_OK) return status;
-    status = virtio_mmio_mapped_write32(
-        device, mapped_base, mapped_size,
-        SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES_SEL, 1U);
-    if (status != SYNTRA_STATUS_OK) return status;
-    status = virtio_mmio_mapped_write32(
-        device, mapped_base, mapped_size,
-        SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES, 0U);
-    if (status != SYNTRA_STATUS_OK) return status;
+
+    /* Only the modern transport exposes the upper 32-bit feature word. */
+    if (identity->version == SYNTRA_VIRTIO_MMIO_VERSION_MODERN)
+    {
+        status = virtio_mmio_mapped_write32(
+            device, mapped_base, mapped_size,
+            SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES_SEL, 1U);
+        if (status != SYNTRA_STATUS_OK) return status;
+        status = virtio_mmio_mapped_write32(
+            device, mapped_base, mapped_size,
+            SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES, 0U);
+        if (status != SYNTRA_STATUS_OK) return status;
+    }
 
     if (identity->version == SYNTRA_VIRTIO_MMIO_VERSION_MODERN)
     {
