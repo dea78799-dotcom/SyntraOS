@@ -1480,6 +1480,16 @@ syntra_status_t syntra_arm64_boot_main(
         }
     }
 
+    /*
+     * Timer and EL0 validation tests leave DAIF.I masked. Enable IRQ delivery
+     * for the running kernel now that device handlers are registered.
+     */
+#if defined(__aarch64__)
+    __asm__ volatile("dsb sy" ::: "memory");
+    __asm__ volatile("msr daifclr, #2" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+#endif
+
     syntra_uart_puts("SyntraOS boot OK\n");
     return SYNTRA_STATUS_OK;
 }
