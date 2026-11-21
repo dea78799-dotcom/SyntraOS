@@ -1275,16 +1275,16 @@ syntra_status_t syntra_arm64_boot_main(
             {
                 if (identity.function == SYNTRA_VIRTIO_MMIO_FUNCTION_INPUT)
                 {
-                    syntra_uart_puts("VirtIO-MMIO function: INPUT\\n");
+                    syntra_uart_puts("VirtIO-MMIO function: INPUT\n");
                     status = syntra_virtio_mmio_prepare_input_mapped(
                         &syntra_virtio_mmio_device,
                         (volatile void *)(uintptr_t)syntra_virtio_mmio_device.base,
                         syntra_virtio_mmio_device.region_size,
                         &identity);
                     if (status == SYNTRA_STATUS_OK)
-                        syntra_uart_puts("VirtIO Input transport: DRIVER FEATURES NEGOTIATED\\n");
+                        syntra_uart_puts("VirtIO Input transport: DRIVER FEATURES NEGOTIATED\n");
                     else
-                        syntra_uart_puts("VirtIO Input transport: PREPARATION UNAVAILABLE\\n");
+                        syntra_uart_puts("VirtIO Input transport: PREPARATION UNAVAILABLE\n");
                 }
                 else if (identity.function == SYNTRA_VIRTIO_MMIO_FUNCTION_OTHER)
                     syntra_uart_puts("VirtIO-MMIO function: OTHER\n");
