@@ -56,7 +56,11 @@ add_executable(syntraos_arm64
     "${SYNTRAOS_ROOT}/kernel/gui/desktop.c"
     "${SYNTRAOS_ROOT}/kernel/gui/ramfb.c"
     "${SYNTRAOS_ROOT}/kernel/gui/desktop_session.c"
+    "${SYNTRAOS_ROOT}/kernel/gui/window_manager.c"
+    "${SYNTRAOS_ROOT}/kernel/gui/window_renderer.c"
+    "${SYNTRAOS_ROOT}/kernel/gui/window_interaction.c"
     "${SYNTRAOS_ROOT}/kernel/input/input.c"
+    "${SYNTRAOS_ROOT}/kernel/virtio/virtio_mmio.c"
 )
 
 set_target_properties(syntraos_arm64 PROPERTIES
@@ -66,10 +70,12 @@ set_target_properties(syntraos_arm64 PROPERTIES
 
 target_compile_definitions(syntraos_arm64 PRIVATE
     SYNTRA_ARM64_FREESTANDING_IMAGE=1
+    SYNTRA_QEMU_INPUT_DIAGNOSTIC=1
 )
 
 target_include_directories(syntraos_arm64 PRIVATE
     "${SYNTRAOS_ROOT}/kernel/core"
+    "${SYNTRAOS_ROOT}/kernel/virtio"
     "${SYNTRAOS_ROOT}/kernel/memory"
     "${SYNTRAOS_ROOT}/kernel/scheduler"
     "${SYNTRAOS_ROOT}/kernel/timer"

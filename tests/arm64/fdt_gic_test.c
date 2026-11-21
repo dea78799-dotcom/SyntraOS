@@ -158,6 +158,35 @@ static void build_test_fdt(int use_gic_v2)
     write_be32(blob + 36U, (uint32_t)(strings_offset - structure_offset));
 }
 
+static void test_gic_spi_route_offsets(void)
+{
+    size_t offset = 0U;
+
+    /* GICD_IROUTER uses the absolute INTID, not an SPI-relative index. */
+    assert(syntra_arm64_gic_spi_route_offset(32U, 0x10000U, &offset) ==
+           SYNTRA_STATUS_OK);
+    assert(offset == 0x6100U);
+
+    assert(syntra_arm64_gic_spi_route_offset(48U, 0x10000U, &offset) ==
+           SYNTRA_STATUS_OK);
+    assert(offset == 0x6180U);
+
+    assert(syntra_arm64_gic_spi_route_offset(1019U, 0x10000U, &offset) ==
+           SYNTRA_STATUS_OK);
+    assert(offset == 0x7FF8U);
+
+    assert(syntra_arm64_gic_spi_route_offset(31U, 0x10000U, &offset) ==
+           SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_gic_spi_route_offset(1020U, 0x10000U, &offset) ==
+           SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_gic_spi_route_offset(48U, 0x6187U, &offset) ==
+           SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_gic_spi_route_offset(48U, 0x6188U, &offset) ==
+           SYNTRA_STATUS_OK);
+    assert(syntra_arm64_gic_spi_route_offset(48U, 0x10000U, NULL) ==
+           SYNTRA_STATUS_INVALID_ARGUMENT);
+}
+
 static void test_fdt_and_gic_discovery(void)
 {
     syntra_fdt_t fdt;
@@ -335,6 +364,7 @@ static void test_rejects_overlapping_blocks(void)
 
 int main(void)
 {
+    test_gic_spi_route_offsets();
     test_fdt_and_gic_discovery();
     test_gic_v2_discovery();
     test_rejects_invalid_reg_index_and_truncation();

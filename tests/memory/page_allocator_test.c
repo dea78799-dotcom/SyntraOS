@@ -92,6 +92,26 @@ int main(void)
     assert(syntra_page_free(third) == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_free_count() == 4100U);
 
+
+    /* Contiguous runs are allocated only from adjacent free physical pages. */
+    assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_add(
+        (uintptr_t)0x40000000U, (size_t)(4U * SYNTRA_PAGE_SIZE),
+        SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_init() == SYNTRA_STATUS_OK);
+    assert(syntra_page_alloc_contiguous(0U, &first) ==
+           SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_page_alloc_contiguous(2U, NULL) ==
+           SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_page_alloc_contiguous(2U, &first) == SYNTRA_STATUS_OK);
+    assert(first == (uintptr_t)0x40000000U);
+    assert(syntra_page_allocator_free_count() == 2U);
+    assert(syntra_page_alloc_contiguous(3U, &second) ==
+           SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(syntra_page_free(first + SYNTRA_PAGE_SIZE) == SYNTRA_STATUS_OK);
+    assert(syntra_page_free(first) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_free_count() == 4U);
+
     /* Boundary policy: clip RAM crossing 4 GiB and ignore high-only RAM. */
     assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
     assert(syntra_memory_region_add(

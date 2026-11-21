@@ -90,6 +90,17 @@ syntra_status_t syntra_arm64_gic_acknowledge(
 syntra_status_t syntra_arm64_gic_end_of_interrupt(
     uint32_t interrupt_id
 );
+/* Configure an SPI as edge-rising (DT flags 1) or level-high (flags 4). */
+syntra_status_t syntra_arm64_gic_configure_interrupt(
+    uint32_t interrupt_id,
+    uint32_t trigger_flags
+);
+/* Pure helper: compute architected GICD_IROUTER offset for an SPI. */
+syntra_status_t syntra_arm64_gic_spi_route_offset(
+    uint32_t interrupt_id,
+    size_t distributor_size,
+    size_t *offset
+);
 syntra_status_t syntra_arm64_gic_enable_interrupt(uint32_t interrupt_id);
 syntra_status_t syntra_arm64_gic_disable_interrupt(uint32_t interrupt_id);
 syntra_status_t syntra_arm64_gic_set_priority(

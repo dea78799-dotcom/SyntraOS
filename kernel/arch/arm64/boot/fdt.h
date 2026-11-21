@@ -81,11 +81,27 @@ syntra_status_t syntra_fdt_find_compatible(
     syntra_fdt_node_t *node
 );
 
+/* Resolve a node by its standard phandle or legacy linux,phandle property. */
+syntra_status_t syntra_fdt_find_phandle(
+    const syntra_fdt_t *fdt,
+    uint32_t phandle,
+    syntra_fdt_node_t *node
+);
+
 /*
  * Find a property belonging directly to a node, not one of its children.
  * Returns SYNTRA_STATUS_NOT_IMPLEMENTED when the property is absent.
  */
 syntra_status_t syntra_fdt_get_property(
+    const syntra_fdt_t *fdt,
+    const syntra_fdt_node_t *node,
+    const char *property_name,
+    const uint8_t **data,
+    uint32_t *data_size
+);
+
+/* Find a property on a node or its ancestors, for inherited DT properties. */
+syntra_status_t syntra_fdt_get_inherited_property(
     const syntra_fdt_t *fdt,
     const syntra_fdt_node_t *node,
     const char *property_name,

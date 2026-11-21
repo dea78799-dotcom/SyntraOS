@@ -23,6 +23,8 @@ static uintptr_t gic_local_redistributor_base;
 #define GICD_ISENABLER 0x100U
 #define GICD_ICENABLER 0x180U
 #define GICD_IPRIORITYR 0x400U
+#define GICD_ICFGR 0xC00U
+#define GICD_IROUTER 0x6000U
 #define GICD_CTLR_RWP (1U << 31)
 #define GICD_CTLR_DS (1U << 6)
 #define GICD_CTLR_ENABLE_G1 (1U << 1)
@@ -394,6 +396,77 @@ syntra_status_t syntra_arm64_gic_set_priority(
 #endif
 }
 
+
+syntra_status_t syntra_arm64_gic_configure_interrupt(
+    uint32_t interrupt_id,
+    uint32_t trigger_flags)
+{
+    size_t register_offset;
+    uint32_t register_index;
+    uint32_t shift;
+    uint32_t mask;
+    uint32_t configuration;
+    volatile uint32_t *distributor;
+
+    if (!gic_initialized) return SYNTRA_STATUS_ERROR;
+    if (interrupt_id < 32U || interrupt_id >= 1020U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    /* GIC polarity is fixed active-high; reject unsupported DT polarity. */
+    if (trigger_flags != 1U && trigger_flags != 4U)
+        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+
+    register_offset = (size_t)GICD_ICFGR +
+                      ((size_t)(interrupt_id / 16U) * sizeof(uint32_t));
+    if (register_offset > gic_config.distributor_size ||
+        gic_config.distributor_size - register_offset < sizeof(uint32_t))
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    register_index = (uint32_t)(register_offset / sizeof(uint32_t));
+    shift = (interrupt_id % 16U) * 2U;
+    mask = 0x3U << shift;
+    configuration = trigger_flags == 1U ? 0x2U : 0x0U;
+
+#if defined(__aarch64__)
+    distributor = (volatile uint32_t *)gic_config.distributor_base;
+    distributor[register_index] =
+        (distributor[register_index] & ~mask) | (configuration << shift);
+    gic_dsb();
+    return SYNTRA_STATUS_OK;
+#else
+    (void)register_index;
+    (void)shift;
+    (void)mask;
+    (void)configuration;
+    (void)distributor;
+    return SYNTRA_STATUS_NOT_IMPLEMENTED;
+#endif
+}
+
+syntra_status_t syntra_arm64_gic_spi_route_offset(
+    uint32_t interrupt_id,
+    size_t distributor_size,
+    size_t *offset
+)
+{
+    size_t route_offset;
+
+    if (offset == NULL ||
+        interrupt_id < 32U ||
+        interrupt_id >= 1020U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    route_offset = (size_t)GICD_IROUTER +
+        ((size_t)interrupt_id * sizeof(uint64_t));
+
+    if (route_offset > distributor_size ||
+        distributor_size - route_offset < sizeof(uint64_t))
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    *offset = route_offset;
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_arm64_gic_enable_interrupt(uint32_t interrupt_id)
 {
     if (!gic_initialized) return SYNTRA_STATUS_ERROR;
@@ -419,6 +492,31 @@ syntra_status_t syntra_arm64_gic_enable_interrupt(uint32_t interrupt_id)
             if ((enable_index + 1U) * sizeof(uint32_t) >
                 gic_config.distributor_size)
                 return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+            /*
+             * On GICv3 with affinity routing enabled, explicitly route SPIs
+             * to the boot CPU before enabling them. QEMU virt is single-CPU
+             * in this test configuration, so this is the intended target.
+             */
+            if (gic_config.version == SYNTRA_ARM64_GIC_VERSION_3)
+            {
+                /*
+                 * GICD_IROUTER is indexed by the absolute INTID. SPI 48
+                 * therefore uses GICD_IROUTER + 48 * 8 (not SPI-relative).
+                 */
+                size_t route_offset;
+                syntra_status_t route_status =
+                    syntra_arm64_gic_spi_route_offset(
+                        interrupt_id,
+                        gic_config.distributor_size,
+                        &route_offset);
+                if (route_status != SYNTRA_STATUS_OK)
+                    return route_status;
+                *(volatile uint64_t *)(gic_config.distributor_base +
+                                       route_offset) =
+                    gic_mpidr_affinity(gic_read_mpidr());
+            }
+
             dist[group_index] |= bit;
             dist[enable_index] = bit;
         }

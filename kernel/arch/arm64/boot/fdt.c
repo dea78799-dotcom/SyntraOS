@@ -520,6 +520,51 @@ syntra_status_t syntra_fdt_find_compatible(
     }
 }
 
+
+syntra_status_t syntra_fdt_find_phandle(
+    const syntra_fdt_t *fdt,
+    uint32_t phandle,
+    syntra_fdt_node_t *node)
+{
+    syntra_fdt_iterator_t iterator;
+    syntra_fdt_token_t token;
+    syntra_fdt_node_t stack[64];
+    syntra_status_t status;
+
+    if (fdt == NULL || node == NULL || phandle == 0U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    syntra_fdt_iterator_init(&iterator);
+    for (;;)
+    {
+        status = syntra_fdt_next(fdt, &iterator, &token);
+        if (status != SYNTRA_STATUS_OK)
+            return status == SYNTRA_STATUS_NOT_IMPLEMENTED
+                ? SYNTRA_STATUS_NOT_IMPLEMENTED : status;
+
+        if (token.type == SYNTRA_FDT_TOKEN_BEGIN_NODE)
+        {
+            if (token.depth >= 64U)
+                return SYNTRA_STATUS_NOT_IMPLEMENTED;
+            stack[token.depth].begin_offset = token.offset;
+            stack[token.depth].depth = token.depth;
+        }
+        else if (token.type == SYNTRA_FDT_TOKEN_PROPERTY &&
+                 token.depth != 0U && token.depth <= 64U &&
+                 token.data_size == 4U &&
+                 (fdt_string_equals(token.name, "phandle") ||
+                  fdt_string_equals(token.name, "linux,phandle")))
+        {
+            uint32_t value = fdt_read_be32(token.data);
+            if (value == phandle)
+            {
+                *node = stack[token.depth - 1U];
+                return SYNTRA_STATUS_OK;
+            }
+        }
+    }
+}
+
 syntra_status_t syntra_fdt_get_property(
     const syntra_fdt_t *fdt,
     const syntra_fdt_node_t *node,
@@ -622,6 +667,38 @@ static syntra_status_t fdt_get_parent_node(
     }
 
     return SYNTRA_STATUS_ERROR;
+}
+
+
+syntra_status_t syntra_fdt_get_inherited_property(
+    const syntra_fdt_t *fdt,
+    const syntra_fdt_node_t *node,
+    const char *property_name,
+    const uint8_t **data,
+    uint32_t *data_size)
+{
+    syntra_fdt_node_t current;
+    syntra_status_t status;
+    unsigned int depth;
+
+    if (fdt == NULL || node == NULL || property_name == NULL ||
+        data == NULL || data_size == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    current = *node;
+    for (depth = 0U; depth < 64U; ++depth)
+    {
+        status = syntra_fdt_get_property(
+            fdt, &current, property_name, data, data_size);
+        if (status == SYNTRA_STATUS_OK) return SYNTRA_STATUS_OK;
+        if (status != SYNTRA_STATUS_NOT_IMPLEMENTED) return status;
+        if (current.depth == 0U) return SYNTRA_STATUS_NOT_IMPLEMENTED;
+
+        status = fdt_get_parent_node(fdt, &current, &current);
+        if (status != SYNTRA_STATUS_OK) return status;
+    }
+
+    return SYNTRA_STATUS_NOT_IMPLEMENTED;
 }
 
 static int fdt_read_cells(

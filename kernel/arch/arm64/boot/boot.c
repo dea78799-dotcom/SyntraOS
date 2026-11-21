@@ -13,12 +13,66 @@
 #include "../page_table_builder.h"
 #include "../mmu_mapping_plan.h"
 #include "../../../gui/ramfb.h"
+#include "../../../virtio/virtio_mmio.h"
 
 /* Optional QEMU fw_cfg MMIO window, discovered from the supplied FDT. */
 static uintptr_t syntra_fw_cfg_base;
 static syntra_arm64_page_table_t syntra_active_page_table;
 static _Alignas(4096) uint8_t syntra_el0_kernel_stack[4096];
 static size_t syntra_fw_cfg_size;
+static syntra_virtio_mmio_device_t syntra_virtio_mmio_device;
+static int syntra_virtio_mmio_available;
+static syntra_virtio_input_queue_t syntra_virtio_input_queue;
+static syntra_input_state_t syntra_virtio_input_state;
+static int syntra_virtio_input_irq_registered;
+static int syntra_virtio_input_key_a_test_reported;
+static int syntra_virtio_input_irq_test_reported;
+
+static void syntra_uart_puts(const char *message);
+static void syntra_uart_put_hex(uint64_t value);
+
+static void syntra_virtio_input_irq_handler(
+    syntra_interrupt_id_t interrupt_id,
+    void *context)
+{
+    syntra_virtio_input_queue_t *queue =
+        (syntra_virtio_input_queue_t *)context;
+    syntra_status_t status;
+
+    if (queue == NULL ||
+        interrupt_id != syntra_virtio_mmio_device.interrupt_id)
+        return;
+
+    status = syntra_virtio_mmio_handle_input_irq(
+        &syntra_virtio_mmio_device,
+        (volatile void *)(uintptr_t)syntra_virtio_mmio_device.base,
+        syntra_virtio_mmio_device.region_size,
+        queue,
+        &syntra_virtio_input_state);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        queue->irq_error_count++;
+        return;
+    }
+
+    if (!syntra_virtio_input_irq_test_reported)
+    {
+        syntra_virtio_input_irq_test_reported = 1;
+        syntra_uart_puts("VirtIO Input IRQ: HANDLED events=");
+        syntra_uart_put_hex(queue->event_count);
+        syntra_uart_puts(" keys=");
+        syntra_uart_put_hex(queue->key_event_count);
+        syntra_uart_puts("\n");
+    }
+
+    /* QEMU test marker: report once when KEY_A is observed pressed. */
+    if (!syntra_virtio_input_key_a_test_reported &&
+        queue->key_a_press_count != 0U)
+    {
+        syntra_virtio_input_key_a_test_reported = 1;
+        syntra_uart_puts("VirtIO Input test: KEY_A DOWN\n");
+    }
+}
 #include "../timer.h"
 #include "../../../timer/timer.h"
 #include "../../../interrupt/interrupt.h"
@@ -330,6 +384,44 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
         }
     }
 
+    syntra_virtio_mmio_available = 0;
+    syntra_virtio_mmio_device.base = 0U;
+    syntra_virtio_mmio_device.region_size = 0U;
+    syntra_virtio_mmio_device.reg_index = 0U;
+    syntra_virtio_mmio_device.discovered = 0;
+    status = syntra_virtio_mmio_discover_first(
+        &fdt, &syntra_virtio_mmio_device);
+    if (status == SYNTRA_STATUS_OK)
+    {
+        syntra_virtio_mmio_available = 1;
+        syntra_uart_puts("FDT VirtIO-MMIO region discovered: base=");
+        syntra_uart_put_hex((uint64_t)syntra_virtio_mmio_device.base);
+        syntra_uart_puts(" size=");
+        syntra_uart_put_hex((uint64_t)syntra_virtio_mmio_device.region_size);
+        syntra_uart_puts("\n");
+        if (syntra_virtio_mmio_device.interrupt_valid)
+        {
+            syntra_uart_puts("FDT VirtIO-MMIO interrupt: id=");
+            syntra_uart_put_hex(syntra_virtio_mmio_device.interrupt_id);
+            syntra_uart_puts(" flags=");
+            syntra_uart_put_hex(syntra_virtio_mmio_device.interrupt_flags);
+            syntra_uart_puts("\n");
+        }
+        else
+        {
+            syntra_uart_puts("FDT VirtIO-MMIO interrupt: UNAVAILABLE\n");
+        }
+    }
+    else if (status == SYNTRA_STATUS_NOT_IMPLEMENTED)
+    {
+        syntra_uart_puts("FDT VirtIO-MMIO: NOT FOUND\n");
+    }
+    else
+    {
+        /* Input is optional; malformed discovery must not break UART boot. */
+        syntra_uart_puts("FDT VirtIO-MMIO discovery: UNAVAILABLE\n");
+    }
+
     syntra_fdt_iterator_init(&iterator);
 
     for (;;)
@@ -379,7 +471,7 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
         status = syntra_arm64_boot_memory_metadata_set(&metadata);
         if (status != SYNTRA_STATUS_OK)
         {
-            syntra_uart_puts("Boot memory metadata validation failed\\n");
+            syntra_uart_puts("Boot memory metadata validation failed\n");
             return status;
         }
 
@@ -395,7 +487,7 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
         syntra_uart_put_hex((uint64_t)metadata.dtb_start);
         syntra_uart_puts(" size=");
         syntra_uart_put_hex((uint64_t)metadata.dtb_size);
-        syntra_uart_puts("\\n");
+        syntra_uart_puts("\n");
     }
 
     status = syntra_arm64_memory_map_discover(
@@ -663,7 +755,7 @@ static syntra_status_t syntra_arm64_post_mmu_timer_irq_test(void)
     if ((timer_get_ticks() - initial_ticks) < 3ULL)
         return SYNTRA_STATUS_ERROR;
 
-    syntra_uart_puts("Post-MMU Generic Timer IRQ: PASS ticks=3+\\n");
+    syntra_uart_puts("Post-MMU Generic Timer IRQ: PASS ticks=3+\n");
     return SYNTRA_STATUS_OK;
 }
 
@@ -895,10 +987,15 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
         if (status != SYNTRA_STATUS_OK) return status;
     }
 
-    status = syntra_arm64_mmu_mapping_plan_build(
+    status = syntra_arm64_mmu_mapping_plan_build_with_virtio(
         &metadata, regions, region_count, &gic_info.config,
         SYNTRA_PL011_BASE, 0x1000U,
-        syntra_fw_cfg_base, syntra_fw_cfg_size, &plan);
+        syntra_fw_cfg_base, syntra_fw_cfg_size,
+        syntra_virtio_mmio_available
+            ? syntra_virtio_mmio_device.base : 0U,
+        syntra_virtio_mmio_available
+            ? syntra_virtio_mmio_device.region_size : 0U,
+        &plan);
     if (status != SYNTRA_STATUS_OK)
     {
         syntra_uart_puts("MMU mapping plan: FAIL\n");
@@ -944,6 +1041,10 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
 
     syntra_uart_puts("MMU identity mapping audit: PASS entries=");
     syntra_uart_put_hex((uint64_t)plan.count);
+    if (syntra_virtio_mmio_available)
+    {
+        syntra_uart_puts(" VirtIO-MMIO=Device/RW/XN");
+    }
     syntra_uart_puts(" root=");
     syntra_uart_put_hex(page_table.root_physical_address);
     syntra_uart_puts("\n");
@@ -1080,7 +1181,7 @@ static syntra_status_t syntra_arm64_run_el0_hello_test(void)
     syntra_uart_put_hex((code.page_descriptor >> 8U) & 3U);
     syntra_uart_puts(" UXN=");
     syntra_uart_put_hex((code.page_descriptor >> 54U) & 1U);
-    syntra_uart_puts("\\nEL0 stack descriptor: ");
+    syntra_uart_puts("\nEL0 stack descriptor: ");
     syntra_uart_put_hex(stack.page_descriptor);
     syntra_uart_puts(" AF=");
     syntra_uart_put_hex((stack.page_descriptor >> 10U) & 1U);
@@ -1090,7 +1191,7 @@ static syntra_status_t syntra_arm64_run_el0_hello_test(void)
     syntra_uart_put_hex((stack.page_descriptor >> 8U) & 3U);
     syntra_uart_puts(" UXN=");
     syntra_uart_put_hex((stack.page_descriptor >> 54U) & 1U);
-    syntra_uart_puts("\\n");
+    syntra_uart_puts("\n");
     if (((code.page_descriptor >> 10U) & 1U) != 1U ||
         ((code.page_descriptor >> 6U) & 3U) != 3U ||
         ((code.page_descriptor >> 8U) & 3U) != 3U ||
@@ -1100,11 +1201,11 @@ static syntra_status_t syntra_arm64_run_el0_hello_test(void)
         ((stack.page_descriptor >> 8U) & 3U) != 3U ||
         ((stack.page_descriptor >> 54U) & 1U) != 1U)
     {
-        syntra_uart_puts("EL0 descriptor attributes: FAIL\\n");
+        syntra_uart_puts("EL0 descriptor attributes: FAIL\n");
         return SYNTRA_STATUS_PERMISSION_DENIED;
     }
-    syntra_uart_puts("EL0 descriptor attributes: PASS\\n");
-    syntra_uart_puts("EL0 page permissions: code=RO+UX stack=RW+UXN PASS\\n");
+    syntra_uart_puts("EL0 descriptor attributes: PASS\n");
+    syntra_uart_puts("EL0 page permissions: code=RO+UX stack=RW+UXN PASS\n");
     status = syntra_arm64_user_context_initialize(
         syntra_el0_kernel_stack, sizeof(syntra_el0_kernel_stack),
         (void *)(uintptr_t)SYNTRA_EL0_STACK_VA,
@@ -1119,13 +1220,57 @@ static syntra_status_t syntra_arm64_run_el0_hello_test(void)
         context->sp_el0 != SYNTRA_EL0_STACK_VA + SYNTRA_ARM64_MMU_PAGE_SIZE)
         return SYNTRA_STATUS_ERROR;
 
-    syntra_uart_puts("EL0 context: SPSR_EL1=0x3c0 ELR_EL1=0x10000000 SP_EL0=0x10002000 PASS\\n");
-    syntra_uart_puts("EL0 transition: ERET\\n");
+    syntra_uart_puts("EL0 context: SPSR_EL1=0x3c0 ELR_EL1=0x10000000 SP_EL0=0x10002000 PASS\n");
+    syntra_uart_puts("EL0 transition: ERET\n");
     syntra_arm64_enter_user_context(context,
         (uintptr_t)(syntra_el0_kernel_stack + sizeof(syntra_el0_kernel_stack)));
     syntra_uart_puts("EL0 test returned to EL1: PASS\n");
     return SYNTRA_STATUS_OK;
 }
+
+#if defined(SYNTRA_QEMU_INPUT_DIAGNOSTIC)
+static void syntra_virtio_input_qemu_diagnostic_wait(void)
+{
+    uint64_t start;
+    uint64_t frequency;
+    volatile uint32_t *registers;
+    volatile uint8_t *queue_memory;
+    uint16_t used_index;
+    uint32_t interrupt_status;
+
+    if (syntra_virtio_input_queue.ready != 1 ||
+        syntra_virtio_input_queue.mapped_memory == NULL)
+        return;
+
+    frequency = syntra_arm64_timer_read_frequency();
+    start = syntra_arm64_timer_read_counter();
+    while ((syntra_arm64_timer_read_counter() - start) < frequency)
+    {
+        /* One-second QEMU-only observation window for injected input. */
+    }
+
+    registers = (volatile uint32_t *)(uintptr_t)
+        syntra_virtio_mmio_device.base;
+    interrupt_status = registers[
+        SYNTRA_VIRTIO_MMIO_INTERRUPT_STATUS / sizeof(uint32_t)];
+    queue_memory = (volatile uint8_t *)
+        syntra_virtio_input_queue.mapped_memory;
+    used_index = (uint16_t)((uint16_t)queue_memory[
+        syntra_virtio_input_queue.used_ring_offset + 2U] |
+        ((uint16_t)queue_memory[
+        syntra_virtio_input_queue.used_ring_offset + 3U] << 8U);
+
+    syntra_uart_puts("VirtIO Input diagnostic: irq_status=");
+    syntra_uart_put_hex(interrupt_status);
+    syntra_uart_puts(" used_index=");
+    syntra_uart_put_hex(used_index);
+    syntra_uart_puts(" irq_events=");
+    syntra_uart_put_hex(syntra_virtio_input_queue.event_count);
+    syntra_uart_puts(" key_a=");
+    syntra_uart_put_hex(syntra_virtio_input_queue.key_a_press_count);
+    syntra_uart_puts("\n");
+}
+#endif
 
 syntra_status_t syntra_arm64_boot_main(
     uint64_t dtb_address,
@@ -1205,10 +1350,159 @@ syntra_status_t syntra_arm64_boot_main(
         return status;
     }
 
+    /*
+     * The MMU audit has verified the identity-mapped VirtIO window as
+     * Device/RW/XN. Only now perform bounded, read-only identification reads.
+     */
+    if (syntra_virtio_mmio_available)
+    {
+        syntra_virtio_mmio_register_snapshot_t snapshot;
+        syntra_virtio_mmio_identity_t identity;
+
+        status = syntra_virtio_mmio_read_identity_mapped(
+            &syntra_virtio_mmio_device,
+            (const volatile void *)(uintptr_t)syntra_virtio_mmio_device.base,
+            syntra_virtio_mmio_device.region_size,
+            &snapshot);
+        if (status == SYNTRA_STATUS_OK)
+        {
+            syntra_uart_puts("VirtIO-MMIO ID registers: magic=");
+            syntra_uart_put_hex(snapshot.magic_value);
+            syntra_uart_puts(" version=");
+            syntra_uart_put_hex(snapshot.version);
+            syntra_uart_puts(" device=");
+            syntra_uart_put_hex(snapshot.device_id);
+            syntra_uart_puts(" vendor=");
+            syntra_uart_put_hex(snapshot.vendor_id);
+            syntra_uart_puts("\n");
+
+            status = syntra_virtio_mmio_decode_identity(
+                &snapshot, &identity);
+            if (status == SYNTRA_STATUS_OK)
+            {
+                if (identity.function == SYNTRA_VIRTIO_MMIO_FUNCTION_INPUT)
+                {
+                    syntra_uart_puts("VirtIO-MMIO function: INPUT\n");
+                    status = syntra_virtio_mmio_prepare_input_mapped(
+                        &syntra_virtio_mmio_device,
+                        (volatile void *)(uintptr_t)syntra_virtio_mmio_device.base,
+                        syntra_virtio_mmio_device.region_size,
+                        &identity);
+                    if (status == SYNTRA_STATUS_OK)
+                    {
+                        syntra_uart_puts("VirtIO Input transport: DRIVER FEATURES NEGOTIATED\n");
+                        if (syntra_virtio_mmio_device.interrupt_valid)
+                        {
+                            status = syntra_arm64_gic_configure_interrupt(
+                                syntra_virtio_mmio_device.interrupt_id,
+                                syntra_virtio_mmio_device.interrupt_flags);
+                            if (status == SYNTRA_STATUS_OK)
+                            {
+                                uintptr_t queue_physical_base = 0U;
+                                syntra_uart_puts("VirtIO Input GIC trigger: CONFIGURED\n");
+                                status = syntra_page_alloc_contiguous(
+                                    2U, &queue_physical_base);
+                                if (status == SYNTRA_STATUS_OK)
+                                {
+                                    status = syntra_virtio_mmio_setup_input_event_queue_mapped(
+                                        &syntra_virtio_mmio_device,
+                                        (volatile void *)(uintptr_t)syntra_virtio_mmio_device.base,
+                                        syntra_virtio_mmio_device.region_size,
+                                        &identity,
+                                        (void *)(uintptr_t)queue_physical_base,
+                                        queue_physical_base,
+                                        2U * SYNTRA_PAGE_SIZE,
+                                        &syntra_virtio_input_queue);
+                                    if (status == SYNTRA_STATUS_OK)
+                                    {
+                                        syntra_uart_puts("VirtIO Input event queue: CONFIGURED\n");
+                                        status = syntra_input_init(
+                                            &syntra_virtio_input_state,
+                                            640U, 480U);
+                                        if (status == SYNTRA_STATUS_OK)
+                                            status = interrupt_register(
+                                                syntra_virtio_mmio_device.interrupt_id,
+                                                syntra_virtio_input_irq_handler,
+                                                &syntra_virtio_input_queue);
+                                        if (status == SYNTRA_STATUS_OK)
+                                        {
+                                            syntra_virtio_input_irq_registered = 1;
+                                            status = interrupt_set_priority(
+                                                syntra_virtio_mmio_device.interrupt_id,
+                                                0xA0U);
+                                        }
+                                        if (status == SYNTRA_STATUS_OK)
+                                            status = interrupt_enable(
+                                                syntra_virtio_mmio_device.interrupt_id);
+                                        if (status == SYNTRA_STATUS_OK)
+                                            status = syntra_virtio_mmio_start_input_mapped(
+                                                &syntra_virtio_mmio_device,
+                                                (volatile void *)(uintptr_t)syntra_virtio_mmio_device.base,
+                                                syntra_virtio_mmio_device.region_size,
+                                                &identity,
+                                                &syntra_virtio_input_queue);
+                                        if (status == SYNTRA_STATUS_OK)
+                                        {
+                                            syntra_uart_puts("VirtIO Input IRQ: REGISTERED\n");
+                                            syntra_uart_puts("VirtIO Input queue: STARTED\n");
+                                        }
+                                        else
+                                        {
+                                            (void)interrupt_disable(
+                                                syntra_virtio_mmio_device.interrupt_id);
+                                            if (syntra_virtio_input_irq_registered)
+                                            {
+                                                (void)interrupt_unregister(
+                                                    syntra_virtio_mmio_device.interrupt_id);
+                                                syntra_virtio_input_irq_registered = 0;
+                                            }
+                                            syntra_uart_puts("VirtIO Input IRQ/queue: UNAVAILABLE\n");
+                                        }
+                                    }
+                                    else
+                                    {
+                                        (void)syntra_page_free(queue_physical_base);
+                                        (void)syntra_page_free(queue_physical_base + SYNTRA_PAGE_SIZE);
+                                        syntra_uart_puts("VirtIO Input event queue: UNAVAILABLE\n");
+                                    }
+                                }
+                                else
+                                {
+                                    syntra_uart_puts("VirtIO Input event queue: ALLOCATION FAILED\n");
+                                }
+                            }
+                            else
+                            {
+                                syntra_uart_puts("VirtIO Input GIC trigger: UNSUPPORTED\n");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        syntra_uart_puts("VirtIO Input transport: PREPARATION UNAVAILABLE\n");
+                    }
+                }
+                else if (identity.function == SYNTRA_VIRTIO_MMIO_FUNCTION_OTHER)
+                    syntra_uart_puts("VirtIO-MMIO function: OTHER\n");
+                else
+                    syntra_uart_puts("VirtIO-MMIO function: EMPTY SLOT\n");
+            }
+            else
+            {
+                syntra_uart_puts("VirtIO-MMIO identity decode: UNAVAILABLE\n");
+            }
+        }
+        else
+        {
+            /* Optional input transport probe must not prevent the OS booting. */
+            syntra_uart_puts("VirtIO-MMIO mapped identity read: UNAVAILABLE\n");
+        }
+    }
+
     status = syntra_arm64_run_el0_hello_test();
     if (status != SYNTRA_STATUS_OK)
     {
-        syntra_uart_puts("SyntraOS boot failed: first EL0 process\\n");
+        syntra_uart_puts("SyntraOS boot failed: first EL0 process\n");
         return status;
     }
 
@@ -1230,6 +1524,19 @@ syntra_status_t syntra_arm64_boot_main(
         }
     }
 
+    /*
+     * Timer and EL0 validation tests leave DAIF.I masked. Enable IRQ delivery
+     * for the running kernel now that device handlers are registered.
+     */
+#if defined(__aarch64__)
+    __asm__ volatile("dsb sy" ::: "memory");
+    __asm__ volatile("msr daifclr, #2" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+#endif
+
     syntra_uart_puts("SyntraOS boot OK\n");
+#if defined(SYNTRA_QEMU_INPUT_DIAGNOSTIC)
+    syntra_virtio_input_qemu_diagnostic_wait();
+#endif
     return SYNTRA_STATUS_OK;
 }

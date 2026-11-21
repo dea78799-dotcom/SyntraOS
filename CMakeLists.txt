@@ -19,6 +19,9 @@ add_library(syntra_gui STATIC
     kernel/gui/desktop.c
     kernel/gui/ramfb.c
     kernel/gui/desktop_session.c
+    kernel/gui/window_manager.c
+    kernel/gui/window_renderer.c
+    kernel/gui/window_interaction.c
     kernel/input/input.c
 )
 target_include_directories(syntra_gui PUBLIC
@@ -77,6 +80,8 @@ add_library(syntra_kernel STATIC
     kernel/hal/hal_device_event_dispatcher.c
     kernel/hal/hal_device_event_router.c
     kernel/input/input.c
+    kernel/arch/arm64/boot/fdt.c
+    kernel/virtio/virtio_mmio.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -95,6 +100,7 @@ target_include_directories(syntra_kernel PUBLIC
     kernel/config
     kernel/hal
     kernel/input
+    kernel/virtio
 )
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -112,6 +118,16 @@ endif()
 # ==================================================
 
 enable_testing()
+
+# VirtIO-MMIO metadata validation test
+add_executable(virtio_mmio_test tests/virtio/virtio_mmio_test.c)
+target_link_libraries(virtio_mmio_test PRIVATE syntra_kernel)
+add_test(NAME VirtIOMMIOValidationTest COMMAND virtio_mmio_test)
+
+# ARM64 FDT phandle lookup test
+add_executable(fdt_phandle_test tests/arm64/fdt_phandle_test.c)
+target_link_libraries(fdt_phandle_test PRIVATE syntra_kernel)
+add_test(NAME FDTPhandleLookupTest COMMAND fdt_phandle_test)
 
 # SyntraOS input event core test
 add_executable(input_test tests/input/input_test.c)
@@ -131,6 +147,21 @@ add_executable(gui_desktop_test
 )
 target_link_libraries(gui_desktop_test PRIVATE syntra_gui)
 add_test(NAME GUIDesktopRendererTest COMMAND gui_desktop_test)
+
+# SyntraOS bounded GUI window manager test
+add_executable(gui_window_manager_test tests/gui/window_manager_test.c)
+target_link_libraries(gui_window_manager_test PRIVATE syntra_gui)
+add_test(NAME GUIWindowManagerTest COMMAND gui_window_manager_test)
+
+# SyntraOS GUI window frame renderer test
+add_executable(gui_window_renderer_test tests/gui/window_renderer_test.c)
+target_link_libraries(gui_window_renderer_test PRIVATE syntra_gui)
+add_test(NAME GUIWindowRendererTest COMMAND gui_window_renderer_test)
+
+# SyntraOS GUI window pointer interaction test
+add_executable(gui_window_interaction_test tests/gui/window_interaction_test.c)
+target_link_libraries(gui_window_interaction_test PRIVATE syntra_gui)
+add_test(NAME GUIWindowInteractionTest COMMAND gui_window_interaction_test)
 
 
 # QEMU ramfb firmware-directory and wire-format tests
