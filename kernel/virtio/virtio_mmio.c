@@ -362,7 +362,7 @@ syntra_status_t syntra_virtio_mmio_setup_input_event_queue_mapped(
     const size_t used_offset =
         virtio_mmio_align_up(available_offset + available_bytes, 4096U);
     const size_t event_offset =
-        virtio_mmio_align_up(used_offset + used_bytes, 4U);
+        virtio_mmio_align_up(used_offset + used_bytes, 8U);
     const size_t required_bytes =
         event_offset + queue_size * SYNTRA_VIRTIO_INPUT_EVENT_SIZE;
     uint32_t queue_num_max;
