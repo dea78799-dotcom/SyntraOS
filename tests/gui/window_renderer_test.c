@@ -73,6 +73,11 @@ int main(void)
     assert(pixels[(size_t)75U * STRIDE + 313U] == 0xFF54D6E8U);
     assert(pixels[(size_t)249U * STRIDE + 49U] == 0xFF54D6E8U);
 
+    manager.windows[0].app_type = (syntra_gui_app_type_t)99;
+    assert(syntra_gui_render_windows(&framebuffer, &manager) ==
+           SYNTRA_STATUS_INVALID_ARGUMENT);
+    manager.windows[0].app_type = SYNTRA_GUI_APP_FILES;
+
     assert(syntra_gui_render_windows(&wrong_size, &manager) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(syntra_gui_render_windows(&framebuffer, NULL) ==
