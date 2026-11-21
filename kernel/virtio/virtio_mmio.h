@@ -42,6 +42,9 @@ typedef struct
     uintptr_t base;
     size_t region_size;
     uint32_t reg_index;
+    uint32_t interrupt_id;
+    uint32_t interrupt_flags;
+    int interrupt_valid;
     int discovered;
 } syntra_virtio_mmio_device_t;
 
