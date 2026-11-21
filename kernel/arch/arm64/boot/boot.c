@@ -55,7 +55,7 @@ static void syntra_virtio_input_irq_handler(
 
     /* QEMU test marker: report once when KEY_A is observed pressed. */
     if (!syntra_virtio_input_key_a_test_reported &&
-        syntra_input_key_down(&syntra_virtio_input_state, 30U))
+        queue->key_a_press_count != 0U)
     {
         syntra_virtio_input_key_a_test_reported = 1;
         syntra_uart_puts("VirtIO Input test: KEY_A DOWN\n");
