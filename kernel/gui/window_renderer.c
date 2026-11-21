@@ -11,6 +11,109 @@
 #define COLOR_WINDOW_TEXT 0xFFF4F7FFU
 #define COLOR_WINDOW_CLOSE 0xFFB83D55U
 
+
+static syntra_status_t draw_app_surface(
+    syntra_framebuffer_t *framebuffer,
+    const syntra_gui_window_t *window)
+{
+    const uint32_t left = window->x + 4U;
+    const uint32_t top = window->y + 24U;
+    const uint32_t inner_width = window->width > 8U ? window->width - 8U : 0U;
+    const uint32_t inner_height = window->height > 28U ? window->height - 28U : 0U;
+    uint32_t row_y;
+    syntra_status_t status;
+
+    if (inner_width < 40U || inner_height < 24U)
+        return SYNTRA_STATUS_OK;
+
+    if (window->app_type == SYNTRA_GUI_APP_FILES)
+    {
+        static const char *const names[] = {
+            "HOME", "DOCUMENTS", "DOWNLOADS", "PICTURES"
+        };
+        uint32_t row;
+        status = syntra_framebuffer_fill_rect(
+            framebuffer, left, top, inner_width, inner_height, 0xFF0C1428U);
+        if (status != SYNTRA_STATUS_OK) return status;
+        status = syntra_framebuffer_fill_rect(
+            framebuffer, left, top, 34U, inner_height, 0xFF1A2948U);
+        if (status != SYNTRA_STATUS_OK) return status;
+        status = syntra_framebuffer_draw_text(
+            framebuffer, left + 5U, top + 6U, "FILES",
+            COLOR_WINDOW_TEXT, 0xFF1A2948U, 1U);
+        if (status != SYNTRA_STATUS_OK) return status;
+        for (row = 0U; row < 4U; ++row)
+        {
+            row_y = top + 8U + row * 22U;
+            if (row_y + 16U >= top + inner_height) break;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, left + 42U, row_y, 12U, 9U, 0xFF54D6E8U);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, left + 42U, row_y + 3U, 12U, 9U, 0xFF3B9FB5U);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_framebuffer_draw_text(
+                framebuffer, left + 62U, row_y + 2U, names[row],
+                COLOR_WINDOW_TEXT, 0xFF0C1428U, 1U);
+            if (status != SYNTRA_STATUS_OK) return status;
+        }
+        return SYNTRA_STATUS_OK;
+    }
+
+    if (window->app_type == SYNTRA_GUI_APP_SETTINGS)
+    {
+        static const char *const names[] = {
+            "DISPLAY", "INPUT", "SYSTEM", "ABOUT"
+        };
+        uint32_t row;
+        status = syntra_framebuffer_fill_rect(
+            framebuffer, left, top, inner_width, inner_height, 0xFF0C1428U);
+        if (status != SYNTRA_STATUS_OK) return status;
+        for (row = 0U; row < 4U; ++row)
+        {
+            row_y = top + 5U + row * 22U;
+            if (row_y + 18U >= top + inner_height) break;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, left + 5U, row_y, inner_width - 10U, 17U,
+                0xFF1A2948U);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, left + 8U, row_y + 4U, 5U, 9U,
+                0xFF54D6E8U);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_framebuffer_draw_text(
+                framebuffer, left + 20U, row_y + 5U, names[row],
+                COLOR_WINDOW_TEXT, 0xFF1A2948U, 1U);
+            if (status != SYNTRA_STATUS_OK) return status;
+        }
+        return SYNTRA_STATUS_OK;
+    }
+
+    if (window->app_type == SYNTRA_GUI_APP_LAUNCHER)
+    {
+        static const char *const names[] = {"FILES", "SET", "APP", "INFO"};
+        static const uint32_t colors[] = {
+            0xFF54D6E8U, 0xFF58C99AU, 0xFF9874F5U, 0xFFFFB66EU
+        };
+        uint32_t tile_width = (inner_width - 12U) / 2U;
+        uint32_t row;
+        for (row = 0U; row < 4U; ++row)
+        {
+            uint32_t x = left + 4U + (row % 2U) * (tile_width + 4U);
+            row_y = top + 4U + (row / 2U) * 32U;
+            if (row_y + 26U >= top + inner_height) break;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, x, row_y, tile_width, 24U, colors[row]);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_framebuffer_draw_text(
+                framebuffer, x + 5U, row_y + 9U, names[row],
+                COLOR_WINDOW_TEXT, colors[row], 1U);
+            if (status != SYNTRA_STATUS_OK) return status;
+        }
+    }
+    return SYNTRA_STATUS_OK;
+}
+
 static syntra_status_t draw_window(
     syntra_framebuffer_t *framebuffer,
     const syntra_gui_window_t *window,
@@ -75,6 +178,9 @@ static syntra_status_t draw_window(
             COLOR_WINDOW_TEXT, title_color, 1U);
         if (status != SYNTRA_STATUS_OK) return status;
     }
+
+    if (window->app_type != SYNTRA_GUI_APP_GENERIC)
+        return draw_app_surface(framebuffer, window);
 
     return SYNTRA_STATUS_OK;
 }
