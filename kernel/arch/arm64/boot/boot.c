@@ -25,6 +25,9 @@ static int syntra_virtio_mmio_available;
 static syntra_virtio_input_queue_t syntra_virtio_input_queue;
 static syntra_input_state_t syntra_virtio_input_state;
 static int syntra_virtio_input_irq_registered;
+static int syntra_virtio_input_key_a_test_reported;
+
+static void syntra_uart_puts(const char *message);
 
 static void syntra_virtio_input_irq_handler(
     syntra_interrupt_id_t interrupt_id,
@@ -45,7 +48,18 @@ static void syntra_virtio_input_irq_handler(
         queue,
         &syntra_virtio_input_state);
     if (status != SYNTRA_STATUS_OK)
+    {
         queue->irq_error_count++;
+        return;
+    }
+
+    /* QEMU test marker: report once when KEY_A is observed pressed. */
+    if (!syntra_virtio_input_key_a_test_reported &&
+        syntra_input_key_down(&syntra_virtio_input_state, 30U))
+    {
+        syntra_virtio_input_key_a_test_reported = 1;
+        syntra_uart_puts("VirtIO Input test: KEY_A DOWN\n");
+    }
 }
 #include "../timer.h"
 #include "../../../timer/timer.h"
