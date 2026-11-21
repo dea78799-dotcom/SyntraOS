@@ -122,6 +122,7 @@ static syntra_status_t draw_window(
     uint32_t title_height;
     uint32_t title_color;
     uint32_t close_x;
+    const char *title_text = "WINDOW";
     syntra_status_t status;
 
     status = syntra_framebuffer_fill_rect(
@@ -146,6 +147,9 @@ static syntra_status_t draw_window(
     if (title_height > WINDOW_TITLE_HEIGHT)
         title_height = WINDOW_TITLE_HEIGHT;
     title_color = active ? COLOR_WINDOW_ACTIVE : COLOR_WINDOW_INACTIVE;
+    if (window->app_type == SYNTRA_GUI_APP_FILES) title_text = "FILES";
+    else if (window->app_type == SYNTRA_GUI_APP_SETTINGS) title_text = "SETTINGS";
+    else if (window->app_type == SYNTRA_GUI_APP_LAUNCHER) title_text = "LAUNCHER";
 
     status = syntra_framebuffer_fill_rect(
         framebuffer,
@@ -174,7 +178,7 @@ static syntra_status_t draw_window(
 
         status = syntra_framebuffer_draw_text(
             framebuffer, window->x + 7U,
-            window->y + 7U, "WINDOW",
+            window->y + 7U, title_text,
             COLOR_WINDOW_TEXT, title_color, 1U);
         if (status != SYNTRA_STATUS_OK) return status;
     }
