@@ -22,6 +22,8 @@ static _Alignas(4096) uint8_t syntra_el0_kernel_stack[4096];
 static size_t syntra_fw_cfg_size;
 static syntra_virtio_mmio_device_t syntra_virtio_mmio_device;
 static int syntra_virtio_mmio_available;
+static syntra_virtio_input_queue_t syntra_virtio_input_queue;
+static uintptr_t syntra_virtio_input_queue_physical_base;
 #include "../timer.h"
 #include "../../../timer/timer.h"
 #include "../../../interrupt/interrupt.h"
@@ -1302,9 +1304,44 @@ syntra_status_t syntra_arm64_boot_main(
                                 syntra_virtio_mmio_device.interrupt_id,
                                 syntra_virtio_mmio_device.interrupt_flags);
                             if (status == SYNTRA_STATUS_OK)
+                            {
+                                uintptr_t queue_physical_base = 0U;
                                 syntra_uart_puts("VirtIO Input GIC trigger: CONFIGURED\n");
+                                status = syntra_page_alloc_contiguous(
+                                    2U, &queue_physical_base);
+                                if (status == SYNTRA_STATUS_OK)
+                                {
+                                    status = syntra_virtio_mmio_setup_input_event_queue_mapped(
+                                        &syntra_virtio_mmio_device,
+                                        (volatile void *)(uintptr_t)syntra_virtio_mmio_device.base,
+                                        syntra_virtio_mmio_device.region_size,
+                                        &identity,
+                                        (void *)(uintptr_t)queue_physical_base,
+                                        queue_physical_base,
+                                        2U * SYNTRA_PAGE_SIZE,
+                                        &syntra_virtio_input_queue);
+                                    if (status == SYNTRA_STATUS_OK)
+                                    {
+                                        syntra_virtio_input_queue_physical_base =
+                                            queue_physical_base;
+                                        syntra_uart_puts("VirtIO Input event queue: CONFIGURED (NOT STARTED)\\n");
+                                    }
+                                    else
+                                    {
+                                        (void)syntra_page_free(queue_physical_base);
+                                        (void)syntra_page_free(queue_physical_base + SYNTRA_PAGE_SIZE);
+                                        syntra_uart_puts("VirtIO Input event queue: UNAVAILABLE\\n");
+                                    }
+                                }
+                                else
+                                {
+                                    syntra_uart_puts("VirtIO Input event queue: ALLOCATION FAILED\\n");
+                                }
+                            }
                             else
-                                syntra_uart_puts("VirtIO Input GIC trigger: UNSUPPORTED\n");
+                            {
+                                syntra_uart_puts("VirtIO Input GIC trigger: UNSUPPORTED\\n");
+                            }
                         }
                     }
                     else
