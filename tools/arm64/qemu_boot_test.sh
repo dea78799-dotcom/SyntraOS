@@ -62,9 +62,8 @@ GDB_OUTPUT="$(timeout 15s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "set architecture aarch64" \
     -ex "set pagination off" \
     -ex "set confirm off" \
+    -ex "maint set target-async off" \
     -ex "target remote 127.0.0.1:$GDB_PORT" \
-    -ex "set target-async off" \
-    -ex "set mi-async off" \
     -ex "hbreak *0x10000000" \
     -ex "continue" \
     -ex 'printf "EL0_ENTRY_STOP PC=%#lx\n", $pc' \
