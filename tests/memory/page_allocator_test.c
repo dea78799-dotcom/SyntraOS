@@ -48,7 +48,7 @@ int main(void)
     assert(syntra_page_free(third) == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_free_count() == 2U);
 
-    /* Cursor advances after allocation and moves backward when a lower page is freed. */
+    /* Cursor moves backward when a lower page is freed. */
     assert(syntra_page_alloc(&first) == SYNTRA_STATUS_OK);
     assert(syntra_page_alloc(&second) == SYNTRA_STATUS_OK);
     assert(first == (uintptr_t)0x10000000U);
@@ -60,14 +60,39 @@ int main(void)
     assert(syntra_page_free(third) == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_free_count() == 2U);
 
+    /* Exercise allocations across bitmap-word and summary-word boundaries. */
+    assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_add(
+        (uintptr_t)0x30000000U, (size_t)(130U * SYNTRA_PAGE_SIZE),
+        SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_init() == SYNTRA_STATUS_OK);
-    assert(syntra_page_allocator_total_count() == 2U);
-    assert(syntra_page_allocator_free_count() == 2U);
+    assert(syntra_page_allocator_total_count() == 130U);
+    for (unsigned int i = 0U; i < 130U; ++i)
+    {
+        assert(syntra_page_alloc(&first) == SYNTRA_STATUS_OK);
+        assert(first == (uintptr_t)0x30000000U +
+                        (uintptr_t)i * SYNTRA_PAGE_SIZE);
+    }
+    assert(syntra_page_allocator_free_count() == 0U);
+    assert(syntra_page_alloc(&second) == SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(syntra_page_free((uintptr_t)0x30000000U +
+                            (uintptr_t)65U * SYNTRA_PAGE_SIZE) == SYNTRA_STATUS_OK);
+    assert(syntra_page_alloc(&third) == SYNTRA_STATUS_OK);
+    assert(third == (uintptr_t)0x30000000U +
+                    (uintptr_t)65U * SYNTRA_PAGE_SIZE);
+    for (unsigned int i = 0U; i < 130U; ++i)
+    {
+        uintptr_t address = (uintptr_t)0x30000000U +
+                            (uintptr_t)i * SYNTRA_PAGE_SIZE;
+        if (i != 65U)
+        {
+            assert(syntra_page_free(address) == SYNTRA_STATUS_OK);
+        }
+    }
+    assert(syntra_page_free(third) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_free_count() == 130U);
 
-    /*
-     * Boundary policy: clip RAM crossing the 4-GiB limit and ignore RAM
-     * entirely above it. Initialization succeeds when clipped RAM is usable.
-     */
+    /* Boundary policy: clip RAM crossing 4 GiB and ignore high-only RAM. */
     assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
     assert(syntra_memory_region_add(
         (uintptr_t)0xFFFFF000ULL, (size_t)0x3000U,
@@ -79,7 +104,6 @@ int main(void)
     assert(first == (uintptr_t)0xFFFFF000ULL);
     assert(syntra_page_free(first) == SYNTRA_STATUS_OK);
 
-    /* High-only RAM is outside V1's managed window: no pages, OOM status. */
     assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
     assert(syntra_memory_region_add(
         (uintptr_t)0x100000000ULL, (size_t)0x4000U,
