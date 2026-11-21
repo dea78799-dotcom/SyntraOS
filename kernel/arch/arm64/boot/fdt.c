@@ -520,6 +520,51 @@ syntra_status_t syntra_fdt_find_compatible(
     }
 }
 
+
+syntra_status_t syntra_fdt_find_phandle(
+    const syntra_fdt_t *fdt,
+    uint32_t phandle,
+    syntra_fdt_node_t *node)
+{
+    syntra_fdt_iterator_t iterator;
+    syntra_fdt_token_t token;
+    syntra_fdt_node_t stack[64];
+    syntra_status_t status;
+
+    if (fdt == NULL || node == NULL || phandle == 0U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    syntra_fdt_iterator_init(&iterator);
+    for (;;)
+    {
+        status = syntra_fdt_next(fdt, &iterator, &token);
+        if (status != SYNTRA_STATUS_OK)
+            return status == SYNTRA_STATUS_NOT_IMPLEMENTED
+                ? SYNTRA_STATUS_NOT_IMPLEMENTED : status;
+
+        if (token.type == SYNTRA_FDT_TOKEN_BEGIN_NODE)
+        {
+            if (token.depth >= 64U)
+                return SYNTRA_STATUS_NOT_IMPLEMENTED;
+            stack[token.depth].begin_offset = token.offset;
+            stack[token.depth].depth = token.depth;
+        }
+        else if (token.type == SYNTRA_FDT_TOKEN_PROPERTY &&
+                 token.depth != 0U && token.depth <= 64U &&
+                 token.data_size == 4U &&
+                 (fdt_string_equals(token.name, "phandle") ||
+                  fdt_string_equals(token.name, "linux,phandle")))
+        {
+            uint32_t value = fdt_read_be32(token.data);
+            if (value == phandle)
+            {
+                *node = stack[token.depth - 1U];
+                return SYNTRA_STATUS_OK;
+            }
+        }
+    }
+}
+
 syntra_status_t syntra_fdt_get_property(
     const syntra_fdt_t *fdt,
     const syntra_fdt_node_t *node,
