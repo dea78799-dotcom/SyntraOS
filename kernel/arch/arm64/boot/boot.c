@@ -1294,9 +1294,23 @@ syntra_status_t syntra_arm64_boot_main(
                         syntra_virtio_mmio_device.region_size,
                         &identity);
                     if (status == SYNTRA_STATUS_OK)
+                    {
                         syntra_uart_puts("VirtIO Input transport: DRIVER FEATURES NEGOTIATED\n");
+                        if (syntra_virtio_mmio_device.interrupt_valid)
+                        {
+                            status = syntra_arm64_gic_configure_interrupt(
+                                syntra_virtio_mmio_device.interrupt_id,
+                                syntra_virtio_mmio_device.interrupt_flags);
+                            if (status == SYNTRA_STATUS_OK)
+                                syntra_uart_puts("VirtIO Input GIC trigger: CONFIGURED\n");
+                            else
+                                syntra_uart_puts("VirtIO Input GIC trigger: UNSUPPORTED\n");
+                        }
+                    }
                     else
+                    {
                         syntra_uart_puts("VirtIO Input transport: PREPARATION UNAVAILABLE\n");
+                    }
                 }
                 else if (identity.function == SYNTRA_VIRTIO_MMIO_FUNCTION_OTHER)
                     syntra_uart_puts("VirtIO-MMIO function: OTHER\n");
