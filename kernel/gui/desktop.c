@@ -1,4 +1,6 @@
 #include "desktop.h"
+#include "window_manager.h"
+#include "window_renderer.h"
 
 #define COLOR_BACKGROUND 0xFF101A35U
 #define COLOR_BACKGROUND_LIGHT 0xFF1B2D55U
@@ -272,6 +274,48 @@ syntra_status_t syntra_desktop_render(syntra_framebuffer_t *framebuffer)
  * transport remains separate, so the same session can be driven by host
  * tests or a future QEMU VirtIO input backend.
  */
+
+syntra_status_t syntra_desktop_render_gui_v5(
+    syntra_framebuffer_t *framebuffer)
+{
+    syntra_gui_window_manager_t manager;
+    uint32_t files_id;
+    uint32_t settings_id;
+    uint32_t launcher_id;
+    syntra_status_t status;
+
+    status = syntra_framebuffer_validate(framebuffer);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = syntra_desktop_render(framebuffer);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    /* Keep the compact mobile preview uncluttered on small framebuffers. */
+    if (framebuffer->width < 640U || framebuffer->height < 480U)
+        return SYNTRA_STATUS_OK;
+
+    status = syntra_gui_window_manager_init(
+        &manager, framebuffer->width, framebuffer->height);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = syntra_gui_window_open_app(
+        &manager, 20U, 190U, 270U, 230U,
+        SYNTRA_GUI_APP_FILES, &files_id);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = syntra_gui_window_open_app(
+        &manager, 330U, 190U, 270U, 230U,
+        SYNTRA_GUI_APP_SETTINGS, &settings_id);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = syntra_gui_window_open_app(
+        &manager, 230U, 60U, 180U, 140U,
+        SYNTRA_GUI_APP_LAUNCHER, &launcher_id);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    return syntra_gui_render_windows(framebuffer, &manager);
+}
+
 syntra_status_t syntra_desktop_render_session(
     syntra_framebuffer_t *framebuffer,
     const syntra_desktop_session_t *session)
