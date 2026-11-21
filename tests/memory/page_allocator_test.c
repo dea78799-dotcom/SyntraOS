@@ -52,6 +52,30 @@ int main(void)
     assert(syntra_page_allocator_total_count() == 2U);
     assert(syntra_page_allocator_free_count() == 2U);
 
+    /*
+     * Boundary policy: clip RAM crossing the 4-GiB limit and ignore RAM
+     * entirely above it. Initialization succeeds when clipped RAM is usable.
+     */
+    assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_add(
+        (uintptr_t)0xFFFFF000ULL, (size_t)0x3000U,
+        SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_init() == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_total_count() == 1U);
+    assert(syntra_page_allocator_free_count() == 1U);
+    assert(syntra_page_alloc(&first) == SYNTRA_STATUS_OK);
+    assert(first == (uintptr_t)0xFFFFF000ULL);
+    assert(syntra_page_free(first) == SYNTRA_STATUS_OK);
+
+    /* High-only RAM is outside V1's managed window: no pages, OOM status. */
+    assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_add(
+        (uintptr_t)0x100000000ULL, (size_t)0x4000U,
+        SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_init() == SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(syntra_page_allocator_total_count() == 0U);
+    assert(syntra_page_allocator_free_count() == 0U);
+
     puts("Physical Page Allocator V1 tests passed.");
     return 0;
 }

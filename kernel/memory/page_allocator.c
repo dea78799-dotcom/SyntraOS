@@ -76,9 +76,20 @@ syntra_status_t syntra_page_allocator_init(void)
         }
 
         end = region.base + region.size;
+
+        /*
+         * V1 manages only physical addresses below 4 GiB. Clip crossing
+         * regions and ignore regions wholly above the supported window,
+         * rather than failing initialization for otherwise usable RAM.
+         */
+        if (region.base >=
+                (uintptr_t)SYNTRA_PAGE_ALLOCATOR_MAX_PHYSICAL_ADDRESS)
+        {
+            continue;
+        }
         if ((uint64_t)end > SYNTRA_PAGE_ALLOCATOR_MAX_PHYSICAL_ADDRESS)
         {
-            return SYNTRA_STATUS_NOT_IMPLEMENTED;
+            end = (uintptr_t)SYNTRA_PAGE_ALLOCATOR_MAX_PHYSICAL_ADDRESS;
         }
 
         /*
@@ -93,6 +104,10 @@ syntra_status_t syntra_page_allocator_init(void)
 
         first = align_up_page(region.base);
         limit = end - (end % (uintptr_t)SYNTRA_PAGE_SIZE);
+        if (first >= limit)
+        {
+            continue;
+        }
 
         for (address = first; address < limit;
              address += (uintptr_t)SYNTRA_PAGE_SIZE)
