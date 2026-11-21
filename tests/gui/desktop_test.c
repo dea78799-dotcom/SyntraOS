@@ -57,6 +57,12 @@ int main(void)
 
     /* Compact layout is rendered for smaller displays without overflow. */
     assert(syntra_desktop_render(&compact) == SYNTRA_STATUS_OK);
+    /* GUI v5 composes the base desktop with Files, Settings, and Launcher. */
+    assert(syntra_desktop_render_gui_v5(&framebuffer) == SYNTRA_STATUS_OK);
+    assert(pixels[(size_t)225U * TEST_STRIDE + 66U] == 0xFF3B9FB5U);
+    assert(pixels[(size_t)225U * TEST_STRIDE + 343U] == 0xFF54D6E8U);
+    assert(pixels[(size_t)89U * TEST_STRIDE + 239U] == 0xFF54D6E8U);
+    assert(syntra_desktop_render_gui_v5(&compact) == SYNTRA_STATUS_OK);
     assert(compact_pixels[0] == 0xE8202D49U);
     assert(compact_pixels[(size_t)40U * COMPACT_WIDTH + 20U] ==
            0xE8202D49U);
