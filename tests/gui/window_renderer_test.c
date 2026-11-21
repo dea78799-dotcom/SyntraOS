@@ -71,7 +71,7 @@ int main(void)
     /* App-specific surfaces render folder, settings, and launcher accents. */
     assert(pixels[(size_t)75U * STRIDE + 86U] == 0xFF3B9FB5U);
     assert(pixels[(size_t)75U * STRIDE + 313U] == 0xFF54D6E8U);
-    assert(pixels[(size_t)245U * STRIDE + 49U] == 0xFF54D6E8U);
+    assert(pixels[(size_t)249U * STRIDE + 49U] == 0xFF54D6E8U);
 
     assert(syntra_gui_render_windows(&wrong_size, &manager) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
