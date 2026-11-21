@@ -60,14 +60,14 @@ int main(void)
     assert(syntra_page_free(third) == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_free_count() == 2U);
 
-    /* Exercise allocations across bitmap-word and summary-word boundaries. */
+    /* Exercise allocations across primary-bitmap and summary-bitmap boundaries. */
     assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
     assert(syntra_memory_region_add(
-        (uintptr_t)0x30000000U, (size_t)(130U * SYNTRA_PAGE_SIZE),
+        (uintptr_t)0x30000000U, (size_t)(4100U * SYNTRA_PAGE_SIZE),
         SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_init() == SYNTRA_STATUS_OK);
-    assert(syntra_page_allocator_total_count() == 130U);
-    for (unsigned int i = 0U; i < 130U; ++i)
+    assert(syntra_page_allocator_total_count() == 4100U);
+    for (unsigned int i = 0U; i < 4100U; ++i)
     {
         assert(syntra_page_alloc(&first) == SYNTRA_STATUS_OK);
         assert(first == (uintptr_t)0x30000000U +
@@ -90,7 +90,7 @@ int main(void)
         }
     }
     assert(syntra_page_free(third) == SYNTRA_STATUS_OK);
-    assert(syntra_page_allocator_free_count() == 130U);
+    assert(syntra_page_allocator_free_count() == 4100U);
 
     /* Boundary policy: clip RAM crossing 4 GiB and ignore high-only RAM. */
     assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
