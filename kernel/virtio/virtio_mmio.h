@@ -38,6 +38,7 @@
 #define SYNTRA_VIRTIO_MMIO_INTERRUPT_REGISTERS_SIZE 0x068U
 
 #define SYNTRA_VIRTIO_INPUT_EVENT_QUEUE_SIZE 8U
+#define SYNTRA_VIRTIO_INPUT_SOFTWARE_EVENT_QUEUE_SIZE 64U
 #define SYNTRA_VIRTIO_INPUT_EVENT_SIZE 8U
 #define SYNTRA_VIRTIO_SPLIT_DESC_SIZE 16U
 #define SYNTRA_VIRTIO_SPLIT_USED_ELEMENT_SIZE 8U
@@ -132,6 +133,10 @@ typedef struct
     volatile uint32_t key_a_press_count;
     volatile uint32_t dropped_event_count;
     volatile uint32_t irq_error_count;
+    syntra_input_event_t software_events[SYNTRA_VIRTIO_INPUT_SOFTWARE_EVENT_QUEUE_SIZE];
+    volatile uint32_t software_event_head;
+    volatile uint32_t software_event_tail;
+    volatile uint32_t software_event_dropped;
     int ready;
 } syntra_virtio_input_queue_t;
 
@@ -167,6 +172,15 @@ syntra_status_t syntra_virtio_mmio_start_input_mapped(
     size_t mapped_size,
     const syntra_virtio_mmio_identity_t *identity,
     const syntra_virtio_input_queue_t *queue
+);
+
+/*
+ * SPSC event FIFO: IRQ handler is the producer, normal context is the consumer.
+ * Events are copied and published in order; queue overflow drops newest events.
+ */
+syntra_status_t syntra_virtio_mmio_pop_input_event(
+    syntra_virtio_input_queue_t *queue,
+    syntra_input_event_t *event
 );
 
 /* Acknowledge a VirtIO Input interrupt, drain used entries, and recycle buffers. */
