@@ -391,6 +391,8 @@ syntra_status_t syntra_virtio_mmio_setup_input_event_queue_mapped(
         queue_physical_base == 0U ||
         (queue_physical_base & 0xFFFU) != 0U ||
         queue_physical_base > UINT32_MAX ||
+        required_bytes == 0U ||
+        queue_physical_base > (uintptr_t)UINT32_MAX - (required_bytes - 1U) ||
         (((uintptr_t)queue_memory) & 0xFU) != 0U)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
