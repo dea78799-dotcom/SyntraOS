@@ -124,6 +124,11 @@ add_executable(virtio_mmio_test tests/virtio/virtio_mmio_test.c)
 target_link_libraries(virtio_mmio_test PRIVATE syntra_kernel)
 add_test(NAME VirtIOMMIOValidationTest COMMAND virtio_mmio_test)
 
+# ARM64 FDT phandle lookup test
+add_executable(fdt_phandle_test tests/arm64/fdt_phandle_test.c)
+target_link_libraries(fdt_phandle_test PRIVATE syntra_kernel)
+add_test(NAME FDTPhandleLookupTest COMMAND fdt_phandle_test)
+
 # SyntraOS input event core test
 add_executable(input_test tests/input/input_test.c)
 target_link_libraries(input_test PRIVATE syntra_kernel)
