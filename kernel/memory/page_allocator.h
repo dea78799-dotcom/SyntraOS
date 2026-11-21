@@ -11,6 +11,7 @@
 
 /*
  * V1 uses a static bitmap for the first 4 GiB of physical address space.
+ * RAM ranges crossing 4 GiB are clipped; ranges wholly above it are ignored.
  * Only complete 4 KiB pages inside SYNTRA_MEMORY_REGION_RAM are eligible.
  */
 syntra_status_t syntra_page_allocator_init(void);
