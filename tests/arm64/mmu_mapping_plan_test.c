@@ -1,111 +1,207 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+
 #include "../../kernel/arch/arm64/mmu_mapping_plan.h"
+
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 
 static syntra_arm64_boot_memory_metadata_t fixture(void)
 {
-    syntra_arm64_boot_memory_metadata_t m = {0};
-    m.kernel_start = 0x40200000; m.kernel_end = 0x40208000;
-    m.text_start = 0x40200000; m.text_end = 0x40201000;
-    m.rodata_start = 0x40201000; m.rodata_end = 0x40202000;
-    m.data_start = 0x40202000; m.data_end = 0x40203000;
-    m.bss_start = 0x40203000; m.bss_end = 0x40204000;
-    m.stack_bottom = 0x40204000; m.stack_top = 0x40208000;
-    m.dtb_start = 0x40000000; m.dtb_size = 0x1800;
-    return m;
+    syntra_arm64_boot_memory_metadata_t metadata = {0};
+    metadata.kernel_start = 0x40200000U;
+    metadata.kernel_end = 0x40208000U;
+    metadata.text_start = 0x40200000U;
+    metadata.text_end = 0x40201000U;
+    metadata.rodata_start = 0x40201000U;
+    metadata.rodata_end = 0x40202000U;
+    metadata.data_start = 0x40202000U;
+    metadata.data_end = 0x40203000U;
+    metadata.bss_start = 0x40203000U;
+    metadata.bss_end = 0x40204000U;
+    metadata.stack_bottom = 0x40204000U;
+    metadata.stack_top = 0x40208000U;
+    metadata.dtb_start = 0x40000000U;
+    metadata.dtb_size = 0x1800U;
+    return metadata;
 }
 
 static syntra_arm64_gic_config_t fixture_gic(void)
 {
-    syntra_arm64_gic_config_t g = {0};
-    g.version = SYNTRA_ARM64_GIC_VERSION_3;
-    g.distributor_base = 0x08000000; g.distributor_size = 0x10000;
-    g.redistributor_base = 0x080A0000; g.redistributor_size = 0xF60000;
-    return g;
+    syntra_arm64_gic_config_t gic = {0};
+    gic.version = SYNTRA_ARM64_GIC_VERSION_3;
+    gic.distributor_base = 0x08000000U;
+    gic.distributor_size = 0x10000U;
+    gic.redistributor_base = 0x080A0000U;
+    gic.redistributor_size = 0xF60000U;
+    return gic;
 }
 
-static void test_attributes(void)
+static syntra_memory_region_t fixture_regions[] = {
+    {0x40002000U, 0x001FE000U, SYNTRA_MEMORY_REGION_RAM},
+    {0x40200000U, 0x8000U, SYNTRA_MEMORY_REGION_KERNEL},
+    {0x40208000U, 0x1FDF8000U, SYNTRA_MEMORY_REGION_RAM},
+    {0x40000000U, 0x1800U, SYNTRA_MEMORY_REGION_DTB}
+};
+
+static void test_existing_mapping_attributes(void)
 {
-    syntra_memory_region_t rs[] = {
-        {0x40002000,0x001FE000,SYNTRA_MEMORY_REGION_RAM},
-        {0x40200000,0x8000,SYNTRA_MEMORY_REGION_KERNEL},
-        {0x40208000,0x1FDF8000,SYNTRA_MEMORY_REGION_RAM},
-        {0x40000000,0x1800,SYNTRA_MEMORY_REGION_DTB}
-    };
-    syntra_arm64_gic_config_t g = fixture_gic();
-    syntra_arm64_mmu_mapping_plan_t p;
-    syntra_arm64_boot_memory_metadata_t m = fixture();
+    syntra_arm64_gic_config_t gic = fixture_gic();
+    syntra_arm64_mmu_mapping_plan_t plan;
+    syntra_arm64_boot_memory_metadata_t metadata = fixture();
     int flags[10] = {0};
-    size_t i;
+    size_t index;
 
     assert(syntra_arm64_mmu_mapping_plan_build(
-        &m, rs, 4, &g, 0x09000000, 0x1000,
-        0x09020000, 0x18, &p) == SYNTRA_STATUS_OK);
+        &metadata, fixture_regions, 4U, &gic,
+        0x09000000U, 0x1000U, 0x09020000U, 0x18U,
+        &plan) == SYNTRA_STATUS_OK);
 
-    for (i = 0; i < p.count; ++i)
+    for (index = 0U; index < plan.count; ++index)
     {
-        const syntra_arm64_mmu_mapping_t *x = &p.mappings[i];
-        if (x->virtual_address == m.text_start)
-            flags[0] = x->access == SYNTRA_ARM64_MMU_ACCESS_READ_ONLY &&
-                x->executable && x->memory_type == SYNTRA_ARM64_MMU_MEMORY_NORMAL;
-        if (x->virtual_address == m.rodata_start)
-            flags[1] = x->access == SYNTRA_ARM64_MMU_ACCESS_READ_ONLY && !x->executable;
-        if (x->virtual_address == m.data_start)
-            flags[2] = x->access == SYNTRA_ARM64_MMU_ACCESS_READ_WRITE && !x->executable;
-        if (x->virtual_address == m.bss_start)
-            flags[3] = x->access == SYNTRA_ARM64_MMU_ACCESS_READ_WRITE && !x->executable;
-        if (x->virtual_address == m.stack_bottom)
-            flags[4] = x->access == SYNTRA_ARM64_MMU_ACCESS_READ_WRITE && !x->executable;
-        if (x->virtual_address == 0x40000000)
-            flags[5] = x->access == SYNTRA_ARM64_MMU_ACCESS_READ_ONLY && !x->executable;
-        if (x->virtual_address == 0x09000000)
-            flags[6] = x->memory_type == SYNTRA_ARM64_MMU_MEMORY_DEVICE && !x->executable;
-        if (x->virtual_address == 0x08000000)
-            flags[7] = x->memory_type == SYNTRA_ARM64_MMU_MEMORY_DEVICE;
-        if (x->virtual_address == 0x080A0000)
-            flags[8] = x->memory_type == SYNTRA_ARM64_MMU_MEMORY_DEVICE;
-        if (x->virtual_address == 0x09020000)
-            flags[9] = x->memory_type == SYNTRA_ARM64_MMU_MEMORY_DEVICE &&
-                x->access == SYNTRA_ARM64_MMU_ACCESS_READ_WRITE && !x->executable;
+        const syntra_arm64_mmu_mapping_t *mapping =
+            &plan.mappings[index];
+
+        if (mapping->virtual_address == metadata.text_start)
+            flags[0] = mapping->access == SYNTRA_ARM64_MMU_ACCESS_READ_ONLY &&
+                mapping->executable &&
+                mapping->memory_type == SYNTRA_ARM64_MMU_MEMORY_NORMAL;
+        if (mapping->virtual_address == metadata.rodata_start)
+            flags[1] = mapping->access == SYNTRA_ARM64_MMU_ACCESS_READ_ONLY &&
+                !mapping->executable;
+        if (mapping->virtual_address == metadata.data_start)
+            flags[2] = mapping->access == SYNTRA_ARM64_MMU_ACCESS_READ_WRITE &&
+                !mapping->executable;
+        if (mapping->virtual_address == metadata.bss_start)
+            flags[3] = mapping->access == SYNTRA_ARM64_MMU_ACCESS_READ_WRITE &&
+                !mapping->executable;
+        if (mapping->virtual_address == metadata.stack_bottom)
+            flags[4] = mapping->access == SYNTRA_ARM64_MMU_ACCESS_READ_WRITE &&
+                !mapping->executable;
+        if (mapping->virtual_address == 0x40000000U)
+            flags[5] = mapping->access == SYNTRA_ARM64_MMU_ACCESS_READ_ONLY &&
+                !mapping->executable;
+        if (mapping->virtual_address == 0x09000000U)
+            flags[6] = mapping->memory_type == SYNTRA_ARM64_MMU_MEMORY_DEVICE &&
+                !mapping->executable;
+        if (mapping->virtual_address == 0x08000000U)
+            flags[7] = mapping->memory_type == SYNTRA_ARM64_MMU_MEMORY_DEVICE;
+        if (mapping->virtual_address == 0x080A0000U)
+            flags[8] = mapping->memory_type == SYNTRA_ARM64_MMU_MEMORY_DEVICE;
+        if (mapping->virtual_address == 0x09020000U)
+            flags[9] = mapping->memory_type == SYNTRA_ARM64_MMU_MEMORY_DEVICE &&
+                mapping->access == SYNTRA_ARM64_MMU_ACCESS_READ_WRITE &&
+                !mapping->executable;
     }
-    for (i = 0; i < 10; ++i) assert(flags[i]);
+
+    for (index = 0U; index < 10U; ++index)
+        assert(flags[index]);
 }
 
-static void test_rejections(void)
+static void test_virtio_device_mapping(void)
 {
-    syntra_memory_region_t rs[] = {
-        {0x40002000,0x001FE000,SYNTRA_MEMORY_REGION_RAM},
-        {0x40200000,0x8000,SYNTRA_MEMORY_REGION_KERNEL},
-        {0x40208000,0x1FDF8000,SYNTRA_MEMORY_REGION_RAM}
-    };
-    syntra_arm64_gic_config_t g = fixture_gic();
-    syntra_arm64_mmu_mapping_plan_t p;
-    syntra_arm64_boot_memory_metadata_t m = fixture();
+    syntra_arm64_gic_config_t gic = fixture_gic();
+    syntra_arm64_mmu_mapping_plan_t plan;
+    syntra_arm64_boot_memory_metadata_t metadata = fixture();
+    int found = 0;
+    size_t index;
+
+    assert(syntra_arm64_mmu_mapping_plan_build_with_virtio(
+        &metadata, fixture_regions, 4U, &gic,
+        0x09000000U, 0x1000U, 0U, 0U,
+        0x0A000000U, 0x200U, &plan) == SYNTRA_STATUS_OK);
+
+    for (index = 0U; index < plan.count; ++index)
+    {
+        const syntra_arm64_mmu_mapping_t *mapping =
+            &plan.mappings[index];
+
+        if (mapping->virtual_address == 0x0A000000U)
+        {
+            found = 1;
+            assert(mapping->physical_address == 0x0A000000U);
+            assert(mapping->size == SYNTRA_ARM64_MMU_PAGE_SIZE);
+            assert(mapping->memory_type == SYNTRA_ARM64_MMU_MEMORY_DEVICE);
+            assert(mapping->access == SYNTRA_ARM64_MMU_ACCESS_READ_WRITE);
+            assert(mapping->executable == 0U);
+        }
+    }
+    assert(found);
+}
+
+static void test_virtio_rejections(void)
+{
+    syntra_arm64_gic_config_t gic = fixture_gic();
+    syntra_arm64_mmu_mapping_plan_t plan;
+    syntra_arm64_boot_memory_metadata_t metadata = fixture();
+
+    assert(syntra_arm64_mmu_mapping_plan_build_with_virtio(
+        &metadata, fixture_regions, 4U, &gic,
+        0x09000000U, 0x1000U, 0U, 0U,
+        0x0A000000U, 0x1FFU, &plan) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    assert(syntra_arm64_mmu_mapping_plan_build_with_virtio(
+        &metadata, fixture_regions, 4U, &gic,
+        0x09000000U, 0x1000U, 0U, 0U,
+        0x0A000000U, 0U, &plan) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    assert(syntra_arm64_mmu_mapping_plan_build_with_virtio(
+        &metadata, fixture_regions, 4U, &gic,
+        0x09000000U, 0x1000U, 0U, 0U,
+        0x09000000U, 0x200U, &plan) == SYNTRA_STATUS_ERROR);
+
+    assert(syntra_arm64_mmu_mapping_plan_build_with_virtio(
+        &metadata, fixture_regions, 4U, &gic,
+        0x09000000U, 0x1000U, 0U, 0U,
+        UINTPTR_MAX - 0x100U, 0x200U, &plan) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+}
+
+static void test_existing_rejections(void)
+{
+    syntra_arm64_gic_config_t gic = fixture_gic();
+    syntra_arm64_mmu_mapping_plan_t plan;
+    syntra_arm64_boot_memory_metadata_t metadata = fixture();
 
     assert(syntra_arm64_mmu_mapping_plan_build(
-        &m, rs, 3, &g, 0x40200000, 0x1000, 0, 0, &p) == SYNTRA_STATUS_ERROR);
-    m.text_start++;
-    assert(syntra_arm64_mmu_mapping_plan_build(
-        &m, rs, 3, &g, 0x09000000, 0x1000, 0, 0, &p) ==
-        SYNTRA_STATUS_INVALID_ARGUMENT);
-    m = fixture();
-    assert(syntra_arm64_mmu_mapping_plan_build(
-        &m, rs, 3, &g, 0x09000000, 0x1000, 0x09020000, 0, &p) ==
-        SYNTRA_STATUS_INVALID_ARGUMENT);
-    assert(syntra_arm64_mmu_mapping_plan_build(
-        &m, rs, 3, &g, 0x09000000, 0x1000, 0x09000000, 0x1000, &p) ==
+        &metadata, fixture_regions, 4U, &gic,
+        0x40200000U, 0x1000U, 0U, 0U, &plan) ==
         SYNTRA_STATUS_ERROR);
-    g.version = SYNTRA_ARM64_GIC_VERSION_NONE;
+
+    metadata.text_start++;
     assert(syntra_arm64_mmu_mapping_plan_build(
-        &m, rs, 3, &g, 0x09000000, 0x1000, 0, 0, &p) ==
+        &metadata, fixture_regions, 4U, &gic,
+        0x09000000U, 0x1000U, 0U, 0U, &plan) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    metadata = fixture();
+    assert(syntra_arm64_mmu_mapping_plan_build(
+        &metadata, fixture_regions, 4U, &gic,
+        0x09000000U, 0x1000U, 0x09020000U, 0U, &plan) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    assert(syntra_arm64_mmu_mapping_plan_build(
+        &metadata, fixture_regions, 4U, &gic,
+        0x09000000U, 0x1000U, 0x09000000U, 0x1000U, &plan) ==
+        SYNTRA_STATUS_ERROR);
+
+    gic.version = SYNTRA_ARM64_GIC_VERSION_NONE;
+    assert(syntra_arm64_mmu_mapping_plan_build(
+        &metadata, fixture_regions, 4U, &gic,
+        0x09000000U, 0x1000U, 0U, 0U, &plan) ==
         SYNTRA_STATUS_INVALID_ARGUMENT);
 }
 
 int main(void)
 {
-    test_attributes();
-    test_rejections();
+    test_existing_mapping_attributes();
+    test_virtio_device_mapping();
+    test_virtio_rejections();
+    test_existing_rejections();
     puts("ARM64 MMU mapping-plan tests passed");
     return 0;
 }
