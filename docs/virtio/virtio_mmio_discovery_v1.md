@@ -21,7 +21,7 @@ Target: QEMU ARM64 `virt`
 
 ## Runtime boundary
 
-The queue layout is prepared and published, but the driver has not set DRIVER_OK, enabled the SPI, consumed the used ring, or delivered key/pointer events. This stage does not claim live input support.
+The queue is started and the SPI handler is registered/enabled. The IRQ handler acknowledges VirtIO interrupt status, drains bounded used-ring entries, validates descriptor IDs/lengths, processes normalized input events, recycles buffers, and notifies queue 0. QEMU CI verifies boot after activation. Real key/mouse event delivery and routing into desktop/window interaction remain to be validated; input state is not yet wired into the desktop session.
 
 ## Validation
 
