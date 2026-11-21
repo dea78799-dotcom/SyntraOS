@@ -95,6 +95,8 @@ syntra_status_t syntra_arm64_gic_configure_interrupt(
     uint32_t interrupt_id,
     uint32_t trigger_flags
 );
+/* Pure helper: convert MPIDR affinity to architected GICD_IROUTER fields. */
+uint64_t syntra_arm64_gic_mpidr_to_irouter(uint64_t mpidr);
 /* Pure helper: compute architected GICD_IROUTER offset for an SPI. */
 syntra_status_t syntra_arm64_gic_spi_route_offset(
     uint32_t interrupt_id,
