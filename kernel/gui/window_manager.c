@@ -53,22 +53,25 @@ syntra_status_t syntra_gui_window_manager_init(
         manager->windows[index].y = 0U;
         manager->windows[index].width = 0U;
         manager->windows[index].height = 0U;
+        manager->windows[index].app_type = SYNTRA_GUI_APP_GENERIC;
     }
 
     return SYNTRA_STATUS_OK;
 }
 
-syntra_status_t syntra_gui_window_open(
+syntra_status_t syntra_gui_window_open_app(
     syntra_gui_window_manager_t *manager,
     uint32_t x,
     uint32_t y,
     uint32_t width,
     uint32_t height,
+    syntra_gui_app_type_t app_type,
     uint32_t *window_id)
 {
     syntra_gui_window_t *window;
 
     if (manager == NULL || manager->initialized != 1 || window_id == NULL ||
+        app_type > SYNTRA_GUI_APP_LAUNCHER ||
         !window_bounds_valid(manager, x, y, width, height))
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
@@ -83,11 +86,24 @@ syntra_status_t syntra_gui_window_open(
     window->y = y;
     window->width = width;
     window->height = height;
+    window->app_type = app_type;
 
     *window_id = manager->next_id;
     manager->next_id++;
     manager->count++;
     return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t syntra_gui_window_open(
+    syntra_gui_window_manager_t *manager,
+    uint32_t x,
+    uint32_t y,
+    uint32_t width,
+    uint32_t height,
+    uint32_t *window_id)
+{
+    return syntra_gui_window_open_app(
+        manager, x, y, width, height, SYNTRA_GUI_APP_GENERIC, window_id);
 }
 
 syntra_status_t syntra_gui_window_close(
@@ -112,6 +128,7 @@ syntra_status_t syntra_gui_window_close(
     manager->windows[manager->count].y = 0U;
     manager->windows[manager->count].width = 0U;
     manager->windows[manager->count].height = 0U;
+    manager->windows[manager->count].app_type = SYNTRA_GUI_APP_GENERIC;
     return SYNTRA_STATUS_OK;
 }
 
