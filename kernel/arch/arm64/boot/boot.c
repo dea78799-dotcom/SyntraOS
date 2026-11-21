@@ -348,6 +348,18 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
         syntra_uart_puts(" size=");
         syntra_uart_put_hex((uint64_t)syntra_virtio_mmio_device.region_size);
         syntra_uart_puts("\n");
+        if (syntra_virtio_mmio_device.interrupt_valid)
+        {
+            syntra_uart_puts("FDT VirtIO-MMIO interrupt: id=");
+            syntra_uart_put_hex(syntra_virtio_mmio_device.interrupt_id);
+            syntra_uart_puts(" flags=");
+            syntra_uart_put_hex(syntra_virtio_mmio_device.interrupt_flags);
+            syntra_uart_puts("\n");
+        }
+        else
+        {
+            syntra_uart_puts("FDT VirtIO-MMIO interrupt: UNAVAILABLE\n");
+        }
     }
     else if (status == SYNTRA_STATUS_NOT_IMPLEMENTED)
     {
