@@ -40,7 +40,10 @@ static void test_metadata_validation(void)
 static void test_mapped_identity_read(void)
 {
     syntra_virtio_mmio_device_t device = {
-        (uintptr_t)0x0A000000U, 0x200U, 0U, 1
+        .base = (uintptr_t)0x0A000000U,
+        .region_size = 0x200U,
+        .reg_index = 0U,
+        .discovered = 1
     };
     volatile uint32_t registers[4] = {
         SYNTRA_VIRTIO_MMIO_EXPECTED_MAGIC,
