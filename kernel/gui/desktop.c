@@ -251,7 +251,7 @@ syntra_status_t syntra_desktop_render(syntra_framebuffer_t *framebuffer)
                   COLOR_BACKGROUND_LIGHT);
     if (status != SYNTRA_STATUS_OK) return status;
 
-    if (width < 520U || height < 400U)
+    if (width < 640U || height < 480U)
     {
         return render_compact(framebuffer);
     }
