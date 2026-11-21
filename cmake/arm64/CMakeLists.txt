@@ -87,6 +87,8 @@ target_compile_options(syntraos_arm64 PRIVATE
     $<$<COMPILE_LANGUAGE:C>:-fno-pic>
     $<$<COMPILE_LANGUAGE:C>:-fno-unwind-tables>
     $<$<COMPILE_LANGUAGE:C>:-fno-asynchronous-unwind-tables>
+    # Kernel C cannot use FP/SIMD until the thread context saves that state.
+    $<$<COMPILE_LANGUAGE:C>:-mgeneral-regs-only>
 )
 
 target_link_options(syntraos_arm64 PRIVATE

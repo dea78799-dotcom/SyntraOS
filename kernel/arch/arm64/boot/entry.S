@@ -18,6 +18,14 @@ _start:
     cmp x19, #0x4
     b.ne .Lhalt
 
+    /* Disable FP/SIMD access until per-thread context save/restore exists. */
+    mrs x2, cpacr_el1
+    mov x3, #3
+    lsl x3, x3, #20
+    bic x2, x2, x3
+    msr cpacr_el1, x2
+    isb
+
     /* Set the initial stack pointer. */
     adrp x2, __stack_top
     add x2, x2, :lo12:__stack_top
