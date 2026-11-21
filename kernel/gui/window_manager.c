@@ -71,7 +71,10 @@ syntra_status_t syntra_gui_window_open_app(
     syntra_gui_window_t *window;
 
     if (manager == NULL || manager->initialized != 1 || window_id == NULL ||
-        app_type > SYNTRA_GUI_APP_LAUNCHER ||
+        (app_type != SYNTRA_GUI_APP_GENERIC &&
+         app_type != SYNTRA_GUI_APP_FILES &&
+         app_type != SYNTRA_GUI_APP_SETTINGS &&
+         app_type != SYNTRA_GUI_APP_LAUNCHER) ||
         !window_bounds_valid(manager, x, y, width, height))
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
