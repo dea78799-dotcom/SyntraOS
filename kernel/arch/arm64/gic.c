@@ -27,6 +27,7 @@ static uintptr_t gic_local_redistributor_base;
 #define GICD_IROUTER 0x6000U
 #define GICD_CTLR_RWP (1U << 31)
 #define GICD_CTLR_DS (1U << 6)
+#define GICD_CTLR_ARE_NS (1U << 4)
 #define GICD_CTLR_ENABLE_G1 (1U << 1)
 #define GICR_FRAME_SIZE 0x20000U
 #define GICR_TYPER 0x0008U
@@ -247,7 +248,8 @@ syntra_status_t syntra_arm64_gic_init(void)
     status = gic_init_cpu_interface();
     if (status != SYNTRA_STATUS_OK) return status;
 
-    control |= GICD_CTLR_ENABLE_G1;
+    /* Enable affinity routing before SPIs are routed through IROUTER. */
+    control |= GICD_CTLR_ARE_NS | GICD_CTLR_ENABLE_G1;
     dist[GICD_CTLR / sizeof(uint32_t)] = control;
     gic_dsb();
     if (!gic_wait_register_clear(
