@@ -106,6 +106,8 @@ int main(void)
            SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(syntra_desktop_session_init(&invalid, 0U, 480U) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_desktop_session_init(&invalid, 319U, 240U) ==
+           SYNTRA_STATUS_INVALID_ARGUMENT);
 
     test_keyboard_navigation_and_activation();
     test_relative_mouse_click();
