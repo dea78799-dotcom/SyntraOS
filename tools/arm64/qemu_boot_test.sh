@@ -64,20 +64,13 @@ GDB_OUTPUT="$(timeout 15s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "set confirm off" \
     -ex "target remote 127.0.0.1:$GDB_PORT" \
     -ex "hbreak *0x10000000" \
+    -ex "continue" \
+    -ex 'printf "EL0_ENTRY_STOP PC=%#lx\\n", $pc' \
     -ex "break syntra_arm64_exception_handle_and_select" \
-    -ex "commands 2" \
-    -ex "silent" \
-    -ex 'if *(unsigned long*)($x0+288)==8 && (((*(unsigned long*)($x0+272)>>26)&0x3f)==0x15)' \
-    -ex 'printf "EL0_SVC_BREAK_HIT\n"' \
-    -ex "else" \
-    -ex 'printf "EXCEPTION_TRACE vector=%lu ESR=%#lx ELR=%#lx FAR=%#lx SPSR=%#lx\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+280), *(unsigned long*)($x0+264)' \
+    -ex 'condition 2 *(unsigned long*)($x0+288)==8 && (((*(unsigned long*)($x0+272)>>26)&0x3f)==0x15) && ((*(unsigned long*)($x0+264)&0xf)==0) && ((*(unsigned long*)($x0+272)&0xffff)==0x44)' \
     -ex "continue" \
-    -ex "end" \
-    -ex "end" \
-    -ex 'printf "EL0_ENTRY_STOP PC=%#lx\n", $pc' \
-    -ex "continue" \
-    -ex 'printf "EL0_SVC_STOP vector=%lu ESR=%#lx ELR=%#lx FAR=%#lx SPSR=%#lx SVC_IMM=%#lx\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+280), *(unsigned long*)($x0+264), (*(unsigned long*)($x0+272)&0xffff)' \
-    -ex "detach" 2>&1)" || { \
+    -ex 'printf "EL0_SVC_STOP vector=%lu ESR=%#lx ELR=%#lx FAR=%#lx SPSR=%#lx SVC_IMM=%#lx\\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+280), *(unsigned long*)($x0+264), (*(unsigned long*)($x0+272)&0xffff)' \
+endToken" || { \
         printf '%s\n' "$GDB_OUTPUT" >&2; \
         echo "GDB diagnostic breakpoint did not complete (timeout or remote error)." >&2; \
         echo "Continuing with UART smoke-test checks." >&2; \
