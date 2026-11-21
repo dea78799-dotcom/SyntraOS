@@ -63,6 +63,8 @@ GDB_OUTPUT="$(timeout 15s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "set pagination off" \
     -ex "set confirm off" \
     -ex "target remote 127.0.0.1:$GDB_PORT" \
+    -ex "set target-async off" \
+    -ex "set mi-async off" \
     -ex "hbreak *0x10000000" \
     -ex "continue" \
     -ex 'printf "EL0_ENTRY_STOP PC=%#lx\n", $pc' \
@@ -98,6 +100,10 @@ fi
 
 if ! grep -Fq 'EL0_ENTRY_STOP PC=0x10000000' <<<"$GDB_OUTPUT"; then
     echo "GDB did not stop at EL0 entry PC 0x10000000." >&2
+    exit 1
+fi
+if ! grep -Fq 'EL0_SVC_STOP vector=8 ' <<<"$GDB_OUTPUT" || ! grep -Fq 'SVC_IMM=0x44' <<<"$GDB_OUTPUT"; then
+    echo "GDB did not stop at EL0 SVC #0x44 breakpoint." >&2
     exit 1
 fi
 if ! grep -Fq 'EL0_RETURN_STOP PC=' <<<"$GDB_OUTPUT"; then
