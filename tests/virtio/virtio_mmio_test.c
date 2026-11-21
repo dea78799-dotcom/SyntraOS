@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-int main(void)
+static void test_metadata_validation(void)
 {
     syntra_virtio_mmio_device_t device;
 
@@ -35,7 +35,49 @@ int main(void)
     device.region_size = 0x200U;
     assert(syntra_virtio_mmio_validate(&device) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
+}
 
-    puts("SyntraOS VirtIO-MMIO metadata validation tests passed.");
+static void test_identity_decode(void)
+{
+    syntra_virtio_mmio_register_snapshot_t snapshot = {
+        SYNTRA_VIRTIO_MMIO_EXPECTED_MAGIC,
+        SYNTRA_VIRTIO_MMIO_VERSION_MODERN,
+        SYNTRA_VIRTIO_MMIO_DEVICE_ID_INPUT,
+        0x554D4551U
+    };
+    syntra_virtio_mmio_identity_t identity;
+
+    assert(syntra_virtio_mmio_decode_identity(&snapshot, &identity) ==
+           SYNTRA_STATUS_OK);
+    assert(identity.version == SYNTRA_VIRTIO_MMIO_VERSION_MODERN);
+    assert(identity.device_id == SYNTRA_VIRTIO_MMIO_DEVICE_ID_INPUT);
+    assert(identity.vendor_id == 0x554D4551U);
+    assert(identity.function == SYNTRA_VIRTIO_MMIO_FUNCTION_INPUT);
+
+    snapshot.device_id = 2U;
+    assert(syntra_virtio_mmio_decode_identity(&snapshot, &identity) ==
+           SYNTRA_STATUS_OK);
+    assert(identity.function == SYNTRA_VIRTIO_MMIO_FUNCTION_OTHER);
+
+    snapshot.magic_value = 0U;
+    assert(syntra_virtio_mmio_decode_identity(&snapshot, &identity) ==
+           SYNTRA_STATUS_ERROR);
+
+    snapshot.magic_value = SYNTRA_VIRTIO_MMIO_EXPECTED_MAGIC;
+    snapshot.version = 3U;
+    assert(syntra_virtio_mmio_decode_identity(&snapshot, &identity) ==
+           SYNTRA_STATUS_NOT_IMPLEMENTED);
+
+    assert(syntra_virtio_mmio_decode_identity(NULL, &identity) ==
+           SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_virtio_mmio_decode_identity(&snapshot, NULL) ==
+           SYNTRA_STATUS_INVALID_ARGUMENT);
+}
+
+int main(void)
+{
+    test_metadata_validation();
+    test_identity_decode();
+    puts("SyntraOS VirtIO-MMIO discovery and identity tests passed.");
     return 0;
 }
