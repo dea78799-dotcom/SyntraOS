@@ -66,29 +66,30 @@ GDB_OUTPUT="$(timeout 15s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "target remote 127.0.0.1:$GDB_PORT" \
     -ex "hbreak *0x10000000" \
     -ex "continue" \
-    -ex 'printf "EL0_ENTRY_STOP PC=%#lx\n", $pc' \
+    -ex 'printf "EL0_ENTRY_STOP PC=%#lx\\n", $pc' \
     -ex "break syntra_arm64_exception_handle_and_select" \
     -ex 'condition 2 *(unsigned long*)($x0+288)==8 && (((*(unsigned long*)($x0+272)>>26)&0x3f)==0x15) && ((*(unsigned long*)($x0+264)&0xf)==0) && ((*(unsigned long*)($x0+272)&0xffff)==0x44)' \
     -ex "continue" \
-    -ex 'printf "EL0_SVC_STOP vector=%lu ESR=%#lx ELR=%#lx FAR=%#lx SPSR=%#lx SVC_IMM=%#lx\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+280), *(unsigned long*)($x0+264), (*(unsigned long*)($x0+272)&0xffff)' \
+    -ex 'printf "EL0_SVC_STOP vector=%lu ESR=%#lx ELR=%#lx FAR=%#lx SPSR=%#lx SVC_IMM=%#lx\\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+280), *(unsigned long*)($x0+264), (*(unsigned long*)($x0+272)&0xffff)' \
+    -ex "disable 2" \
     -ex "break syntra_arm64_exception_handle_and_select" \
     -ex 'condition 3 *(unsigned long*)($x0+288)==8 && (((*(unsigned long*)($x0+272)>>26)&0x3f)==0x15) && ((*(unsigned long*)($x0+264)&0xf)==0) && ((*(unsigned long*)($x0+272)&0xffff)==0x45)' \
     -ex "break syntra_arm64_el0_return_trampoline" \
     -ex "continue" \
-    -ex 'printf "EL0_EXIT_SVC_STOP vector=%lu ESR=%#lx ELR=%#lx SPSR=%#lx SVC_IMM=%#lx\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+264), (*(unsigned long*)($x0+272)&0xffff)' \
+    -ex 'printf "EL0_EXIT_SVC_STOP vector=%lu ESR=%#lx ELR=%#lx SPSR=%#lx SVC_IMM=%#lx\\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+264), (*(unsigned long*)($x0+272)&0xffff)' \
     -ex "continue" \
     -ex 'if $pc == (unsigned long)&syntra_arm64_el0_return_trampoline' \
-    -ex 'printf "EL0_RETURN_STOP PC=%#lx\n", $pc' \
+    -ex 'printf "EL0_RETURN_STOP PC=%#lx\\n", $pc' \
     -ex "else" \
-    -ex 'printf "EL0_RETURN_WRONG_STOP PC=%#lx expected=%#lx\n", $pc, (unsigned long)&syntra_arm64_el0_return_trampoline' \
+    -ex 'printf "EL0_RETURN_WRONG_STOP PC=%#lx expected=%#lx\\n", $pc, (unsigned long)&syntra_arm64_el0_return_trampoline' \
     -ex "quit 1" \
     -ex "end" \
-    -ex "detach" 2>&1)" || { \
-        printf '%s\n' "$GDB_OUTPUT" >&2; \
-        echo "GDB diagnostic breakpoint did not complete (timeout or remote error)." >&2; \
-        echo "Continuing with UART smoke-test checks." >&2; \
+    -ex "detach" 2>&1)" || {
+        printf '%s\\n' "$GDB_OUTPUT" >&2
+        echo "GDB diagnostic breakpoint did not complete (timeout or remote error)." >&2
+        echo "Continuing with UART smoke-test checks." >&2
     }
-printf '%s\n' "$GDB_OUTPUT"
+printf '%s\\n' "$GDB_OUTPUT"
 
 echo "Waiting for EL0 UART completion markers..."
 for _ in $(seq 1 100); do
@@ -114,11 +115,14 @@ if ! grep -Fq 'EL0_SVC_STOP vector=8 ' <<<"$GDB_OUTPUT" || ! grep -Fq 'SVC_IMM=0
     echo "GDB did not stop at EL0 SVC #0x44 breakpoint." >&2
     exit 1
 fi
-if ! grep -Fq 'EL0_RETURN_STOP PC=' <<<"$GDB_OUTPUT"; then
-    echo "GDB did not observe the EL0 return trampoline." >&2
+if ! grep -Fq 'EL0_EXIT_SVC_STOP vector=8 ' <<<"$GDB_OUTPUT" || ! grep -Fq 'SVC_IMM=0x45' <<<"$GDB_OUTPUT"; then
+    echo "GDB did not stop at EL0 SVC #0x45 breakpoint after SVC #0x44." >&2
     exit 1
 fi
-
+if ! grep -Fq 'EL0_RETURN_STOP PC=' <<<"$GDB_OUTPUT" || grep -Fq 'EL0_RETURN_WRONG_STOP' <<<"$GDB_OUTPUT"; then
+    echo "GDB did not observe the exact EL0 return trampoline." >&2
+    exit 1
+fi
 
 if ! grep -Fq 'Hello from EL0' "$UART_LOG"; then
     echo "First EL0 process did not print its UART hello marker." >&2
