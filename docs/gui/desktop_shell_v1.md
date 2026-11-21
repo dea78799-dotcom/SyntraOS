@@ -23,7 +23,7 @@ The 640x480 QEMU profile uses:
 
 ## Compact layout
 
-Framebuffers smaller than 520 pixels wide or 400 pixels high use a compact layout:
+Framebuffers smaller than 640 pixels wide or 480 pixels high use a compact layout:
 - Reduced top bar and welcome panel.
 - Four evenly spaced launcher tiles.
 - Reduced bottom dock.
