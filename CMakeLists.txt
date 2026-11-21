@@ -21,6 +21,7 @@ add_library(syntra_gui STATIC
     kernel/gui/desktop_session.c
     kernel/gui/window_manager.c
     kernel/gui/window_renderer.c
+    kernel/gui/window_interaction.c
     kernel/input/input.c
 )
 target_include_directories(syntra_gui PUBLIC
@@ -143,6 +144,11 @@ add_test(NAME GUIWindowManagerTest COMMAND gui_window_manager_test)
 add_executable(gui_window_renderer_test tests/gui/window_renderer_test.c)
 target_link_libraries(gui_window_renderer_test PRIVATE syntra_gui)
 add_test(NAME GUIWindowRendererTest COMMAND gui_window_renderer_test)
+
+# SyntraOS GUI window pointer interaction test
+add_executable(gui_window_interaction_test tests/gui/window_interaction_test.c)
+target_link_libraries(gui_window_interaction_test PRIVATE syntra_gui)
+add_test(NAME GUIWindowInteractionTest COMMAND gui_window_interaction_test)
 
 
 # QEMU ramfb firmware-directory and wire-format tests
