@@ -78,10 +78,13 @@ syntra_status_t syntra_virtio_mmio_decode_identity(
     identity->version = snapshot->version;
     identity->device_id = snapshot->device_id;
     identity->vendor_id = snapshot->vendor_id;
-    identity->function = snapshot->device_id ==
-        SYNTRA_VIRTIO_MMIO_DEVICE_ID_INPUT
-            ? SYNTRA_VIRTIO_MMIO_FUNCTION_INPUT
-            : SYNTRA_VIRTIO_MMIO_FUNCTION_OTHER;
+
+    if (snapshot->device_id == 0U)
+        identity->function = SYNTRA_VIRTIO_MMIO_FUNCTION_UNKNOWN;
+    else if (snapshot->device_id == SYNTRA_VIRTIO_MMIO_DEVICE_ID_INPUT)
+        identity->function = SYNTRA_VIRTIO_MMIO_FUNCTION_INPUT;
+    else
+        identity->function = SYNTRA_VIRTIO_MMIO_FUNCTION_OTHER;
 
     return SYNTRA_STATUS_OK;
 }
