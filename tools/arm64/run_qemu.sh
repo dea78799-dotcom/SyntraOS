@@ -88,7 +88,7 @@ try:
     sock.recv(4096)  # monitor greeting/prompt
 except socket.timeout:
     pass
-sock.sendall(b"sendkey a 120\\n")
+sock.sendall(b"sendkey a 120\n")
 time.sleep(0.15)
 try:
     sock.recv(4096)
