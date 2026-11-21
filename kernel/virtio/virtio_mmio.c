@@ -315,6 +315,161 @@ syntra_status_t syntra_virtio_mmio_prepare_input_mapped(
     return SYNTRA_STATUS_OK;
 }
 
+
+static size_t virtio_mmio_align_up(size_t value, size_t alignment)
+{
+    size_t remainder = value % alignment;
+    return remainder == 0U ? value : value + (alignment - remainder);
+}
+
+static void virtio_mmio_store_le16(uint8_t *memory, size_t offset, uint16_t value)
+{
+    memory[offset] = (uint8_t)value;
+    memory[offset + 1U] = (uint8_t)(value >> 8U);
+}
+
+static void virtio_mmio_store_le32(uint8_t *memory, size_t offset, uint32_t value)
+{
+    memory[offset] = (uint8_t)value;
+    memory[offset + 1U] = (uint8_t)(value >> 8U);
+    memory[offset + 2U] = (uint8_t)(value >> 16U);
+    memory[offset + 3U] = (uint8_t)(value >> 24U);
+}
+
+static void virtio_mmio_store_le64(uint8_t *memory, size_t offset, uint64_t value)
+{
+    virtio_mmio_store_le32(memory, offset, (uint32_t)value);
+    virtio_mmio_store_le32(memory, offset + 4U, (uint32_t)(value >> 32U));
+}
+
+syntra_status_t syntra_virtio_mmio_setup_input_event_queue_mapped(
+    const syntra_virtio_mmio_device_t *device,
+    volatile void *mapped_base,
+    size_t mapped_size,
+    const syntra_virtio_mmio_identity_t *identity,
+    void *queue_memory,
+    uintptr_t queue_physical_base,
+    size_t queue_memory_size,
+    syntra_virtio_input_queue_t *queue)
+{
+    const size_t queue_size = SYNTRA_VIRTIO_INPUT_EVENT_QUEUE_SIZE;
+    const size_t descriptor_bytes =
+        queue_size * SYNTRA_VIRTIO_SPLIT_DESC_SIZE;
+    const size_t available_bytes = 4U + queue_size * sizeof(uint16_t);
+    const size_t used_bytes =
+        4U + queue_size * SYNTRA_VIRTIO_SPLIT_USED_ELEMENT_SIZE;
+    const size_t available_offset = descriptor_bytes;
+    const size_t used_offset =
+        virtio_mmio_align_up(available_offset + available_bytes, 4096U);
+    const size_t event_offset =
+        virtio_mmio_align_up(used_offset + used_bytes, 4U);
+    const size_t required_bytes =
+        event_offset + queue_size * SYNTRA_VIRTIO_INPUT_EVENT_SIZE;
+    uint32_t queue_num_max;
+    uint32_t status_value;
+    uint8_t *memory;
+    size_t index;
+    syntra_status_t status;
+
+    if (queue == NULL) return SYNTRA_STATUS_INVALID_ARGUMENT;
+    queue->physical_base = 0U;
+    queue->memory_size = 0U;
+    queue->used_ring_offset = 0U;
+    queue->event_buffer_offset = 0U;
+    queue->queue_size = 0U;
+    queue->last_used_index = 0U;
+    queue->ready = 0;
+
+    if (syntra_virtio_mmio_validate(device) != SYNTRA_STATUS_OK ||
+        mapped_base == NULL || mapped_size < SYNTRA_VIRTIO_MMIO_QUEUE_REGISTERS_SIZE ||
+        mapped_size > device->region_size ||
+        identity == NULL ||
+        identity->function != SYNTRA_VIRTIO_MMIO_FUNCTION_INPUT ||
+        identity->device_id != SYNTRA_VIRTIO_MMIO_DEVICE_ID_INPUT ||
+        identity->version != SYNTRA_VIRTIO_MMIO_VERSION_LEGACY ||
+        queue_memory == NULL || queue_memory_size < required_bytes ||
+        queue_physical_base == 0U ||
+        (queue_physical_base & 0xFFFU) != 0U ||
+        queue_physical_base > UINT32_MAX ||
+        (((uintptr_t)queue_memory) & 0xFU) != 0U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    status = virtio_mmio_mapped_read32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_DEVICE_STATUS, &status_value);
+    if (status != SYNTRA_STATUS_OK ||
+        (status_value & (SYNTRA_VIRTIO_STATUS_ACKNOWLEDGE |
+                         SYNTRA_VIRTIO_STATUS_DRIVER)) !=
+        (SYNTRA_VIRTIO_STATUS_ACKNOWLEDGE |
+         SYNTRA_VIRTIO_STATUS_DRIVER) ||
+        (status_value & SYNTRA_VIRTIO_STATUS_DRIVER_OK) != 0U)
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+
+    status = virtio_mmio_mapped_write32(
+        device, mapped_base, mapped_size, SYNTRA_VIRTIO_MMIO_QUEUE_SEL, 0U);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = virtio_mmio_mapped_read32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_QUEUE_NUM_MAX, &queue_num_max);
+    if (status != SYNTRA_STATUS_OK) return status;
+    if (queue_num_max < queue_size) return SYNTRA_STATUS_OUT_OF_MEMORY;
+
+    memory = (uint8_t *)queue_memory;
+    for (index = 0U; index < required_bytes; ++index) memory[index] = 0U;
+
+    /* Split ring descriptor table: one writable 8-byte event buffer per slot. */
+    for (index = 0U; index < queue_size; ++index)
+    {
+        size_t descriptor_offset = index * SYNTRA_VIRTIO_SPLIT_DESC_SIZE;
+        uintptr_t event_physical = queue_physical_base +
+            (uintptr_t)event_offset +
+            (uintptr_t)(index * SYNTRA_VIRTIO_INPUT_EVENT_SIZE);
+        virtio_mmio_store_le64(memory, descriptor_offset, (uint64_t)event_physical);
+        virtio_mmio_store_le32(
+            memory, descriptor_offset + 8U, SYNTRA_VIRTIO_INPUT_EVENT_SIZE);
+        virtio_mmio_store_le16(
+            memory, descriptor_offset + 12U, SYNTRA_VIRTIO_SPLIT_DESC_F_WRITE);
+        virtio_mmio_store_le16(memory, descriptor_offset + 14U, 0U);
+
+        /* Available ring begins after the descriptor table. */
+        virtio_mmio_store_le16(
+            memory, available_offset + 4U + index * 2U, (uint16_t)index);
+    }
+
+    virtio_mmio_store_le16(memory, available_offset, 0U);
+    virtio_mmio_store_le16(memory, available_offset + 2U, (uint16_t)queue_size);
+    virtio_mmio_store_le16(memory, used_offset, 0U);
+    virtio_mmio_store_le16(memory, used_offset + 2U, 0U);
+
+#if defined(__aarch64__)
+    __asm__ volatile("dmb oshst" ::: "memory");
+#endif
+
+    status = virtio_mmio_mapped_write32(
+        device, mapped_base, mapped_size, SYNTRA_VIRTIO_MMIO_QUEUE_NUM,
+        (uint32_t)queue_size);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = virtio_mmio_mapped_write32(
+        device, mapped_base, mapped_size, SYNTRA_VIRTIO_MMIO_QUEUE_ALIGN,
+        4096U);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    /* QueuePFN is the publication point and must be written last. */
+    status = virtio_mmio_mapped_write32(
+        device, mapped_base, mapped_size, SYNTRA_VIRTIO_MMIO_QUEUE_PFN,
+        (uint32_t)(queue_physical_base >> 12U));
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    queue->physical_base = queue_physical_base;
+    queue->memory_size = queue_memory_size;
+    queue->used_ring_offset = used_offset;
+    queue->event_buffer_offset = event_offset;
+    queue->queue_size = (uint16_t)queue_size;
+    queue->last_used_index = 0U;
+    queue->ready = 1;
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_virtio_mmio_decode_identity(
     const syntra_virtio_mmio_register_snapshot_t *snapshot,
     syntra_virtio_mmio_identity_t *identity)
