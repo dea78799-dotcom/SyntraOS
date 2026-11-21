@@ -245,7 +245,10 @@ static void test_input_event_queue_setup(void)
     assert(queue_memory[1] == 0x10U);
     assert(queue_memory[2] == 0x00U);
     assert(queue_memory[3] == 0x40U);
-    assert(queue_memory[4] == (uint8_t)queue.event_buffer_offset);
+    assert(queue_memory[4] == 0x00U);
+    assert(queue_memory[5] == 0x00U);
+    assert(queue_memory[6] == 0x00U);
+    assert(queue_memory[7] == 0x00U);
     assert(queue_memory[8] == SYNTRA_VIRTIO_INPUT_EVENT_SIZE);
     descriptor_flags = (uint32_t)queue_memory[12] |
                        ((uint32_t)queue_memory[13] << 8U);
