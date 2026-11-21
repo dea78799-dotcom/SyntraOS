@@ -1324,23 +1324,23 @@ syntra_status_t syntra_arm64_boot_main(
                                     {
                                         syntra_virtio_input_queue_physical_base =
                                             queue_physical_base;
-                                        syntra_uart_puts("VirtIO Input event queue: CONFIGURED (NOT STARTED)\\n");
+                                        syntra_uart_puts("VirtIO Input event queue: CONFIGURED (NOT STARTED)\n");
                                     }
                                     else
                                     {
                                         (void)syntra_page_free(queue_physical_base);
                                         (void)syntra_page_free(queue_physical_base + SYNTRA_PAGE_SIZE);
-                                        syntra_uart_puts("VirtIO Input event queue: UNAVAILABLE\\n");
+                                        syntra_uart_puts("VirtIO Input event queue: UNAVAILABLE\n");
                                     }
                                 }
                                 else
                                 {
-                                    syntra_uart_puts("VirtIO Input event queue: ALLOCATION FAILED\\n");
+                                    syntra_uart_puts("VirtIO Input event queue: ALLOCATION FAILED\n");
                                 }
                             }
                             else
                             {
-                                syntra_uart_puts("VirtIO Input GIC trigger: UNSUPPORTED\\n");
+                                syntra_uart_puts("VirtIO Input GIC trigger: UNSUPPORTED\n");
                             }
                         }
                     }
