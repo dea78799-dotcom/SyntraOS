@@ -341,24 +341,9 @@ syntra_arm64_exception_handle_and_select(
         context->reserved = SYNTRA_ARM64_IRQ_RETURN_MAGIC;
         scheduler_context_switching_active = 1;
 
-        /*
-         * Peek before mutating scheduler state. Metadata-only READY threads
-         * may not have an ARM64 exception frame to restore.
-         */
-        next = scheduler_get_next_ready();
-        if (next == NULL || next->cpu_context == NULL)
+        next = scheduler_schedule_next_with_context();
+        if (next == NULL)
         {
-            (void)scheduler_set_thread_state(
-                SYNTRA_ARM64_BOOT_THREAD_ID, THREAD_RUNNING);
-            scheduler_context_switching_active = 0;
-            return context;
-        }
-
-        next = scheduler_schedule_next();
-        if (next == NULL || next->cpu_context == NULL)
-        {
-            /* Defensive fallback; the single-core scheduler should not change
-             * between peek and select while IRQ handling is in progress. */
             (void)scheduler_set_thread_state(
                 SYNTRA_ARM64_BOOT_THREAD_ID, THREAD_RUNNING);
             scheduler_context_switching_active = 0;
@@ -373,16 +358,8 @@ syntra_arm64_exception_handle_and_select(
         current = scheduler_get_current();
         if (current != NULL) current->cpu_context = context;
 
-        /*
-         * Do not let scheduler metadata advance to a thread without a saved
-         * CPU frame. Keep the interrupted thread running in that case.
-         */
-        next = scheduler_get_next_ready();
-        if (next == NULL || next->cpu_context == NULL)
-            return context;
-
-        next = scheduler_schedule_next();
-        if (next == NULL || next->cpu_context == NULL) return context;
+        next = scheduler_schedule_next_with_context();
+        if (next == NULL) return context;
         return (syntra_arm64_exception_context_t *)next->cpu_context;
     }
 
