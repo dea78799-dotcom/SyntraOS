@@ -1243,6 +1243,55 @@ syntra_status_t syntra_arm64_boot_main(
         return status;
     }
 
+    /*
+     * The MMU audit has verified the identity-mapped VirtIO window as
+     * Device/RW/XN. Only now perform bounded, read-only identification reads.
+     */
+    if (syntra_virtio_mmio_available)
+    {
+        syntra_virtio_mmio_register_snapshot_t snapshot;
+        syntra_virtio_mmio_identity_t identity;
+
+        status = syntra_virtio_mmio_read_identity_mapped(
+            &syntra_virtio_mmio_device,
+            (const volatile void *)(uintptr_t)syntra_virtio_mmio_device.base,
+            syntra_virtio_mmio_device.region_size,
+            &snapshot);
+        if (status == SYNTRA_STATUS_OK)
+        {
+            syntra_uart_puts("VirtIO-MMIO ID registers: magic=");
+            syntra_uart_put_hex(snapshot.magic_value);
+            syntra_uart_puts(" version=");
+            syntra_uart_put_hex(snapshot.version);
+            syntra_uart_puts(" device=");
+            syntra_uart_put_hex(snapshot.device_id);
+            syntra_uart_puts(" vendor=");
+            syntra_uart_put_hex(snapshot.vendor_id);
+            syntra_uart_puts("\\n");
+
+            status = syntra_virtio_mmio_decode_identity(
+                &snapshot, &identity);
+            if (status == SYNTRA_STATUS_OK)
+            {
+                if (identity.function == SYNTRA_VIRTIO_MMIO_FUNCTION_INPUT)
+                    syntra_uart_puts("VirtIO-MMIO function: INPUT\\n");
+                else if (identity.function == SYNTRA_VIRTIO_MMIO_FUNCTION_OTHER)
+                    syntra_uart_puts("VirtIO-MMIO function: OTHER\\n");
+                else
+                    syntra_uart_puts("VirtIO-MMIO function: EMPTY SLOT\\n");
+            }
+            else
+            {
+                syntra_uart_puts("VirtIO-MMIO identity decode: UNAVAILABLE\\n");
+            }
+        }
+        else
+        {
+            /* Optional input transport probe must not prevent the OS booting. */
+            syntra_uart_puts("VirtIO-MMIO mapped identity read: UNAVAILABLE\\n");
+        }
+    }
+
     status = syntra_arm64_run_el0_hello_test();
     if (status != SYNTRA_STATUS_OK)
     {
