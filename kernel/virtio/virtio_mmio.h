@@ -9,7 +9,7 @@
 
 /*
  * Device-Tree discovery metadata for a VirtIO-MMIO transport.
- * This layer deliberately performs no MMIO access and enables no IRQ.
+ * No MMIO access or IRQ enable occurs during discovery.
  */
 #define SYNTRA_VIRTIO_MMIO_MIN_REGION_SIZE 0x200U
 
@@ -17,7 +17,8 @@
 #define SYNTRA_VIRTIO_MMIO_MAGIC_VALUE 0x000U
 #define SYNTRA_VIRTIO_MMIO_VERSION     0x004U
 #define SYNTRA_VIRTIO_MMIO_DEVICE_ID   0x008U
-#define SYNTRA_VIRTIO_MMIO_VENDOR_ID  0x00CU
+#define SYNTRA_VIRTIO_MMIO_VENDOR_ID   0x00CU
+#define SYNTRA_VIRTIO_MMIO_IDENTITY_SIZE 0x010U
 #define SYNTRA_VIRTIO_MMIO_DEVICE_ID_INPUT 18U
 
 #define SYNTRA_VIRTIO_MMIO_EXPECTED_MAGIC 0x74726976U
@@ -32,10 +33,7 @@ typedef struct
     int discovered;
 } syntra_virtio_mmio_device_t;
 
-/*
- * A copied register snapshot. This is data supplied by a future, separately
- * validated MMIO reader; this parser never dereferences a device address.
- */
+/* A copied register snapshot; decoding never dereferences a device address. */
 typedef struct
 {
     uint32_t magic_value;
@@ -59,26 +57,29 @@ typedef struct
     syntra_virtio_mmio_function_t function;
 } syntra_virtio_mmio_identity_t;
 
-/*
- * Discover the first "virtio,mmio" node from a validated FDT.
- * The returned region is metadata only; callers must establish a safe
- * device-memory mapping before accessing registers.
- */
 syntra_status_t syntra_virtio_mmio_discover_first(
     const syntra_fdt_t *fdt,
     syntra_virtio_mmio_device_t *device
 );
 
-/* Validate metadata before a later transport initialization stage. */
 syntra_status_t syntra_virtio_mmio_validate(
     const syntra_virtio_mmio_device_t *device
 );
 
 /*
- * Decode an already-copied register snapshot. This validates the transport
- * magic/version and classifies device ID 18 as VirtIO Input. No MMIO access,
- * reset, feature negotiation, or device-state mutation occurs here.
+ * Read only the four identification registers from a mapped device region.
+ * Caller contract: mapped_base must be the verified Device-memory mapping
+ * for device->base, and this function may only be called after the MMU
+ * mapping audit has passed. The supplied size bounds every register read.
  */
+syntra_status_t syntra_virtio_mmio_read_identity_mapped(
+    const syntra_virtio_mmio_device_t *device,
+    const volatile void *mapped_base,
+    size_t mapped_size,
+    syntra_virtio_mmio_register_snapshot_t *snapshot
+);
+
+/* Decode a copied snapshot; no MMIO access or device mutation occurs here. */
 syntra_status_t syntra_virtio_mmio_decode_identity(
     const syntra_virtio_mmio_register_snapshot_t *snapshot,
     syntra_virtio_mmio_identity_t *identity
