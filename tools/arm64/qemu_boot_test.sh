@@ -77,7 +77,12 @@ GDB_OUTPUT="$(timeout 15s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "continue" \
     -ex 'printf "EL0_EXIT_SVC_STOP vector=%lu ESR=%#lx ELR=%#lx SPSR=%#lx SVC_IMM=%#lx\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+264), (*(unsigned long*)($x0+272)&0xffff)' \
     -ex "continue" \
+    -ex 'if $pc == (unsigned long)&syntra_arm64_el0_return_trampoline' \
     -ex 'printf "EL0_RETURN_STOP PC=%#lx\n", $pc' \
+    -ex "else" \
+    -ex 'printf "EL0_RETURN_WRONG_STOP PC=%#lx expected=%#lx\n", $pc, (unsigned long)&syntra_arm64_el0_return_trampoline' \
+    -ex "quit 1" \
+    -ex "end" \
     -ex "detach" 2>&1)" || { \
         printf '%s\n' "$GDB_OUTPUT" >&2; \
         echo "GDB diagnostic breakpoint did not complete (timeout or remote error)." >&2; \
