@@ -379,6 +379,29 @@ static void test_input_event_irq_drain(void)
     assert(queue.key_event_count == 2U);
     assert(queue.event_count == 2U);
     assert(queue.last_used_index == 2U);
+
+    /* Reject a corrupted queue boundary before reading ring memory. */
+    {
+        size_t saved_offset = queue.event_buffer_offset;
+        queue.event_buffer_offset = queue.memory_size - 1U;
+        assert(syntra_virtio_mmio_handle_input_irq(
+            &device, registers, sizeof(registers), &queue, &input_state) ==
+            SYNTRA_STATUS_INVALID_ARGUMENT);
+        queue.event_buffer_offset = saved_offset;
+    }
+
+    /* Invalid event lengths are dropped but descriptors are recycled. */
+    used_element += SYNTRA_VIRTIO_SPLIT_USED_ELEMENT_SIZE;
+    test_store_le32(memory, used_element, 1U);
+    test_store_le32(memory, used_element + 4U, 4U);
+    test_store_le16(memory, queue.used_ring_offset + 2U, 3U);
+    registers[SYNTRA_VIRTIO_MMIO_INTERRUPT_STATUS / sizeof(uint32_t)] = 1U;
+    assert(syntra_virtio_mmio_handle_input_irq(
+        &device, registers, sizeof(registers), &queue, &input_state) ==
+        SYNTRA_STATUS_OK);
+    assert(queue.dropped_event_count == 1U);
+    assert(queue.event_count == 2U);
+    assert(queue.last_used_index == 3U);
 }
 
 int main(void)
