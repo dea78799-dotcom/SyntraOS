@@ -73,5 +73,8 @@ The ARM64 physical page allocator manages complete 4-KiB RAM pages in the
 physical address window below 4 GiB. It uses static free/allocated bitmaps.
 RAM regions crossing the 4-GiB boundary are clipped; regions wholly above
 4 GiB are ignored. Initialization returns OUT_OF_MEMORY if no eligible pages
-remain. It is currently a single-core, non-thread-safe allocator; locking or
-interrupt-safe serialization is required before concurrent runtime use.
+remain. Allocation search begins at a next-free cursor and wraps; freeing a
+lower page moves the cursor backward. This improves common reuse paths but
+does not bound worst-case scan time. It is currently a single-core,
+non-thread-safe allocator; locking or interrupt-safe serialization is required
+before concurrent runtime use.
