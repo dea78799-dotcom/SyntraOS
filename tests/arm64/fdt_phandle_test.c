@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-static const char test_strings[] = "phandle\0#interrupt-cells\0";
+static const char test_strings[] = "phandle\0#interrupt-cells\0interrupt-parent\0";
 
 static void write_be32(uint8_t *target, uint32_t value)
 {
@@ -48,6 +48,12 @@ static size_t build_test_fdt(uint8_t *blob, size_t capacity)
     cursor = append_u32(blob, cursor, 1U);
     cursor = append_name(blob, cursor, "");
 
+    /* Root interrupt-parent inherits into child nodes. */
+    cursor = append_u32(blob, cursor, 3U);
+    cursor = append_u32(blob, cursor, 4U);
+    cursor = append_u32(blob, cursor, 25U);
+    cursor = append_u32(blob, cursor, 0x8002U);
+
     /* FDT_BEGIN_NODE: interrupt controller */
     cursor = append_u32(blob, cursor, 1U);
     cursor = append_name(blob, cursor, "intc");
@@ -78,6 +84,10 @@ static size_t build_test_fdt(uint8_t *blob, size_t capacity)
     cursor = 56U;
     cursor = append_u32(blob, cursor, 1U);
     cursor = append_name(blob, cursor, "");
+    cursor = append_u32(blob, cursor, 3U);
+    cursor = append_u32(blob, cursor, 4U);
+    cursor = append_u32(blob, cursor, 25U);
+    cursor = append_u32(blob, cursor, 0x8002U);
     cursor = append_u32(blob, cursor, 1U);
     cursor = append_name(blob, cursor, "intc");
     cursor = append_u32(blob, cursor, 3U);
@@ -127,6 +137,14 @@ int main(void)
     assert(data_size == 4U);
     assert(data[0] == 0U && data[1] == 0U &&
            data[2] == 0U && data[3] == 3U);
+
+    assert(syntra_fdt_get_inherited_property(
+        &fdt, &node, "interrupt-parent", &data, &data_size) ==
+        SYNTRA_STATUS_OK);
+    assert(data_size == 4U);
+    assert(data[0] == 0U && data[1] == 0U &&
+           data[2] == 0x80U && data[3] == 0x02U);
+
     assert(syntra_fdt_find_phandle(&fdt, 0x1234U, &node) !=
            SYNTRA_STATUS_OK);
 
