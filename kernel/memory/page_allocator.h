@@ -16,6 +16,11 @@
  */
 syntra_status_t syntra_page_allocator_init(void);
 syntra_status_t syntra_page_alloc(uintptr_t *physical_address);
+/* Allocate an aligned physically contiguous run of complete 4 KiB pages. */
+syntra_status_t syntra_page_alloc_contiguous(
+    size_t page_count,
+    uintptr_t *physical_address
+);
 syntra_status_t syntra_page_free(uintptr_t physical_address);
 size_t syntra_page_allocator_free_count(void);
 size_t syntra_page_allocator_total_count(void);
