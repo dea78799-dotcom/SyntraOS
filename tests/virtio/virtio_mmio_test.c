@@ -164,6 +164,7 @@ static void test_input_transport_prepare(void)
         (SYNTRA_VIRTIO_STATUS_ACKNOWLEDGE |
          SYNTRA_VIRTIO_STATUS_DRIVER |
          SYNTRA_VIRTIO_STATUS_FEATURES_OK));
+    assert(registers[SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES_SEL / sizeof(uint32_t)] == 1U);
 
     identity.function = SYNTRA_VIRTIO_MMIO_FUNCTION_OTHER;
     assert(syntra_virtio_mmio_prepare_input_mapped(
