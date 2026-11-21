@@ -6,8 +6,6 @@ on:
       - main
 
   pull_request:
-    branches:
-      - main
 
   # Run a health check every day at 02:00 UTC (09:00 Vietnam time).
   schedule:
