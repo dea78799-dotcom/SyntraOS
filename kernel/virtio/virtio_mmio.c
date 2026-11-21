@@ -1,6 +1,7 @@
 #include "virtio_mmio.h"
 
 #include <stddef.h>
+#include "../input/input.h"
 
 
 static uint32_t virtio_mmio_read_be32(const uint8_t *data)
@@ -378,6 +379,10 @@ syntra_status_t syntra_virtio_mmio_setup_input_event_queue_mapped(
     queue->event_buffer_offset = 0U;
     queue->queue_size = 0U;
     queue->last_used_index = 0U;
+    queue->event_count = 0U;
+    queue->key_event_count = 0U;
+    queue->dropped_event_count = 0U;
+    queue->irq_error_count = 0U;
     queue->ready = 0;
 
     if (syntra_virtio_mmio_validate(device) != SYNTRA_STATUS_OK ||
@@ -469,6 +474,198 @@ syntra_status_t syntra_virtio_mmio_setup_input_event_queue_mapped(
     queue->queue_size = (uint16_t)queue_size;
     queue->last_used_index = 0U;
     queue->ready = 1;
+    return SYNTRA_STATUS_OK;
+}
+
+
+static uint16_t virtio_mmio_load_volatile_le16(
+    const volatile uint8_t *memory, size_t offset)
+{
+    return (uint16_t)((uint16_t)memory[offset] |
+                      ((uint16_t)memory[offset + 1U] << 8U));
+}
+
+static uint32_t virtio_mmio_load_volatile_le32(
+    const volatile uint8_t *memory, size_t offset)
+{
+    return (uint32_t)memory[offset] |
+           ((uint32_t)memory[offset + 1U] << 8U) |
+           ((uint32_t)memory[offset + 2U] << 16U) |
+           ((uint32_t)memory[offset + 3U] << 24U);
+}
+
+static void virtio_mmio_store_volatile_le16(
+    volatile uint8_t *memory, size_t offset, uint16_t value)
+{
+    memory[offset] = (uint8_t)value;
+    memory[offset + 1U] = (uint8_t)(value >> 8U);
+}
+
+syntra_status_t syntra_virtio_mmio_start_input_mapped(
+    const syntra_virtio_mmio_device_t *device,
+    volatile void *mapped_base,
+    size_t mapped_size,
+    const syntra_virtio_mmio_identity_t *identity,
+    const syntra_virtio_input_queue_t *queue)
+{
+    uint32_t device_status;
+    syntra_status_t status;
+
+    if (identity == NULL || queue == NULL || queue->ready != 1 ||
+        identity->function != SYNTRA_VIRTIO_MMIO_FUNCTION_INPUT ||
+        identity->version != SYNTRA_VIRTIO_MMIO_VERSION_LEGACY ||
+        mapped_size < SYNTRA_VIRTIO_MMIO_INTERRUPT_REGISTERS_SIZE)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    status = virtio_mmio_mapped_read32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_DEVICE_STATUS, &device_status);
+    if (status != SYNTRA_STATUS_OK) return status;
+    if ((device_status & (SYNTRA_VIRTIO_STATUS_ACKNOWLEDGE |
+                          SYNTRA_VIRTIO_STATUS_DRIVER)) !=
+        (SYNTRA_VIRTIO_STATUS_ACKNOWLEDGE |
+         SYNTRA_VIRTIO_STATUS_DRIVER) ||
+        (device_status & SYNTRA_VIRTIO_STATUS_DRIVER_OK) != 0U)
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+
+    status = virtio_mmio_mapped_write32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_DEVICE_STATUS,
+        device_status | SYNTRA_VIRTIO_STATUS_DRIVER_OK);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    /* Queue 0 is the event queue. Notify only after DRIVER_OK is visible. */
+    return virtio_mmio_mapped_write32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_QUEUE_NOTIFY, 0U);
+}
+
+syntra_status_t syntra_virtio_mmio_handle_input_irq(
+    const syntra_virtio_mmio_device_t *device,
+    volatile void *mapped_base,
+    size_t mapped_size,
+    syntra_virtio_input_queue_t *queue,
+    syntra_input_state_t *input_state)
+{
+    uint32_t interrupt_status;
+    uint16_t used_index;
+    uint16_t pending;
+    uint16_t processed = 0U;
+    volatile uint8_t *memory;
+    const size_t available_offset =
+        SYNTRA_VIRTIO_INPUT_EVENT_QUEUE_SIZE * SYNTRA_VIRTIO_SPLIT_DESC_SIZE;
+    syntra_status_t status;
+
+    if (queue == NULL || input_state == NULL || queue->ready != 1 ||
+        queue->queue_size != SYNTRA_VIRTIO_INPUT_EVENT_QUEUE_SIZE ||
+        mapped_size < SYNTRA_VIRTIO_MMIO_INTERRUPT_REGISTERS_SIZE)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    status = virtio_mmio_mapped_read32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_INTERRUPT_STATUS, &interrupt_status);
+    if (status != SYNTRA_STATUS_OK) return status;
+    if (interrupt_status == 0U) return SYNTRA_STATUS_OK;
+
+    status = virtio_mmio_mapped_write32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_INTERRUPT_ACK, interrupt_status);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    if ((interrupt_status & 1U) == 0U) return SYNTRA_STATUS_OK;
+
+    memory = (volatile uint8_t *)(uintptr_t)queue->physical_base;
+#if defined(__aarch64__)
+    __asm__ volatile("dmb oshld" ::: "memory");
+#endif
+    used_index = virtio_mmio_load_volatile_le16(
+        memory, queue->used_ring_offset + 2U);
+    pending = (uint16_t)(used_index - queue->last_used_index);
+    if (pending > queue->queue_size)
+    {
+        queue->irq_error_count++;
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    while (queue->last_used_index != used_index &&
+           processed < queue->queue_size)
+    {
+        size_t used_element_offset =
+            queue->used_ring_offset + 4U +
+            ((size_t)(queue->last_used_index % queue->queue_size) *
+             SYNTRA_VIRTIO_SPLIT_USED_ELEMENT_SIZE);
+        uint32_t descriptor_id =
+            virtio_mmio_load_volatile_le32(memory, used_element_offset);
+        uint32_t event_length =
+            virtio_mmio_load_volatile_le32(memory, used_element_offset + 4U);
+        size_t event_offset;
+        syntra_status_t event_status = SYNTRA_STATUS_OK;
+
+        if (descriptor_id >= queue->queue_size)
+        {
+            queue->irq_error_count++;
+            return SYNTRA_STATUS_ERROR;
+        }
+
+        event_offset = queue->event_buffer_offset +
+            ((size_t)descriptor_id * SYNTRA_VIRTIO_INPUT_EVENT_SIZE);
+
+        if (event_length < SYNTRA_VIRTIO_INPUT_EVENT_SIZE)
+        {
+            queue->dropped_event_count++;
+        }
+        else
+        {
+            syntra_input_event_t event;
+            event.type = virtio_mmio_load_volatile_le16(memory, event_offset);
+            event.code = virtio_mmio_load_volatile_le16(memory, event_offset + 2U);
+            event.value = (int32_t)virtio_mmio_load_volatile_le32(
+                memory, event_offset + 4U);
+            event_status = syntra_input_process(input_state, &event);
+            if (event_status == SYNTRA_STATUS_OK)
+            {
+                if (queue->event_count < UINT32_MAX) queue->event_count++;
+                if (event.type == SYNTRA_INPUT_EV_KEY &&
+                    queue->key_event_count < UINT32_MAX)
+                    queue->key_event_count++;
+            }
+            else if (queue->dropped_event_count < UINT32_MAX)
+            {
+                queue->dropped_event_count++;
+            }
+        }
+
+        /* Recycle the completed descriptor into the available ring. */
+        {
+            uint16_t available_index = virtio_mmio_load_volatile_le16(
+                memory, available_offset + 2U);
+            size_t ring_offset = available_offset + 4U +
+                ((size_t)(available_index % queue->queue_size) * 2U);
+            virtio_mmio_store_volatile_le16(
+                memory, ring_offset, (uint16_t)descriptor_id);
+#if defined(__aarch64__)
+            __asm__ volatile("dmb oshst" ::: "memory");
+#endif
+            virtio_mmio_store_volatile_le16(
+                memory, available_offset + 2U,
+                (uint16_t)(available_index + 1U));
+        }
+
+        queue->last_used_index++;
+        processed++;
+    }
+
+#if defined(__aarch64__)
+    __asm__ volatile("dmb oshst" ::: "memory");
+#endif
+    if (processed != 0U)
+    {
+        status = virtio_mmio_mapped_write32(
+            device, mapped_base, mapped_size,
+            SYNTRA_VIRTIO_MMIO_QUEUE_NOTIFY, 0U);
+        if (status != SYNTRA_STATUS_OK) return status;
+    }
+
     return SYNTRA_STATUS_OK;
 }
 
