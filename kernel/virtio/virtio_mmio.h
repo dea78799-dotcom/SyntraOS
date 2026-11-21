@@ -180,7 +180,8 @@ syntra_status_t syntra_virtio_mmio_start_input_mapped(
  */
 syntra_status_t syntra_virtio_mmio_pop_input_event(
     syntra_virtio_input_queue_t *queue,
-    syntra_input_event_t *event
+    syntra_input_event_t *event,
+    int *available
 );
 
 /* Acknowledge a VirtIO Input interrupt, drain used entries, and recycle buffers. */
