@@ -13,6 +13,7 @@
 #include "../page_table_builder.h"
 #include "../mmu_mapping_plan.h"
 #include "../../../gui/ramfb.h"
+#include "../../../virtio/virtio_mmio.h"
 
 /* Optional QEMU fw_cfg MMIO window, discovered from the supplied FDT. */
 static uintptr_t syntra_fw_cfg_base;
@@ -327,6 +328,28 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
         {
             /* UART-only boot remains supported when fw_cfg is absent. */
             syntra_uart_puts("FDT fw_cfg: NOT FOUND; GUI output unavailable\n");
+        }
+    }
+
+    {
+        syntra_virtio_mmio_device_t virtio_device;
+        status = syntra_virtio_mmio_discover_first(&fdt, &virtio_device);
+        if (status == SYNTRA_STATUS_OK)
+        {
+            syntra_uart_puts("FDT VirtIO-MMIO region discovered: base=");
+            syntra_uart_put_hex((uint64_t)virtio_device.base);
+            syntra_uart_puts(" size=");
+            syntra_uart_put_hex((uint64_t)virtio_device.region_size);
+            syntra_uart_puts("\\n");
+        }
+        else if (status == SYNTRA_STATUS_NOT_IMPLEMENTED)
+        {
+            syntra_uart_puts("FDT VirtIO-MMIO: NOT FOUND\\n");
+        }
+        else
+        {
+            /* Input is optional; malformed discovery must not break UART boot. */
+            syntra_uart_puts("FDT VirtIO-MMIO discovery: UNAVAILABLE\\n");
         }
     }
 
