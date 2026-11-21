@@ -70,7 +70,7 @@ GDB_OUTPUT="$(timeout 15s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex 'condition 2 *(unsigned long*)($x0+288)==8 && (((*(unsigned long*)($x0+272)>>26)&0x3f)==0x15) && ((*(unsigned long*)($x0+264)&0xf)==0) && ((*(unsigned long*)($x0+272)&0xffff)==0x44)' \
     -ex "continue" \
     -ex 'printf "EL0_SVC_STOP vector=%lu ESR=%#lx ELR=%#lx FAR=%#lx SPSR=%#lx SVC_IMM=%#lx\\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+280), *(unsigned long*)($x0+264), (*(unsigned long*)($x0+272)&0xffff)' \
-endToken" || { \
+    -ex "detach" 2>&1)" || { \
         printf '%s\n' "$GDB_OUTPUT" >&2; \
         echo "GDB diagnostic breakpoint did not complete (timeout or remote error)." >&2; \
         echo "Continuing with UART smoke-test checks." >&2; \
