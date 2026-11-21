@@ -4,11 +4,14 @@
 #include "context.h"
 
 /*
- * These symbols are part of the ARM64 image: the UART entry points are
- * defined in boot.c, the EL0 entry helpers in user_program.S/user_entry.S,
- * and __user_text_start in the linker script. Keep them as strong
- * references so freestanding code does not emit weak-symbol GOT loads.
+ * The freestanding ARM64 image provides these symbols in boot.c,
+ * user_program.S, user_entry.S, and linker.ld. Strong references avoid
+ * weak-symbol GOT loads in the post-MMU exception path.
+ *
+ * Host-side unit tests compile this file without the ARM64 boot objects,
+ * so they retain weak references and tolerate the symbols being absent.
  */
+#if defined(SYNTRA_ARM64_FREESTANDING_IMAGE)
 extern void syntra_arm64_exception_uart_puts(const char *message);
 extern void syntra_arm64_exception_uart_put_hex(uint64_t value);
 extern char __user_text_start[];
@@ -24,6 +27,25 @@ static void syntra_exception_uart_puts(const char *message)
 {
     syntra_arm64_exception_uart_puts(message);
 }
+#else
+extern void syntra_arm64_exception_uart_puts(const char *message) __attribute__((weak));
+extern void syntra_arm64_exception_uart_put_hex(uint64_t value) __attribute__((weak));
+extern char __user_text_start[] __attribute__((weak));
+extern void syntra_arm64_user_fault_halt(void) __attribute__((weak));
+extern void syntra_arm64_el0_return_trampoline(void) __attribute__((weak));
+
+static void syntra_exception_uart_hex(uint64_t value)
+{
+    if (syntra_arm64_exception_uart_put_hex != NULL)
+        syntra_arm64_exception_uart_put_hex(value);
+}
+
+static void syntra_exception_uart_puts(const char *message)
+{
+    if (syntra_arm64_exception_uart_puts != NULL)
+        syntra_arm64_exception_uart_puts(message);
+}
+#endif
 #include "../../interrupt/interrupt.h"
 #include "../../scheduler/scheduler.h"
 
@@ -175,7 +197,11 @@ syntra_status_t syntra_arm64_exception_handle(
                 syntra_exception_uart_puts("Hello from EL0\n");
                 mutable_context->reserved = SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC;
             }
-            else if (immediate == 0x45ULL)
+            else if (immediate == 0x45ULL
+#if !defined(SYNTRA_ARM64_FREESTANDING_IMAGE)
+                     && syntra_arm64_el0_return_trampoline != NULL
+#endif
+                    )
             {
                 syntra_exception_uart_puts("EL0 exit SVC: returning to EL1\n");
                 mutable_context->elr_el1 =
