@@ -24,6 +24,10 @@ The original `syntra_gui_window_open()` remains source-compatible and opens a ge
 
 `syntra_gui_render_windows()` draws each window back-to-front, its title bar, close affordance, and the typed app surface. Surface drawing is framebuffer-only and uses the existing 5x7 built-in font and fill-rectangle primitive. App types are validated when opening a window; unknown values are rejected.
 
+## GUI v5 composition preview
+
+On the 640x480 QEMU framebuffer, the desktop renderer composes the Files, Settings, and Launcher prototype windows over the desktop before ramfb is configured. A boot marker reports successful composition. Compact 320x240 rendering intentionally stays with the uncluttered base desktop. This is a visual integration milestone, not live window interaction.
+
 ## Current limitations
 
 These are prototype visual surfaces, not filesystem or settings implementations. The surfaces have no app actions, file I/O, settings persistence, launcher-to-window dispatch, or event-loop integration yet. QEMU live input and CI validation are still pending for this PR.
