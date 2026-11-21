@@ -43,6 +43,7 @@ cat "$LOG_FILE"
 if grep -Fq "SyntraOS boot OK" "$LOG_FILE" &&
    grep -Fq "VirtIO-MMIO function: INPUT" "$LOG_FILE" &&
    grep -Fq "VirtIO Input transport: DRIVER FEATURES NEGOTIATED" "$LOG_FILE" &&
+   grep -Fq "VirtIO Input GIC trigger: CONFIGURED" "$LOG_FILE" &&
    grep -Eq "FDT physical memory regions: 0x0*[1-9a-fA-F][0-9a-fA-F]*" "$LOG_FILE" &&
    grep -Fq "Kernel reserved: base=0x0000000040200000" "$LOG_FILE" &&
    grep -Eq "Physical page allocator: PASS free=0x0*[1-9a-fA-F][0-9a-fA-F]* total=0x0*[1-9a-fA-F][0-9a-fA-F]*" "$LOG_FILE" &&
