@@ -26,7 +26,7 @@ static syntra_status_t virtio_mmio_discover_interrupt(
     syntra_fdt_node_t controller;
     syntra_status_t status;
 
-    status = syntra_fdt_get_property(
+    status = syntra_fdt_get_inherited_property(
         fdt, device_node, "interrupt-parent", &data, &data_size);
     if (status != SYNTRA_STATUS_OK || data_size != 4U)
         return SYNTRA_STATUS_NOT_IMPLEMENTED;
