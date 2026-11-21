@@ -1519,6 +1519,7 @@ syntra_status_t syntra_arm64_boot_main(
         if (status == SYNTRA_STATUS_OK)
         {
             syntra_uart_puts("QEMU ramfb: READY 640x480 XRGB8888\n");
+            syntra_uart_puts("SyntraOS GUI v5: COMPOSED DESKTOP + LAUNCHER + FILES + SETTINGS\n");
         }
         else if (status == SYNTRA_STATUS_NOT_IMPLEMENTED)
         {
