@@ -55,3 +55,33 @@ syntra_status_t syntra_virtio_mmio_discover_first(
 
     return syntra_virtio_mmio_validate(device);
 }
+
+syntra_status_t syntra_virtio_mmio_decode_identity(
+    const syntra_virtio_mmio_register_snapshot_t *snapshot,
+    syntra_virtio_mmio_identity_t *identity)
+{
+    if (snapshot == NULL || identity == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    identity->version = 0U;
+    identity->device_id = 0U;
+    identity->vendor_id = 0U;
+    identity->function = SYNTRA_VIRTIO_MMIO_FUNCTION_UNKNOWN;
+
+    if (snapshot->magic_value != SYNTRA_VIRTIO_MMIO_EXPECTED_MAGIC)
+        return SYNTRA_STATUS_ERROR;
+
+    if (snapshot->version != SYNTRA_VIRTIO_MMIO_VERSION_LEGACY &&
+        snapshot->version != SYNTRA_VIRTIO_MMIO_VERSION_MODERN)
+        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+
+    identity->version = snapshot->version;
+    identity->device_id = snapshot->device_id;
+    identity->vendor_id = snapshot->vendor_id;
+    identity->function = snapshot->device_id ==
+        SYNTRA_VIRTIO_MMIO_DEVICE_ID_INPUT
+            ? SYNTRA_VIRTIO_MMIO_FUNCTION_INPUT
+            : SYNTRA_VIRTIO_MMIO_FUNCTION_OTHER;
+
+    return SYNTRA_STATUS_OK;
+}
