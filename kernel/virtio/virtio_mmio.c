@@ -382,6 +382,7 @@ syntra_status_t syntra_virtio_mmio_setup_input_event_queue_mapped(
     queue->last_used_index = 0U;
     queue->event_count = 0U;
     queue->key_event_count = 0U;
+    queue->key_a_press_count = 0U;
     queue->dropped_event_count = 0U;
     queue->irq_error_count = 0U;
     queue->ready = 0;
@@ -645,9 +646,14 @@ syntra_status_t syntra_virtio_mmio_handle_input_irq(
             if (event_status == SYNTRA_STATUS_OK)
             {
                 if (queue->event_count < UINT32_MAX) queue->event_count++;
-                if (event.type == SYNTRA_INPUT_EV_KEY &&
-                    queue->key_event_count < UINT32_MAX)
-                    queue->key_event_count++;
+                if (event.type == SYNTRA_INPUT_EV_KEY)
+                {
+                    if (queue->key_event_count < UINT32_MAX)
+                        queue->key_event_count++;
+                    if (event.code == 30U && event.value == 1 &&
+                        queue->key_a_press_count < UINT32_MAX)
+                        queue->key_a_press_count++;
+                }
             }
             else if (queue->dropped_event_count < UINT32_MAX)
             {
