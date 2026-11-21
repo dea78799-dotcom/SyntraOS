@@ -155,6 +155,11 @@ static int find_free_page_range(size_t start_page, size_t end_page, size_t *foun
     return 0;
 }
 
+/*
+ * Initialization rebuilds the full bitmap and is intentionally a boot-time
+ * operation. Call it before enabling interrupts and before publishing the
+ * allocator to other kernel subsystems; it is not an IRQ-safe reinit path.
+ */
 syntra_status_t syntra_page_allocator_init(void)
 {
     size_t index;
