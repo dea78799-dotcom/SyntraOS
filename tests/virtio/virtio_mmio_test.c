@@ -153,7 +153,7 @@ static void test_input_transport_prepare(void)
     assert(registers[SYNTRA_VIRTIO_MMIO_DEVICE_STATUS / sizeof(uint32_t)] ==
         (SYNTRA_VIRTIO_STATUS_ACKNOWLEDGE | SYNTRA_VIRTIO_STATUS_DRIVER));
     assert(registers[SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES / sizeof(uint32_t)] == 0U);
-    assert(registers[SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES_SEL / sizeof(uint32_t)] == 1U);
+    assert(registers[SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES_SEL / sizeof(uint32_t)] == 0U);
 
     identity.version = SYNTRA_VIRTIO_MMIO_VERSION_MODERN;
     registers[SYNTRA_VIRTIO_MMIO_DEVICE_STATUS / sizeof(uint32_t)] = 0U;
