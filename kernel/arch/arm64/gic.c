@@ -443,6 +443,14 @@ syntra_status_t syntra_arm64_gic_configure_interrupt(
 #endif
 }
 
+uint64_t syntra_arm64_gic_mpidr_to_irouter(uint64_t mpidr)
+{
+    return (((mpidr >> 32U) & 0xFFULL) << 32U) |
+           (((mpidr >> 16U) & 0xFFULL) << 16U) |
+           (((mpidr >> 8U) & 0xFFULL) << 8U) |
+           (mpidr & 0xFFULL);
+}
+
 syntra_status_t syntra_arm64_gic_spi_route_offset(
     uint32_t interrupt_id,
     size_t distributor_size,
@@ -514,7 +522,7 @@ syntra_status_t syntra_arm64_gic_enable_interrupt(uint32_t interrupt_id)
                     return route_status;
                 *(volatile uint64_t *)(gic_config.distributor_base +
                                        route_offset) =
-                    gic_mpidr_affinity(gic_read_mpidr());
+                    syntra_arm64_gic_mpidr_to_irouter(gic_read_mpidr());
             }
 
             dist[group_index] |= bit;
