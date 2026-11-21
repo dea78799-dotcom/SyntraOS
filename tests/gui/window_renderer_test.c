@@ -61,8 +61,8 @@ int main(void)
         SYNTRA_GUI_APP_SETTINGS, &settings_id) == SYNTRA_STATUS_OK);
     assert(syntra_gui_render_windows(&framebuffer, &manager) == SYNTRA_STATUS_OK);
     /* App-specific surfaces render folder and settings-row accents. */
-    assert(pixels[(size_t)68U * STRIDE + 86U] == 0xFF3B9FB5U);
-    assert(pixels[(size_t)69U * STRIDE + 313U] == 0xFF54D6E8U);
+    assert(pixels[(size_t)75U * STRIDE + 86U] == 0xFF3B9FB5U);
+    assert(pixels[(size_t)75U * STRIDE + 313U] == 0xFF54D6E8U);
 
     assert(syntra_gui_render_windows(&wrong_size, &manager) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
