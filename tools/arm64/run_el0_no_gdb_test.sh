@@ -58,21 +58,21 @@ tail -n 250 "$QEMU_INT_LOG" || true
 
 # Resolve the first EL1 Data Abort from QEMU's architectural trace.
 FAULT_ELR="$(awk '
-    /Taking exception 4 \\[Data Abort\\]/ { in_abort=1; next }
-    in_abort && /\\.\\.\\.with ELR / {
-        sub(/^.*\\.\\.\\.with ELR /, "")
+    /Taking exception 4/ && /Data Abort/ { in_abort=1; next }
+    in_abort && index($0, "...with ELR ") {
+        sub(/^.*with ELR /, "")
         print
         exit
     }
-' "$QEMU_INT_LOG" | tr -d '\\r')"
+' "$QEMU_INT_LOG" | tr -d '\r')"
 FAULT_FAR="$(awk '
-    /Taking exception 4 \\[Data Abort\\]/ { in_abort=1; next }
-    in_abort && /\\.\\.\\.with FAR / {
-        sub(/^.*\\.\\.\\.with FAR /, "")
+    /Taking exception 4/ && /Data Abort/ { in_abort=1; next }
+    in_abort && index($0, "...with FAR ") {
+        sub(/^.*with FAR /, "")
         print
         exit
     }
-' "$QEMU_INT_LOG" | tr -d '\\r')"
+' "$QEMU_INT_LOG" | tr -d '\r')"
 
 if [[ -n "$FAULT_ELR" ]]; then
     echo "=== First EL1 Data Abort address resolution ==="
