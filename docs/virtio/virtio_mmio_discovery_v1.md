@@ -1,6 +1,6 @@
-# SyntraOS VirtIO-MMIO Discovery v1
+# SyntraOS VirtIO-MMIO Discovery and Identity v2
 
-Status: Device Tree discovery foundation
+Status: Device Tree discovery plus pure register-snapshot decoding
 Target: QEMU ARM64 `virt`
 
 ## Implemented
@@ -8,26 +8,31 @@ Target: QEMU ARM64 `virt`
 - Locate the first Device Tree node compatible with `virtio,mmio`.
 - Read its first `reg` tuple through the existing validated FDT parser.
 - Validate the resulting base address and region size.
-- Keep the result as metadata; no device register is read or written.
+- Define the public VirtIO-MMIO identification register offsets and expected magic value.
+- Decode a copied register snapshot, validate transport versions 1 and 2, and classify device ID 18 as VirtIO Input.
+- Host tests cover metadata bounds, valid Input identification, other device IDs, invalid magic, unsupported versions, and null arguments.
 
 ## Explicit safety boundary
 
+The identity decoder accepts ordinary copied values. It never dereferences the physical device address and never reads or writes MMIO.
+
 This stage does not:
-- map the MMIO region or change page-table memory attributes;
-- negotiate VirtIO feature bits;
+- add the discovered region to the active ARM64 Device-memory page-table plan;
+- read identification registers from hardware;
 - reset or configure a device;
+- negotiate VirtIO feature bits;
 - allocate or publish a virtqueue;
 - enable or acknowledge an interrupt;
 - consume keyboard or pointer events.
 
-The kernel's current boot path does not yet provide a verified device-memory mapping contract for this new transport. Accessing a physical address as a normal C pointer before that work is complete could fault or use incorrect memory attributes. Therefore discovery and register access are intentionally separate stages.
+The kernel's current boot mapping plan does not yet include this discovered VirtIO region. Directly casting its physical address to a C pointer would therefore be unsafe. Mapping and post-activation verification must come before a hardware register reader.
 
 ## Next stages
 
-1. Add a bounded MMIO mapping contract and verify the mapping on QEMU ARM64.
-2. Read the VirtIO-MMIO identification/version registers without changing device state.
+1. Extend the checked MMU mapping plan with the discovered VirtIO region as Device, RW, and execute-never memory.
+2. Verify that mapping before adding a bounded read-only identification-register accessor.
 3. Negotiate the VirtIO Input device and configure a bounded event queue.
 4. Decode input events into `syntra_input_event_t`.
 5. Route events to the desktop/window interaction loop and test using QEMU's virtual input devices.
 
-The discovery implementation is original SyntraOS C code and uses the project's existing FDT parser. The VirtIO transport is based on the public VirtIO specification; no vendor GUI source or third-party GUI toolkit is imported.
+The implementation is original SyntraOS C code. It uses the project's FDT and MMU components and public VirtIO transport definitions; no vendor GUI source or third-party GUI toolkit is imported.
