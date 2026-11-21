@@ -100,6 +100,15 @@ syntra_status_t syntra_fdt_get_property(
     uint32_t *data_size
 );
 
+/* Find a property on a node or its ancestors, for inherited DT properties. */
+syntra_status_t syntra_fdt_get_inherited_property(
+    const syntra_fdt_t *fdt,
+    const syntra_fdt_node_t *node,
+    const char *property_name,
+    const uint8_t **data,
+    uint32_t *data_size
+);
+
 /* Count validated FDT header reservation-map entries (terminator excluded). */
 syntra_status_t syntra_fdt_get_reservation_count(
     const syntra_fdt_t *fdt,
