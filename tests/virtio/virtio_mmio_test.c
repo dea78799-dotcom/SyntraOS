@@ -59,6 +59,11 @@ static void test_identity_decode(void)
            SYNTRA_STATUS_OK);
     assert(identity.function == SYNTRA_VIRTIO_MMIO_FUNCTION_OTHER);
 
+    snapshot.device_id = 0U;
+    assert(syntra_virtio_mmio_decode_identity(&snapshot, &identity) ==
+           SYNTRA_STATUS_OK);
+    assert(identity.function == SYNTRA_VIRTIO_MMIO_FUNCTION_UNKNOWN);
+
     snapshot.magic_value = 0U;
     assert(syntra_virtio_mmio_decode_identity(&snapshot, &identity) ==
            SYNTRA_STATUS_ERROR);
