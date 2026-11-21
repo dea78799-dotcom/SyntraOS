@@ -87,6 +87,7 @@ target_include_directories(syntra_kernel PUBLIC
     kernel/process
     kernel/ipc
     kernel/interrupt
+    kernel/sync
     kernel/exception
     kernel/timer
     kernel/clock
