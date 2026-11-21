@@ -669,6 +669,38 @@ static syntra_status_t fdt_get_parent_node(
     return SYNTRA_STATUS_ERROR;
 }
 
+
+syntra_status_t syntra_fdt_get_inherited_property(
+    const syntra_fdt_t *fdt,
+    const syntra_fdt_node_t *node,
+    const char *property_name,
+    const uint8_t **data,
+    uint32_t *data_size)
+{
+    syntra_fdt_node_t current;
+    syntra_status_t status;
+    unsigned int depth;
+
+    if (fdt == NULL || node == NULL || property_name == NULL ||
+        data == NULL || data_size == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    current = *node;
+    for (depth = 0U; depth < 64U; ++depth)
+    {
+        status = syntra_fdt_get_property(
+            fdt, &current, property_name, data, data_size);
+        if (status == SYNTRA_STATUS_OK) return SYNTRA_STATUS_OK;
+        if (status != SYNTRA_STATUS_NOT_IMPLEMENTED) return status;
+        if (current.depth == 0U) return SYNTRA_STATUS_NOT_IMPLEMENTED;
+
+        status = fdt_get_parent_node(fdt, &current, &current);
+        if (status != SYNTRA_STATUS_OK) return status;
+    }
+
+    return SYNTRA_STATUS_NOT_IMPLEMENTED;
+}
+
 static int fdt_read_cells(
     const uint8_t *data,
     uint32_t cell_count,
