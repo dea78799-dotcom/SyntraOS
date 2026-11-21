@@ -23,7 +23,6 @@ static size_t syntra_fw_cfg_size;
 static syntra_virtio_mmio_device_t syntra_virtio_mmio_device;
 static int syntra_virtio_mmio_available;
 static syntra_virtio_input_queue_t syntra_virtio_input_queue;
-static uintptr_t syntra_virtio_input_queue_physical_base;
 #include "../timer.h"
 #include "../../../timer/timer.h"
 #include "../../../interrupt/interrupt.h"
@@ -1322,8 +1321,6 @@ syntra_status_t syntra_arm64_boot_main(
                                         &syntra_virtio_input_queue);
                                     if (status == SYNTRA_STATUS_OK)
                                     {
-                                        syntra_virtio_input_queue_physical_base =
-                                            queue_physical_base;
                                         syntra_uart_puts("VirtIO Input event queue: CONFIGURED (NOT STARTED)\n");
                                     }
                                     else
