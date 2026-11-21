@@ -477,11 +477,11 @@ syntra_status_t syntra_arm64_gic_enable_interrupt(uint32_t interrupt_id)
             if (gic_config.version == SYNTRA_ARM64_GIC_VERSION_3)
             {
                 /*
-                 * IROUTER entries start at SPI INTID 32; offsets are
-                 * relative to the SPI range, not absolute interrupt IDs.
+                 * GICD_IROUTER is indexed by the absolute INTID. SPI 48
+                 * therefore uses GICD_IROUTER + 48 * 8 (not SPI-relative).
                  */
                 size_t route_offset = (size_t)GICD_IROUTER +
-                    ((size_t)(interrupt_id - 32U) * sizeof(uint64_t));
+                    ((size_t)interrupt_id * sizeof(uint64_t));
                 if (route_offset > gic_config.distributor_size ||
                     gic_config.distributor_size - route_offset <
                         sizeof(uint64_t))
