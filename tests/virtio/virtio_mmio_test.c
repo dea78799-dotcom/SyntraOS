@@ -395,18 +395,21 @@ static void test_input_event_irq_drain(void)
     /* FIFO preserves press/release ordering even when the consumer is delayed. */
     {
         syntra_input_event_t queued;
+        int available = 0;
         assert(queue.software_event_head == 2U);
         assert(queue.software_event_tail == 0U);
-        assert(syntra_virtio_mmio_pop_input_event(&queue, &queued) ==
+        assert(syntra_virtio_mmio_pop_input_event(&queue, &queued, &available) ==
                SYNTRA_STATUS_OK);
+        assert(available == 1);
         assert(queued.type == SYNTRA_INPUT_EV_KEY &&
                queued.code == 30U && queued.value == 1);
         assert(syntra_virtio_mmio_pop_input_event(&queue, &queued) ==
                SYNTRA_STATUS_OK);
         assert(queued.type == SYNTRA_INPUT_EV_KEY &&
                queued.code == 30U && queued.value == 0);
-        assert(syntra_virtio_mmio_pop_input_event(&queue, &queued) ==
-               SYNTRA_STATUS_NOT_IMPLEMENTED);
+        assert(syntra_virtio_mmio_pop_input_event(&queue, &queued, &available) ==
+               SYNTRA_STATUS_OK);
+        assert(available == 0);
     }
 
     /* Reject a corrupted queue boundary before reading ring memory. */
