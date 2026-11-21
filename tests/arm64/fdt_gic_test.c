@@ -158,6 +158,16 @@ static void build_test_fdt(int use_gic_v2)
     write_be32(blob + 36U, (uint32_t)(strings_offset - structure_offset));
 }
 
+static void test_gic_mpidr_to_irouter(void)
+{
+    /* MPIDR Aff3:Aff2:Aff1:Aff0 -> IROUTER Aff3 at [39:32]. */
+    assert(syntra_arm64_gic_mpidr_to_irouter(0x0000000100020304ULL) ==
+           0x0000000100020304ULL);
+    assert(syntra_arm64_gic_mpidr_to_irouter(0x0000000000000001ULL) == 1ULL);
+    assert(syntra_arm64_gic_mpidr_to_irouter(0x0000000100000000ULL) ==
+           0x0000000100000000ULL);
+}
+
 static void test_gic_spi_route_offsets(void)
 {
     size_t offset = 0U;
@@ -364,6 +374,7 @@ static void test_rejects_overlapping_blocks(void)
 
 int main(void)
 {
+    test_gic_mpidr_to_irouter();
     test_gic_spi_route_offsets();
     test_fdt_and_gic_discovery();
     test_gic_v2_discovery();
