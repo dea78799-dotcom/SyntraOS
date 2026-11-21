@@ -62,7 +62,7 @@ int main(void)
     assert(manager.count == 2U);
     assert(syntra_gui_window_get(&manager, settings_id, &window) ==
            SYNTRA_STATUS_OK);
-    assert(syntra_gui_window_active(&manager)->id == files_id ||
+    assert(syntra_gui_window_active(&manager)->id == launcher_id ||
            syntra_gui_window_active(&manager)->id == settings_id);
 
     puts("SyntraOS GUI v5 composed-window interaction integration passed.");
