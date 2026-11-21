@@ -31,3 +31,10 @@ On the 640x480 QEMU framebuffer, the desktop renderer composes the Files, Settin
 ## Current limitations
 
 These are prototype visual surfaces, not filesystem or settings implementations. The surfaces have no app actions, file I/O, settings persistence, launcher-to-window dispatch, or event-loop integration yet. QEMU live input and CI validation are still pending for this PR.
+
+
+## Reusable GUI v5 composition initializer
+
+`syntra_desktop_gui_v5_init_windows(manager, width, height)` creates the fixed Files, Settings, and Launcher composition in a caller-owned manager. This allows integration tests or a future input loop to operate on the same window records instead of recreating a private manager. It currently requires dimensions of at least 640x480 and returns an initialized manager with three windows.
+
+A new host integration test exercises the composition itself: it verifies typed windows and initial z-order, drags Launcher using title-bar pointer input, then closes Files and verifies the window is removed. This is host-level interaction logic only; the live VirtIO IRQ path still does not feed this manager, and no QEMU test is claimed for this integration.
