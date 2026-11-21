@@ -18,6 +18,8 @@ add_library(syntra_gui STATIC
     kernel/gui/framebuffer.c
     kernel/gui/desktop.c
     kernel/gui/ramfb.c
+    kernel/gui/desktop_session.c
+    kernel/input/input.c
 )
 target_include_directories(syntra_gui PUBLIC
     kernel/gui
@@ -115,6 +117,13 @@ enable_testing()
 add_executable(input_test tests/input/input_test.c)
 target_link_libraries(input_test PRIVATE syntra_kernel)
 add_test(NAME InputEventCoreTest COMMAND input_test)
+
+# SyntraOS virtual desktop interaction state test
+add_executable(gui_desktop_session_test
+    tests/gui/desktop_session_test.c
+)
+target_link_libraries(gui_desktop_session_test PRIVATE syntra_gui)
+add_test(NAME GUIDesktopInteractionTest COMMAND gui_desktop_session_test)
 
 # SyntraOS GUI software framebuffer and desktop renderer test
 add_executable(gui_desktop_test
