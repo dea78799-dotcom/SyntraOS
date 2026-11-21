@@ -115,7 +115,10 @@ static int find_free_page_range(size_t start_page, size_t end_page, size_t *foun
         if (last_word < summary_last_word)
         {
             size_t valid_bits = last_word - summary_first_word + 1U;
-            candidates &= (UINT64_C(1) << valid_bits) - 1U;
+            if (valid_bits < SYNTRA_BITMAP_WORD_BITS)
+            {
+                candidates &= (UINT64_C(1) << valid_bits) - 1U;
+            }
         }
 
         while (candidates != 0U)
@@ -132,7 +135,10 @@ static int find_free_page_range(size_t start_page, size_t end_page, size_t *foun
             if (end_page < word_page_end)
             {
                 size_t valid_bits = end_page - word_page_start;
-                page_candidates &= (UINT64_C(1) << valid_bits) - 1U;
+                if (valid_bits < SYNTRA_BITMAP_WORD_BITS)
+                {
+                    page_candidates &= (UINT64_C(1) << valid_bits) - 1U;
+                }
             }
 
             if (page_candidates != 0U)
@@ -219,9 +225,12 @@ syntra_status_t syntra_page_allocator_init(void)
         {
             size_t page_index = (size_t)(address / (uintptr_t)SYNTRA_PAGE_SIZE);
 
-            free_page_set(page_index);
-            total_pages++;
-            free_pages++;
+            if (!bitmap_test(free_bitmap, page_index))
+            {
+                free_page_set(page_index);
+                total_pages++;
+                free_pages++;
+            }
         }
     }
 
