@@ -53,7 +53,8 @@ syntra_status_t syntra_desktop_session_init(
 {
     syntra_status_t status;
 
-    if (session == NULL) return SYNTRA_STATUS_INVALID_ARGUMENT;
+    if (session == NULL || width < 320U || height < 240U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
 
     status = syntra_input_init(&session->input, width, height);
     if (status != SYNTRA_STATUS_OK) return status;
