@@ -369,6 +369,7 @@ static void test_input_event_irq_drain(void)
         SYNTRA_STATUS_OK);
     assert(syntra_input_key_down(&input_state, 30U) == 1);
     assert(queue.key_event_count == 1U);
+    assert(queue.key_a_press_count == 1U);
     assert(queue.event_count == 1U);
     assert(queue.last_used_index == 1U);
     assert(memory[128U + 2U] == 9U);
@@ -387,6 +388,7 @@ static void test_input_event_irq_drain(void)
         SYNTRA_STATUS_OK);
     assert(syntra_input_key_down(&input_state, 30U) == 0);
     assert(queue.key_event_count == 2U);
+    assert(queue.key_a_press_count == 1U);
     assert(queue.event_count == 2U);
     assert(queue.last_used_index == 2U);
 
