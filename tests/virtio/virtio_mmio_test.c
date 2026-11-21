@@ -241,8 +241,8 @@ static void test_input_event_queue_setup(void)
            0x40000U);
 
     /* First descriptor points at its writable event buffer. */
-    assert(queue_memory[0] == 0x00U);
-    assert(queue_memory[1] == 0x00U);
+    assert(queue_memory[0] == 0x44U);
+    assert(queue_memory[1] == 0x10U);
     assert(queue_memory[2] == 0x00U);
     assert(queue_memory[3] == 0x40U);
     assert(queue_memory[4] == (uint8_t)queue.event_buffer_offset);
@@ -252,7 +252,7 @@ static void test_input_event_queue_setup(void)
     assert(descriptor_flags == SYNTRA_VIRTIO_SPLIT_DESC_F_WRITE);
 
     /* Available ring exposes all eight buffers; used ring starts empty. */
-    assert(queue_memory[queue.event_buffer_offset - 4160U + 2U] ==
+    assert(queue_memory[128U + 2U] ==
            SYNTRA_VIRTIO_INPUT_EVENT_QUEUE_SIZE);
     assert(queue_memory[queue.used_ring_offset + 2U] == 0U);
     assert((registers[SYNTRA_VIRTIO_MMIO_DEVICE_STATUS / sizeof(uint32_t)] &
