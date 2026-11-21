@@ -150,10 +150,11 @@ if ! grep -Fq "SyntraOS boot OK" "$LOG_FILE" ||
    ! grep -Fq "VirtIO Input GIC trigger: CONFIGURED" "$LOG_FILE" ||
    ! grep -Fq "VirtIO Input event queue: CONFIGURED" "$LOG_FILE" ||
    ! grep -Fq "VirtIO Input IRQ: REGISTERED" "$LOG_FILE" ||
-   ! grep -Fq "VirtIO Input queue: STARTED" "$LOG_FILE"; then
-    echo "FAIL: QEMU boot or Input startup markers are missing." >&2
+   ! grep -Fq "VirtIO Input queue: STARTED" "$LOG_FILE" ||
+   ! grep -Fq "SyntraOS GUI v5: COMPOSED DESKTOP + LAUNCHER + FILES + SETTINGS" "$LOG_FILE"; then
+    echo "FAIL: QEMU boot, GUI v5 composition, or Input startup markers are missing." >&2
     cat "$LOG_FILE" 2>/dev/null || true
     exit 1
 fi
 
-echo "PASS: QEMU injected KEY_A and SyntraOS confirmed it through the VirtIO Input IRQ path."
+echo "PASS: GUI v5 composition marker present; QEMU injected KEY_A and SyntraOS confirmed it through the VirtIO Input IRQ path."
