@@ -56,6 +56,41 @@ syntra_status_t syntra_virtio_mmio_discover_first(
     return syntra_virtio_mmio_validate(device);
 }
 
+syntra_status_t syntra_virtio_mmio_read_identity_mapped(
+    const syntra_virtio_mmio_device_t *device,
+    const volatile void *mapped_base,
+    size_t mapped_size,
+    syntra_virtio_mmio_register_snapshot_t *snapshot)
+{
+    const volatile uint32_t *registers;
+
+    if (syntra_virtio_mmio_validate(device) != SYNTRA_STATUS_OK ||
+        mapped_base == NULL || snapshot == NULL ||
+        mapped_size < SYNTRA_VIRTIO_MMIO_IDENTITY_SIZE ||
+        mapped_size > device->region_size ||
+        (device->base & 0x3U) != 0U ||
+        (((uintptr_t)mapped_base) & 0x3U) != 0U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    registers = (const volatile uint32_t *)mapped_base;
+
+    snapshot->magic_value =
+        registers[SYNTRA_VIRTIO_MMIO_MAGIC_VALUE / sizeof(uint32_t)];
+    snapshot->version =
+        registers[SYNTRA_VIRTIO_MMIO_VERSION / sizeof(uint32_t)];
+    snapshot->device_id =
+        registers[SYNTRA_VIRTIO_MMIO_DEVICE_ID / sizeof(uint32_t)];
+    snapshot->vendor_id =
+        registers[SYNTRA_VIRTIO_MMIO_VENDOR_ID / sizeof(uint32_t)];
+
+#if defined(__aarch64__)
+    /* Complete the ordered Device-memory reads before decoding the snapshot. */
+    __asm__ volatile("dmb oshld" ::: "memory");
+#endif
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_virtio_mmio_decode_identity(
     const syntra_virtio_mmio_register_snapshot_t *snapshot,
     syntra_virtio_mmio_identity_t *identity)
