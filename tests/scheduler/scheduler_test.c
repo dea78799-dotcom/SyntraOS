@@ -26,6 +26,7 @@ static void dummy_thread(void *argument)
 
 static _Alignas(16) unsigned char stack_a[2048];
 static _Alignas(16) unsigned char stack_b[2048];
+static _Alignas(16) unsigned char fake_cpu_context[320];
 
 int main(void)
 {
@@ -144,6 +145,26 @@ int main(void)
             scheduler_validate() == SYNTRA_STATUS_OK);
         check("User thread remains READY until explicitly scheduled",
             user_thread != NULL && user_thread->state == THREAD_READY);
+    }
+
+    {
+        syntra_thread_t *selected;
+        syntra_thread_t *metadata_thread = scheduler_get_thread(1U);
+        syntra_thread_t *context_thread = scheduler_get_thread(2U);
+
+        if (metadata_thread != NULL)
+            metadata_thread->cpu_context = NULL;
+        if (context_thread != NULL)
+        {
+            context_thread->state = THREAD_READY;
+            context_thread->cpu_context = fake_cpu_context;
+        }
+
+        selected = scheduler_schedule_next_with_context();
+        check("Context-aware selection skips READY thread without CPU context",
+            selected != NULL && selected->thread_id == 2U &&
+            selected->cpu_context == fake_cpu_context &&
+            selected->state == THREAD_RUNNING);
     }
 
     printf("\n=================================\n");
