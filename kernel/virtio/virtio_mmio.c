@@ -97,7 +97,6 @@ syntra_status_t syntra_virtio_mmio_discover_first(
     uintptr_t base;
     size_t region_size;
     size_t reg_count;
-    syntra_fdt_node_t node;
     uint32_t interrupt_id = 0U;
     uint32_t interrupt_flags = 0U;
     syntra_status_t status;
