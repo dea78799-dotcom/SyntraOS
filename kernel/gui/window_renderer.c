@@ -215,6 +215,10 @@ syntra_status_t syntra_gui_render_windows(
             window->height == 0U ||
             window->width > framebuffer->width ||
             window->height > framebuffer->height ||
+            (window->app_type != SYNTRA_GUI_APP_GENERIC &&
+             window->app_type != SYNTRA_GUI_APP_FILES &&
+             window->app_type != SYNTRA_GUI_APP_SETTINGS &&
+             window->app_type != SYNTRA_GUI_APP_LAUNCHER) ||
             window->x > framebuffer->width - window->width ||
             window->y > framebuffer->height - window->height)
             return SYNTRA_STATUS_INVALID_ARGUMENT;
