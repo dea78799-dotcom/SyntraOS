@@ -173,7 +173,7 @@ static void test_gic_spi_route_offsets(void)
 
     assert(syntra_arm64_gic_spi_route_offset(1019U, 0x10000U, &offset) ==
            SYNTRA_STATUS_OK);
-    assert(offset == 0x7FF8U);
+    assert(offset == 0x7FD8U);
 
     assert(syntra_arm64_gic_spi_route_offset(31U, 0x10000U, &offset) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
