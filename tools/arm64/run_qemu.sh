@@ -98,7 +98,7 @@ def send_key(down):
                 "type": "key",
                 "data": {
                     "down": down,
-                    "key": {"type": "qcode", "value": "a"}
+                    "key": {"type": "qcode", "data": "a"}
                 }
             }]
         }
