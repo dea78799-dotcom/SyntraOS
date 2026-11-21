@@ -1,5 +1,8 @@
 #include "../../kernel/gui/window_manager.h"
 
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
