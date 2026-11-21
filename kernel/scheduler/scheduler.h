@@ -78,6 +78,9 @@ syntra_status_t scheduler_create_user_thread(
 /* Select and mark the next READY thread using round-robin order. */
 syntra_thread_t *scheduler_schedule_next(void);
 
+/* Context-switch variant skips READY threads without saved CPU context. */
+syntra_thread_t *scheduler_schedule_next_with_context(void);
+
 /* Read-only peek at the next READY thread in round-robin order. */
 syntra_thread_t *scheduler_get_next_ready(void);
 

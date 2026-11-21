@@ -252,6 +252,50 @@ syntra_thread_t *scheduler_schedule_next(void)
     return selected;
 }
 
+
+/*
+ * Context-switch path: skip READY threads without saved CPU context.
+ * Metadata-only threads remain eligible to scheduler_schedule_next().
+ */
+syntra_thread_t *scheduler_schedule_next_with_context(void)
+{
+    if (!scheduler_initialized || thread_count == 0U)
+        return NULL;
+
+    if (current_slot >= 0 &&
+        threads[(unsigned int)current_slot].state == THREAD_RUNNING)
+        threads[(unsigned int)current_slot].state = THREAD_READY;
+
+    for (unsigned int offset = 0U; offset < thread_count; ++offset)
+    {
+        unsigned int slot = (next_slot + offset) % thread_count;
+        syntra_thread_t *candidate = &threads[slot];
+
+        if (candidate->state != THREAD_READY ||
+            candidate->cpu_context == NULL)
+            continue;
+
+        current_slot = (int)slot;
+        candidate->state = THREAD_RUNNING;
+        next_slot = (slot + 1U) % thread_count;
+        return candidate;
+    }
+
+    /* If no eligible task exists, resume the interrupted task if possible. */
+    if (current_slot >= 0)
+    {
+        syntra_thread_t *current = &threads[(unsigned int)current_slot];
+        if (current->state == THREAD_READY && current->cpu_context != NULL)
+        {
+            current->state = THREAD_RUNNING;
+            return current;
+        }
+    }
+
+    current_slot = -1;
+    return NULL;
+}
+
 syntra_thread_t *scheduler_get_current(void)
 {
     if (!scheduler_initialized || current_slot < 0)

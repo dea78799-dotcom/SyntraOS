@@ -341,11 +341,13 @@ syntra_arm64_exception_handle_and_select(
         context->reserved = SYNTRA_ARM64_IRQ_RETURN_MAGIC;
         scheduler_context_switching_active = 1;
 
-        next = scheduler_schedule_next();
-        if (next == NULL || next->cpu_context == NULL)
+        next = scheduler_schedule_next_with_context();
+        if (next == NULL)
         {
+            (void)scheduler_set_thread_state(
+                SYNTRA_ARM64_BOOT_THREAD_ID, THREAD_RUNNING);
             scheduler_context_switching_active = 0;
-            return NULL;
+            return context;
         }
         return (syntra_arm64_exception_context_t *)next->cpu_context;
     }
@@ -356,8 +358,8 @@ syntra_arm64_exception_handle_and_select(
         current = scheduler_get_current();
         if (current != NULL) current->cpu_context = context;
 
-        next = scheduler_schedule_next();
-        if (next == NULL || next->cpu_context == NULL) return NULL;
+        next = scheduler_schedule_next_with_context();
+        if (next == NULL) return context;
         return (syntra_arm64_exception_context_t *)next->cpu_context;
     }
 
