@@ -230,7 +230,7 @@ static void test_input_event_queue_setup(void)
     assert(queue.physical_base == (uintptr_t)0x40000000U);
     assert(queue.queue_size == SYNTRA_VIRTIO_INPUT_EVENT_QUEUE_SIZE);
     assert(queue.used_ring_offset == 4096U);
-    assert(queue.event_buffer_offset == 4164U);
+    assert(queue.event_buffer_offset == 4168U);
     assert(queue.last_used_index == 0U);
 
     assert(registers[SYNTRA_VIRTIO_MMIO_QUEUE_SEL / sizeof(uint32_t)] == 0U);
@@ -241,7 +241,7 @@ static void test_input_event_queue_setup(void)
            0x40000U);
 
     /* First descriptor points at its writable event buffer. */
-    assert(queue_memory[0] == 0x44U);
+    assert(queue_memory[0] == 0x48U);
     assert(queue_memory[1] == 0x10U);
     assert(queue_memory[2] == 0x00U);
     assert(queue_memory[3] == 0x40U);
