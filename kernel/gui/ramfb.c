@@ -280,7 +280,7 @@ syntra_status_t syntra_ramfb_init(uintptr_t fw_cfg_base, size_t fw_cfg_size)
     framebuffer.height = SYNTRA_RAMFB_HEIGHT;
     framebuffer.stride_pixels = SYNTRA_RAMFB_WIDTH;
 
-    status = syntra_desktop_render(&framebuffer);
+    status = syntra_desktop_render_gui_v5(&framebuffer);
     if (status != SYNTRA_STATUS_OK) return status;
 
     status = syntra_ramfb_encode_config(
