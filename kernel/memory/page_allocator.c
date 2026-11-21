@@ -283,6 +283,84 @@ static syntra_status_t page_alloc_unlocked(uintptr_t *physical_address)
     return SYNTRA_STATUS_OK;
 }
 
+
+static int find_free_contiguous_range(
+    size_t start_page,
+    size_t end_page,
+    size_t page_count,
+    size_t *found_page)
+{
+    size_t candidate;
+
+    if (page_count == 0U || start_page >= end_page ||
+        page_count > end_page - start_page)
+        return 0;
+
+    candidate = start_page;
+    while (candidate <= end_page - page_count)
+    {
+        size_t offset;
+        for (offset = 0U; offset < page_count; ++offset)
+        {
+            if (!bitmap_test(free_bitmap, candidate + offset))
+            {
+                candidate += offset + 1U;
+                break;
+            }
+        }
+
+        if (offset == page_count)
+        {
+            *found_page = candidate;
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static syntra_status_t page_alloc_contiguous_unlocked(
+    size_t page_count,
+    uintptr_t *physical_address)
+{
+    size_t index;
+    size_t end_exclusive;
+
+    if (!initialized || physical_address == NULL || page_count == 0U ||
+        page_count > SYNTRA_PAGE_COUNT)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    if (free_pages < page_count)
+        return SYNTRA_STATUS_OUT_OF_MEMORY;
+
+    end_exclusive = SYNTRA_PAGE_COUNT - page_count + 1U;
+    if (!find_free_contiguous_range(
+            allocation_cursor, end_exclusive, page_count, &index) &&
+        !find_free_contiguous_range(
+            0U,
+            allocation_cursor < end_exclusive
+                ? allocation_cursor : end_exclusive,
+            page_count, &index))
+        return SYNTRA_STATUS_OUT_OF_MEMORY;
+
+    {
+        size_t offset;
+        for (offset = 0U; offset < page_count; ++offset)
+        {
+            free_page_clear(index + offset);
+            bitmap_set(allocated_bitmap, index + offset);
+        }
+    }
+
+    free_pages -= page_count;
+    allocation_cursor = index + page_count;
+    if (allocation_cursor >= SYNTRA_PAGE_COUNT)
+        allocation_cursor = 0U;
+
+    *physical_address = (uintptr_t)(index * SYNTRA_PAGE_SIZE);
+    return SYNTRA_STATUS_OK;
+}
+
 static syntra_status_t page_free_unlocked(uintptr_t physical_address)
 {
     size_t index;
@@ -332,6 +410,18 @@ syntra_status_t syntra_page_alloc(uintptr_t *physical_address)
 {
     syntra_irq_state_t irq_state = syntra_irq_save();
     syntra_status_t status = page_alloc_unlocked(physical_address);
+    syntra_irq_restore(irq_state);
+    return status;
+}
+
+
+syntra_status_t syntra_page_alloc_contiguous(
+    size_t page_count,
+    uintptr_t *physical_address)
+{
+    syntra_irq_state_t irq_state = syntra_irq_save();
+    syntra_status_t status =
+        page_alloc_contiguous_unlocked(page_count, physical_address);
     syntra_irq_restore(irq_state);
     return status;
 }
