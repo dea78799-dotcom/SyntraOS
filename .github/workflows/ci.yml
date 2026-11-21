@@ -195,6 +195,7 @@ jobs:
         run: |
           bash -n tools/arm64/qemu_boot_test.sh
           bash -n tools/arm64/run_el0_no_gdb_test.sh
+          bash -n tools/arm64/run_qemu.sh
 
       - name: Verify ARM64 ELF
         run: |
