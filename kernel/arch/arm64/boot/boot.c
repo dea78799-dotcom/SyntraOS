@@ -26,8 +26,10 @@ static syntra_virtio_input_queue_t syntra_virtio_input_queue;
 static syntra_input_state_t syntra_virtio_input_state;
 static int syntra_virtio_input_irq_registered;
 static int syntra_virtio_input_key_a_test_reported;
+static int syntra_virtio_input_irq_test_reported;
 
 static void syntra_uart_puts(const char *message);
+static void syntra_uart_put_hex(uint64_t value);
 
 static void syntra_virtio_input_irq_handler(
     syntra_interrupt_id_t interrupt_id,
@@ -51,6 +53,16 @@ static void syntra_virtio_input_irq_handler(
     {
         queue->irq_error_count++;
         return;
+    }
+
+    if (!syntra_virtio_input_irq_test_reported)
+    {
+        syntra_virtio_input_irq_test_reported = 1;
+        syntra_uart_puts("VirtIO Input IRQ: HANDLED events=");
+        syntra_uart_put_hex(queue->event_count);
+        syntra_uart_puts(" keys=");
+        syntra_uart_put_hex(queue->key_event_count);
+        syntra_uart_puts("\n");
     }
 
     /* QEMU test marker: report once when KEY_A is observed pressed. */
