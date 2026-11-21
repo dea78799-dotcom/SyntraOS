@@ -6,6 +6,14 @@
 
 #define SYNTRA_GUI_MAX_WINDOWS 8U
 
+typedef enum
+{
+    SYNTRA_GUI_APP_GENERIC = 0U,
+    SYNTRA_GUI_APP_FILES = 1U,
+    SYNTRA_GUI_APP_SETTINGS = 2U,
+    SYNTRA_GUI_APP_LAUNCHER = 3U
+} syntra_gui_app_type_t;
+
 typedef struct
 {
     uint32_t id;
@@ -13,6 +21,7 @@ typedef struct
     uint32_t y;
     uint32_t width;
     uint32_t height;
+    syntra_gui_app_type_t app_type;
 } syntra_gui_window_t;
 
 /*
@@ -33,6 +42,15 @@ syntra_status_t syntra_gui_window_manager_init(
     syntra_gui_window_manager_t *manager,
     uint32_t screen_width,
     uint32_t screen_height);
+
+syntra_status_t syntra_gui_window_open_app(
+    syntra_gui_window_manager_t *manager,
+    uint32_t x,
+    uint32_t y,
+    uint32_t width,
+    uint32_t height,
+    syntra_gui_app_type_t app_type,
+    uint32_t *window_id);
 
 syntra_status_t syntra_gui_window_open(
     syntra_gui_window_manager_t *manager,
