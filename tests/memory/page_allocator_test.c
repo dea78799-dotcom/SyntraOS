@@ -80,7 +80,7 @@ int main(void)
     assert(syntra_page_alloc(&third) == SYNTRA_STATUS_OK);
     assert(third == (uintptr_t)0x30000000U +
                     (uintptr_t)65U * SYNTRA_PAGE_SIZE);
-    for (unsigned int i = 0U; i < 130U; ++i)
+    for (unsigned int i = 0U; i < 4100U; ++i)
     {
         uintptr_t address = (uintptr_t)0x30000000U +
                             (uintptr_t)i * SYNTRA_PAGE_SIZE;
