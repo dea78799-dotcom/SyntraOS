@@ -21,6 +21,7 @@ int main(void)
     uint32_t front_id;
     uint32_t files_id;
     uint32_t settings_id;
+    uint32_t launcher_id;
 
     assert(syntra_gui_window_manager_init(&manager, WIDTH, HEIGHT) ==
            SYNTRA_STATUS_OK);
@@ -59,10 +60,18 @@ int main(void)
     assert(syntra_gui_window_open_app(
         &manager, 300U, 40U, 220U, 160U,
         SYNTRA_GUI_APP_SETTINGS, &settings_id) == SYNTRA_STATUS_OK);
+    assert(syntra_gui_window_open_app(
+        &manager, 40U, 220U, 220U, 130U,
+        SYNTRA_GUI_APP_LAUNCHER, &launcher_id) == SYNTRA_STATUS_OK);
+    assert(syntra_gui_window_open_app(
+        &manager, 540U, 40U, 90U, 90U,
+        (syntra_gui_app_type_t)99, &front_id) == SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(manager.count == 3U);
     assert(syntra_gui_render_windows(&framebuffer, &manager) == SYNTRA_STATUS_OK);
-    /* App-specific surfaces render folder and settings-row accents. */
+    /* App-specific surfaces render folder, settings, and launcher accents. */
     assert(pixels[(size_t)75U * STRIDE + 86U] == 0xFF3B9FB5U);
     assert(pixels[(size_t)75U * STRIDE + 313U] == 0xFF54D6E8U);
+    assert(pixels[(size_t)245U * STRIDE + 49U] == 0xFF54D6E8U);
 
     assert(syntra_gui_render_windows(&wrong_size, &manager) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
