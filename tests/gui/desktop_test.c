@@ -12,8 +12,8 @@
 
 int main(void)
 {
-    uint32_t pixels[TEST_STRIDE * TEST_HEIGHT];
-    uint32_t compact_pixels[COMPACT_WIDTH * COMPACT_HEIGHT];
+    uint32_t pixels[TEST_STRIDE * TEST_HEIGHT] = {0};
+    uint32_t compact_pixels[COMPACT_WIDTH * COMPACT_HEIGHT] = {0};
     syntra_framebuffer_t framebuffer = {
         pixels, TEST_WIDTH, TEST_HEIGHT, TEST_STRIDE
     };
