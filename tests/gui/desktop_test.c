@@ -32,7 +32,8 @@ int main(void)
     assert(pixels[0] == 0xE8202D49U);
     assert(pixels[(size_t)200U * TEST_STRIDE] == 0xFF1B2D55U);
     assert(pixels[(size_t)60U * TEST_STRIDE + 30U] == 0xE8202D49U);
-    assert(pixels[(size_t)180U * TEST_STRIDE + 360U] == 0xE8202D49U);
+    assert(pixels[(size_t)180U * TEST_STRIDE + 364U] == 0xE8202D49U);
+    assert(pixels[(size_t)180U * TEST_STRIDE + 360U] == 0xFF54D6E8U);
     assert(pixels[(size_t)304U * TEST_STRIDE + 378U] == 0xFF58C99AU);
     assert(pixels[(size_t)8U * TEST_STRIDE + 14U] == 0xFF54D6E8U);
 
