@@ -374,6 +374,7 @@ syntra_status_t syntra_virtio_mmio_setup_input_event_queue_mapped(
 
     if (queue == NULL) return SYNTRA_STATUS_INVALID_ARGUMENT;
     queue->physical_base = 0U;
+    queue->mapped_memory = NULL;
     queue->memory_size = 0U;
     queue->used_ring_offset = 0U;
     queue->event_buffer_offset = 0U;
@@ -468,6 +469,7 @@ syntra_status_t syntra_virtio_mmio_setup_input_event_queue_mapped(
     if (status != SYNTRA_STATUS_OK) return status;
 
     queue->physical_base = queue_physical_base;
+    queue->mapped_memory = queue_memory;
     queue->memory_size = queue_memory_size;
     queue->used_ring_offset = used_offset;
     queue->event_buffer_offset = event_offset;
@@ -574,7 +576,7 @@ syntra_status_t syntra_virtio_mmio_handle_input_irq(
 
     if ((interrupt_status & 1U) == 0U) return SYNTRA_STATUS_OK;
 
-    memory = (volatile uint8_t *)(uintptr_t)queue->physical_base;
+    memory = (volatile uint8_t *)queue->mapped_memory;
 #if defined(__aarch64__)
     __asm__ volatile("dmb oshld" ::: "memory");
 #endif
