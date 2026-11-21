@@ -129,6 +129,7 @@ typedef struct
     uint16_t last_used_index;
     volatile uint32_t event_count;
     volatile uint32_t key_event_count;
+    volatile uint32_t key_a_press_count;
     volatile uint32_t dropped_event_count;
     volatile uint32_t irq_error_count;
     int ready;
