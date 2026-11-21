@@ -56,7 +56,8 @@ QEMU_PID=$!
 
 BOOT_READY=0
 for _ in $(seq 1 300); do
-    if grep -Fq "VirtIO Input queue: STARTED" "$LOG_FILE" 2>/dev/null; then
+    if grep -Fq "VirtIO Input queue: STARTED" "$LOG_FILE" 2>/dev/null &&
+       grep -Fq "SyntraOS boot OK" "$LOG_FILE" 2>/dev/null; then
         BOOT_READY=1
         break
     fi
@@ -69,7 +70,7 @@ for _ in $(seq 1 300); do
 done
 
 if [[ "$BOOT_READY" -ne 1 ]]; then
-    echo "FAIL: VirtIO Input queue did not start in time." >&2
+    echo "FAIL: SyntraOS boot and VirtIO Input queue startup did not complete in time." >&2
     cat "$LOG_FILE" 2>/dev/null || true
     exit 1
 fi
