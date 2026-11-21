@@ -1345,7 +1345,7 @@ syntra_status_t syntra_arm64_boot_main(
                                         &syntra_virtio_input_queue);
                                     if (status == SYNTRA_STATUS_OK)
                                     {
-                                        syntra_uart_puts("VirtIO Input event queue: CONFIGURED\\n");
+                                        syntra_uart_puts("VirtIO Input event queue: CONFIGURED\n");
                                         status = syntra_input_init(
                                             &syntra_virtio_input_state,
                                             640U, 480U);
@@ -1373,8 +1373,8 @@ syntra_status_t syntra_arm64_boot_main(
                                                 &syntra_virtio_input_queue);
                                         if (status == SYNTRA_STATUS_OK)
                                         {
-                                            syntra_uart_puts("VirtIO Input IRQ: REGISTERED\\n");
-                                            syntra_uart_puts("VirtIO Input queue: STARTED\\n");
+                                            syntra_uart_puts("VirtIO Input IRQ: REGISTERED\n");
+                                            syntra_uart_puts("VirtIO Input queue: STARTED\n");
                                         }
                                         else
                                         {
@@ -1386,7 +1386,7 @@ syntra_status_t syntra_arm64_boot_main(
                                                     syntra_virtio_mmio_device.interrupt_id);
                                                 syntra_virtio_input_irq_registered = 0;
                                             }
-                                            syntra_uart_puts("VirtIO Input IRQ/queue: UNAVAILABLE\\n");
+                                            syntra_uart_puts("VirtIO Input IRQ/queue: UNAVAILABLE\n");
                                         }
                                     }
                                     else
