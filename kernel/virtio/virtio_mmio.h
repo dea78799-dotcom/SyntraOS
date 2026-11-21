@@ -6,6 +6,7 @@
 
 #include "../core/status.h"
 #include "../arch/arm64/boot/fdt.h"
+#include "../input/input.h"
 
 /*
  * Device-Tree discovery metadata for a VirtIO-MMIO transport.
@@ -31,6 +32,10 @@
 #define SYNTRA_VIRTIO_MMIO_QUEUE_ALIGN            0x03CU
 #define SYNTRA_VIRTIO_MMIO_QUEUE_PFN              0x040U
 #define SYNTRA_VIRTIO_MMIO_QUEUE_REGISTERS_SIZE   0x044U
+#define SYNTRA_VIRTIO_MMIO_QUEUE_NOTIFY            0x050U
+#define SYNTRA_VIRTIO_MMIO_INTERRUPT_STATUS       0x060U
+#define SYNTRA_VIRTIO_MMIO_INTERRUPT_ACK          0x064U
+#define SYNTRA_VIRTIO_MMIO_INTERRUPT_REGISTERS_SIZE 0x068U
 
 #define SYNTRA_VIRTIO_INPUT_EVENT_QUEUE_SIZE 8U
 #define SYNTRA_VIRTIO_INPUT_EVENT_SIZE 8U
@@ -121,6 +126,10 @@ typedef struct
     size_t event_buffer_offset;
     uint16_t queue_size;
     uint16_t last_used_index;
+    volatile uint32_t event_count;
+    volatile uint32_t key_event_count;
+    volatile uint32_t dropped_event_count;
+    volatile uint32_t irq_error_count;
     int ready;
 } syntra_virtio_input_queue_t;
 
@@ -146,6 +155,25 @@ syntra_status_t syntra_virtio_mmio_setup_input_event_queue_mapped(
     uintptr_t queue_physical_base,
     size_t queue_memory_size,
     syntra_virtio_input_queue_t *queue
+);
+
+
+/* Start an already prepared legacy Input queue after its IRQ handler is ready. */
+syntra_status_t syntra_virtio_mmio_start_input_mapped(
+    const syntra_virtio_mmio_device_t *device,
+    volatile void *mapped_base,
+    size_t mapped_size,
+    const syntra_virtio_mmio_identity_t *identity,
+    const syntra_virtio_input_queue_t *queue
+);
+
+/* Acknowledge a VirtIO Input interrupt, drain used entries, and recycle buffers. */
+syntra_status_t syntra_virtio_mmio_handle_input_irq(
+    const syntra_virtio_mmio_device_t *device,
+    volatile void *mapped_base,
+    size_t mapped_size,
+    syntra_virtio_input_queue_t *queue,
+    syntra_input_state_t *input_state
 );
 
 /* Decode a copied snapshot; no MMIO access or device mutation occurs here. */
