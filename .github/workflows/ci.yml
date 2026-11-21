@@ -188,6 +188,11 @@ jobs:
           cmake -S cmake/arm64 -B build/arm64 -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="${GITHUB_WORKSPACE}/cmake/toolchains/aarch64-linux-gnu.cmake"
 
+      - name: Verify kernel FP/SIMD compile policy
+        run: |
+          grep -F -- '-mgeneral-regs-only' build/arm64/build.ninja >/dev/null
+          echo 'PASS: ARM64 kernel C is compiled without FP/SIMD register use'
+
       - name: Build ARM64 ELF
         run: cmake --build build/arm64 --verbose
 
