@@ -19,6 +19,18 @@
 #define SYNTRA_VIRTIO_MMIO_DEVICE_ID   0x008U
 #define SYNTRA_VIRTIO_MMIO_VENDOR_ID   0x00CU
 #define SYNTRA_VIRTIO_MMIO_IDENTITY_SIZE 0x010U
+#define SYNTRA_VIRTIO_MMIO_DEVICE_FEATURES       0x010U
+#define SYNTRA_VIRTIO_MMIO_DEVICE_FEATURES_SEL   0x014U
+#define SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES       0x020U
+#define SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES_SEL   0x024U
+#define SYNTRA_VIRTIO_MMIO_DEVICE_STATUS         0x070U
+#define SYNTRA_VIRTIO_MMIO_DEVICE_STATUS_SIZE    0x074U
+
+#define SYNTRA_VIRTIO_STATUS_ACKNOWLEDGE 0x01U
+#define SYNTRA_VIRTIO_STATUS_DRIVER      0x02U
+#define SYNTRA_VIRTIO_STATUS_DRIVER_OK   0x04U
+#define SYNTRA_VIRTIO_STATUS_FEATURES_OK 0x08U
+#define SYNTRA_VIRTIO_STATUS_FAILED     0x80U
 #define SYNTRA_VIRTIO_MMIO_DEVICE_ID_INPUT 18U
 
 #define SYNTRA_VIRTIO_MMIO_EXPECTED_MAGIC 0x74726976U
@@ -77,6 +89,19 @@ syntra_status_t syntra_virtio_mmio_read_identity_mapped(
     const volatile void *mapped_base,
     size_t mapped_size,
     syntra_virtio_mmio_register_snapshot_t *snapshot
+);
+
+/*
+ * Negotiate the empty feature subset for a confirmed VirtIO Input device.
+ * It resets the device and advances only to ACKNOWLEDGE/DRIVER (plus
+ * FEATURES_OK on transport v2). It does not configure a queue, mark
+ * DRIVER_OK, or enable interrupts.
+ */
+syntra_status_t syntra_virtio_mmio_prepare_input_mapped(
+    const syntra_virtio_mmio_device_t *device,
+    volatile void *mapped_base,
+    size_t mapped_size,
+    const syntra_virtio_mmio_identity_t *identity
 );
 
 /* Decode a copied snapshot; no MMIO access or device mutation occurs here. */
