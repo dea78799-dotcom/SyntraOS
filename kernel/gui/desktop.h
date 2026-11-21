@@ -3,12 +3,19 @@
 
 #include "framebuffer.h"
 #include "desktop_session.h"
+#include "window_manager.h"
 
 /*
  * Draws the static SyntraOS desktop shell. Selects a compact visual layout
  * for smaller framebuffers. Pointer, keyboard and touch input are not handled.
  */
 syntra_status_t syntra_desktop_render(syntra_framebuffer_t *framebuffer);
+
+/* Initialize the fixed GUI v5 app-window composition for interaction/tests. */
+syntra_status_t syntra_desktop_gui_v5_init_windows(
+    syntra_gui_window_manager_t *manager,
+    uint32_t width,
+    uint32_t height);
 
 /* GUI v5 composed preview: desktop plus typed app windows on large displays. */
 syntra_status_t syntra_desktop_render_gui_v5(
