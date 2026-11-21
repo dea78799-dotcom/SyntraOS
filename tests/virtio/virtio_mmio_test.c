@@ -191,12 +191,102 @@ static void test_input_transport_prepare(void)
         SYNTRA_STATUS_ERROR);
 }
 
+
+static void test_input_event_queue_setup(void)
+{
+    syntra_virtio_mmio_device_t device = {
+        .base = (uintptr_t)0x0A000000U,
+        .region_size = 0x200U,
+        .reg_index = 0U,
+        .interrupt_id = 48U,
+        .interrupt_flags = 1U,
+        .interrupt_valid = 1,
+        .discovered = 1
+    };
+    _Alignas(4) volatile uint32_t registers[0x200U / sizeof(uint32_t)] = {0};
+    static _Alignas(4096) uint8_t queue_memory[8192];
+    syntra_virtio_mmio_identity_t identity = {
+        SYNTRA_VIRTIO_MMIO_VERSION_LEGACY,
+        SYNTRA_VIRTIO_MMIO_DEVICE_ID_INPUT,
+        0x554D4551U,
+        SYNTRA_VIRTIO_MMIO_FUNCTION_INPUT
+    };
+    syntra_virtio_input_queue_t queue;
+    uint32_t descriptor_flags;
+
+    registers[SYNTRA_VIRTIO_MMIO_DEVICE_ID / sizeof(uint32_t)] =
+        SYNTRA_VIRTIO_MMIO_DEVICE_ID_INPUT;
+    registers[SYNTRA_VIRTIO_MMIO_DEVICE_STATUS / sizeof(uint32_t)] =
+        SYNTRA_VIRTIO_STATUS_ACKNOWLEDGE | SYNTRA_VIRTIO_STATUS_DRIVER;
+    registers[SYNTRA_VIRTIO_MMIO_QUEUE_NUM_MAX / sizeof(uint32_t)] =
+        SYNTRA_VIRTIO_INPUT_EVENT_QUEUE_SIZE;
+
+    assert(syntra_virtio_mmio_setup_input_event_queue_mapped(
+        &device, registers, sizeof(registers), &identity,
+        queue_memory, (uintptr_t)0x40000000U, sizeof(queue_memory),
+        &queue) == SYNTRA_STATUS_OK);
+
+    assert(queue.ready == 1);
+    assert(queue.physical_base == (uintptr_t)0x40000000U);
+    assert(queue.queue_size == SYNTRA_VIRTIO_INPUT_EVENT_QUEUE_SIZE);
+    assert(queue.used_ring_offset == 4096U);
+    assert(queue.event_buffer_offset == 4164U);
+    assert(queue.last_used_index == 0U);
+
+    assert(registers[SYNTRA_VIRTIO_MMIO_QUEUE_SEL / sizeof(uint32_t)] == 0U);
+    assert(registers[SYNTRA_VIRTIO_MMIO_QUEUE_NUM / sizeof(uint32_t)] ==
+           SYNTRA_VIRTIO_INPUT_EVENT_QUEUE_SIZE);
+    assert(registers[SYNTRA_VIRTIO_MMIO_QUEUE_ALIGN / sizeof(uint32_t)] == 4096U);
+    assert(registers[SYNTRA_VIRTIO_MMIO_QUEUE_PFN / sizeof(uint32_t)] ==
+           0x40000U);
+
+    /* First descriptor points at its writable event buffer. */
+    assert(queue_memory[0] == 0x00U);
+    assert(queue_memory[1] == 0x00U);
+    assert(queue_memory[2] == 0x00U);
+    assert(queue_memory[3] == 0x40U);
+    assert(queue_memory[4] == (uint8_t)queue.event_buffer_offset);
+    assert(queue_memory[8] == SYNTRA_VIRTIO_INPUT_EVENT_SIZE);
+    descriptor_flags = (uint32_t)queue_memory[12] |
+                       ((uint32_t)queue_memory[13] << 8U);
+    assert(descriptor_flags == SYNTRA_VIRTIO_SPLIT_DESC_F_WRITE);
+
+    /* Available ring exposes all eight buffers; used ring starts empty. */
+    assert(queue_memory[queue.event_buffer_offset - 4160U + 2U] ==
+           SYNTRA_VIRTIO_INPUT_EVENT_QUEUE_SIZE);
+    assert(queue_memory[queue.used_ring_offset + 2U] == 0U);
+    assert((registers[SYNTRA_VIRTIO_MMIO_DEVICE_STATUS / sizeof(uint32_t)] &
+            SYNTRA_VIRTIO_STATUS_DRIVER_OK) == 0U);
+
+    /* Reject undersized queues without publishing a PFN. */
+    registers[SYNTRA_VIRTIO_MMIO_QUEUE_NUM_MAX / sizeof(uint32_t)] = 4U;
+    registers[SYNTRA_VIRTIO_MMIO_QUEUE_PFN / sizeof(uint32_t)] = 0U;
+    assert(syntra_virtio_mmio_setup_input_event_queue_mapped(
+        &device, registers, sizeof(registers), &identity,
+        queue_memory, (uintptr_t)0x40000000U, sizeof(queue_memory),
+        &queue) == SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(queue.ready == 0);
+    assert(registers[SYNTRA_VIRTIO_MMIO_QUEUE_PFN / sizeof(uint32_t)] == 0U);
+
+    registers[SYNTRA_VIRTIO_MMIO_QUEUE_NUM_MAX / sizeof(uint32_t)] =
+        SYNTRA_VIRTIO_INPUT_EVENT_QUEUE_SIZE;
+    registers[SYNTRA_VIRTIO_MMIO_DEVICE_STATUS / sizeof(uint32_t)] =
+        SYNTRA_VIRTIO_STATUS_ACKNOWLEDGE |
+        SYNTRA_VIRTIO_STATUS_DRIVER |
+        SYNTRA_VIRTIO_STATUS_DRIVER_OK;
+    assert(syntra_virtio_mmio_setup_input_event_queue_mapped(
+        &device, registers, sizeof(registers), &identity,
+        queue_memory, (uintptr_t)0x40000000U, sizeof(queue_memory),
+        &queue) == SYNTRA_STATUS_PERMISSION_DENIED);
+}
+
 int main(void)
 {
     test_metadata_validation();
     test_mapped_identity_read();
     test_identity_decode();
     test_input_transport_prepare();
+    test_input_event_queue_setup();
     puts("SyntraOS VirtIO-MMIO mapped identity tests passed.");
     return 0;
 }
