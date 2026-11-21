@@ -24,7 +24,7 @@ static int point_on_close_control(
 {
     uint32_t close_x;
 
-    if (window->width < 58U || window->height < 18U)
+    if (window->width < 58U || window->height < 20U)
         return 0;
 
     close_x = window->x + window->width - CLOSE_SIZE - CLOSE_RIGHT_MARGIN;
