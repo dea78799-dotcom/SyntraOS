@@ -75,7 +75,7 @@ static void test_mapped_identity_read(void)
         SYNTRA_STATUS_INVALID_ARGUMENT);
 
     {
-        uint8_t unaligned_storage[sizeof(registers) + 1U];
+        _Alignas(4) uint8_t unaligned_storage[sizeof(registers) + 1U];
         const volatile void *unaligned = &unaligned_storage[1];
         assert(syntra_virtio_mmio_read_identity_mapped(
             &device, unaligned, sizeof(registers),
