@@ -37,10 +37,9 @@ Host tests cover metadata validation, mapped identity reads, register decoding, 
 
 ## Next stages
 
-1. Verify the corrected QEMU boot validator and the live identification-register log in a fresh ARM64 CI run.
-2. If QEMU exposes a real VirtIO Input device, confirm its DeviceID and vendor ID.
-3. Implement feature negotiation and a bounded event virtqueue only after a real input device is confirmed.
-4. Decode input events into `syntra_input_event_t`.
-5. Route events to the desktop/window interaction loop and test with QEMU virtual input devices.
+1. Verify the new QEMU keyboard fixture and its DeviceID 18 log in a fresh ARM64 CI run.
+2. Implement feature negotiation and a bounded event virtqueue only after the attached input device is confirmed.
+3. Decode input events into `syntra_input_event_t`.
+4. Route events to the desktop/window interaction loop and test with QEMU virtual input devices.
 
 The implementation is original SyntraOS C code. It uses the project's own FDT, MMU, and page-table components plus public VirtIO transport definitions; no vendor GUI source or third-party GUI toolkit is imported.
