@@ -24,3 +24,7 @@ Window rectangles use framebuffer pixel coordinates. Width and height must be no
 ## Resource policy
 
 The manager uses a fixed array of eight entries and performs no dynamic allocation. Opening a ninth window returns SYNTRA_STATUS_OUT_OF_MEMORY. This makes the initial kernel-side behavior deterministic and avoids introducing an allocator dependency into the GUI foundation.
+
+## Test configuration
+
+The window manager test keeps its C assertions enabled even when the test executable is built with `NDEBUG`, so Release test runs execute the same behavioral checks instead of silently compiling them out.
