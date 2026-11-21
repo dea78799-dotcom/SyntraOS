@@ -22,6 +22,7 @@ command -v "$GDB_BIN" >/dev/null 2>&1 || {
 
 QEMU_LOG="$(mktemp)"
 UART_LOG="$(mktemp)"
+GDB_COMMANDS="$(mktemp)"
 QEMU_PID=""
 
 cleanup() {
@@ -29,7 +30,7 @@ cleanup() {
         kill "$QEMU_PID" >/dev/null 2>&1 || true
         wait "$QEMU_PID" >/dev/null 2>&1 || true
     fi
-    rm -f "$QEMU_LOG" "$UART_LOG"
+    rm -f "$QEMU_LOG" "$UART_LOG" "$GDB_COMMANDS"
 }
 trap cleanup EXIT
 
@@ -58,6 +59,16 @@ fi
 
 echo "Waiting for SyntraOS boot stage to return from QEMU virt..."
 
+cat > "$GDB_COMMANDS" <<'GDB_EOF'
+if $pc == (unsigned long)&syntra_arm64_el0_return_trampoline
+    printf "EL0_RETURN_STOP PC=%#lx\n", $pc
+    detach
+else
+    printf "EL0_RETURN_WRONG_STOP PC=%#lx expected=%#lx\n", $pc, (unsigned long)&syntra_arm64_el0_return_trampoline
+    quit 1
+end
+GDB_EOF
+
 GDB_OUTPUT="$(timeout 15s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "set architecture aarch64" \
     -ex "set pagination off" \
@@ -79,13 +90,7 @@ GDB_OUTPUT="$(timeout 15s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex 'printf "EL0_EXIT_SVC_STOP vector=%lu ESR=%#lx ELR=%#lx SPSR=%#lx SVC_IMM=%#lx\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+264), (*(unsigned long*)($x0+272)&0xffff)' \
     -ex "disable 3" \
     -ex "continue" \
-    -ex 'if $pc == (unsigned long)&syntra_arm64_el0_return_trampoline' \
-    -ex 'printf "EL0_RETURN_STOP PC=%#lx\n", $pc' \
-    -ex "else" \
-    -ex 'printf "EL0_RETURN_WRONG_STOP PC=%#lx expected=%#lx\n", $pc, (unsigned long)&syntra_arm64_el0_return_trampoline' \
-    -ex "quit 1" \
-    -ex "end" \
-    -ex "detach" 2>&1)" || {
+    -x "$GDB_COMMANDS" 2>&1)" || {
         printf '%s\n' "$GDB_OUTPUT" >&2
         echo "GDB diagnostic breakpoint did not complete (timeout or remote error)." >&2
         echo "Continuing with UART smoke-test checks." >&2
