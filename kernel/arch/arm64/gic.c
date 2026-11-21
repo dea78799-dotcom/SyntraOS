@@ -23,6 +23,7 @@ static uintptr_t gic_local_redistributor_base;
 #define GICD_ISENABLER 0x100U
 #define GICD_ICENABLER 0x180U
 #define GICD_IPRIORITYR 0x400U
+#define GICD_ICFGR 0xC00U
 #define GICD_CTLR_RWP (1U << 31)
 #define GICD_CTLR_DS (1U << 6)
 #define GICD_CTLR_ENABLE_G1 (1U << 1)
@@ -390,6 +391,53 @@ syntra_status_t syntra_arm64_gic_set_priority(
     return SYNTRA_STATUS_OK;
 #else
     (void)priority;
+    return SYNTRA_STATUS_NOT_IMPLEMENTED;
+#endif
+}
+
+
+syntra_status_t syntra_arm64_gic_configure_interrupt(
+    uint32_t interrupt_id,
+    uint32_t trigger_flags)
+{
+    size_t register_offset;
+    uint32_t register_index;
+    uint32_t shift;
+    uint32_t mask;
+    uint32_t configuration;
+    volatile uint32_t *distributor;
+
+    if (!gic_initialized) return SYNTRA_STATUS_ERROR;
+    if (interrupt_id < 32U || interrupt_id >= 1020U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    /* GIC polarity is fixed active-high; reject unsupported DT polarity. */
+    if (trigger_flags != 1U && trigger_flags != 4U)
+        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+
+    register_offset = (size_t)GICD_ICFGR +
+                      ((size_t)(interrupt_id / 16U) * sizeof(uint32_t));
+    if (register_offset > gic_config.distributor_size ||
+        gic_config.distributor_size - register_offset < sizeof(uint32_t))
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    register_index = (uint32_t)(register_offset / sizeof(uint32_t));
+    shift = (interrupt_id % 16U) * 2U;
+    mask = 0x3U << shift;
+    configuration = trigger_flags == 1U ? 0x2U : 0x0U;
+
+#if defined(__aarch64__)
+    distributor = (volatile uint32_t *)gic_config.distributor_base;
+    distributor[register_index] =
+        (distributor[register_index] & ~mask) | (configuration << shift);
+    gic_dsb();
+    return SYNTRA_STATUS_OK;
+#else
+    (void)register_index;
+    (void)shift;
+    (void)mask;
+    (void)configuration;
+    (void)distributor;
     return SYNTRA_STATUS_NOT_IMPLEMENTED;
 #endif
 }
