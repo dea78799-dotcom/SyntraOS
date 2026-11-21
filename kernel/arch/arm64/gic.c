@@ -24,6 +24,7 @@ static uintptr_t gic_local_redistributor_base;
 #define GICD_ICENABLER 0x180U
 #define GICD_IPRIORITYR 0x400U
 #define GICD_ICFGR 0xC00U
+#define GICD_IROUTER 0x6000U
 #define GICD_CTLR_RWP (1U << 31)
 #define GICD_CTLR_DS (1U << 6)
 #define GICD_CTLR_ENABLE_G1 (1U << 1)
@@ -467,6 +468,25 @@ syntra_status_t syntra_arm64_gic_enable_interrupt(uint32_t interrupt_id)
             if ((enable_index + 1U) * sizeof(uint32_t) >
                 gic_config.distributor_size)
                 return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+            /*
+             * On GICv3 with affinity routing enabled, explicitly route SPIs
+             * to the boot CPU before enabling them. QEMU virt is single-CPU
+             * in this test configuration, so this is the intended target.
+             */
+            if (gic_config.version == SYNTRA_ARM64_GIC_VERSION_3)
+            {
+                size_t route_offset = (size_t)GICD_IROUTER +
+                    ((size_t)interrupt_id * sizeof(uint64_t));
+                if (route_offset > gic_config.distributor_size ||
+                    gic_config.distributor_size - route_offset <
+                        sizeof(uint64_t))
+                    return SYNTRA_STATUS_INVALID_ARGUMENT;
+                *(volatile uint64_t *)(gic_config.distributor_base +
+                                       route_offset) =
+                    gic_mpidr_affinity(gic_read_mpidr());
+            }
+
             dist[group_index] |= bit;
             dist[enable_index] = bit;
         }
