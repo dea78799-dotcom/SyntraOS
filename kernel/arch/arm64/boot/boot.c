@@ -20,6 +20,8 @@ static uintptr_t syntra_fw_cfg_base;
 static syntra_arm64_page_table_t syntra_active_page_table;
 static _Alignas(4096) uint8_t syntra_el0_kernel_stack[4096];
 static size_t syntra_fw_cfg_size;
+static syntra_virtio_mmio_device_t syntra_virtio_mmio_device;
+static int syntra_virtio_mmio_available;
 #include "../timer.h"
 #include "../../../timer/timer.h"
 #include "../../../interrupt/interrupt.h"
@@ -331,26 +333,30 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
         }
     }
 
+    syntra_virtio_mmio_available = 0;
+    syntra_virtio_mmio_device.base = 0U;
+    syntra_virtio_mmio_device.region_size = 0U;
+    syntra_virtio_mmio_device.reg_index = 0U;
+    syntra_virtio_mmio_device.discovered = 0;
+    status = syntra_virtio_mmio_discover_first(
+        &fdt, &syntra_virtio_mmio_device);
+    if (status == SYNTRA_STATUS_OK)
     {
-        syntra_virtio_mmio_device_t virtio_device;
-        status = syntra_virtio_mmio_discover_first(&fdt, &virtio_device);
-        if (status == SYNTRA_STATUS_OK)
-        {
-            syntra_uart_puts("FDT VirtIO-MMIO region discovered: base=");
-            syntra_uart_put_hex((uint64_t)virtio_device.base);
-            syntra_uart_puts(" size=");
-            syntra_uart_put_hex((uint64_t)virtio_device.region_size);
-            syntra_uart_puts("\n");
-        }
-        else if (status == SYNTRA_STATUS_NOT_IMPLEMENTED)
-        {
-            syntra_uart_puts("FDT VirtIO-MMIO: NOT FOUND\n");
-        }
-        else
-        {
-            /* Input is optional; malformed discovery must not break UART boot. */
-            syntra_uart_puts("FDT VirtIO-MMIO discovery: UNAVAILABLE\n");
-        }
+        syntra_virtio_mmio_available = 1;
+        syntra_uart_puts("FDT VirtIO-MMIO region discovered: base=");
+        syntra_uart_put_hex((uint64_t)syntra_virtio_mmio_device.base);
+        syntra_uart_puts(" size=");
+        syntra_uart_put_hex((uint64_t)syntra_virtio_mmio_device.region_size);
+        syntra_uart_puts("\n");
+    }
+    else if (status == SYNTRA_STATUS_NOT_IMPLEMENTED)
+    {
+        syntra_uart_puts("FDT VirtIO-MMIO: NOT FOUND\n");
+    }
+    else
+    {
+        /* Input is optional; malformed discovery must not break UART boot. */
+        syntra_uart_puts("FDT VirtIO-MMIO discovery: UNAVAILABLE\n");
     }
 
     syntra_fdt_iterator_init(&iterator);
@@ -918,10 +924,15 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
         if (status != SYNTRA_STATUS_OK) return status;
     }
 
-    status = syntra_arm64_mmu_mapping_plan_build(
+    status = syntra_arm64_mmu_mapping_plan_build_with_virtio(
         &metadata, regions, region_count, &gic_info.config,
         SYNTRA_PL011_BASE, 0x1000U,
-        syntra_fw_cfg_base, syntra_fw_cfg_size, &plan);
+        syntra_fw_cfg_base, syntra_fw_cfg_size,
+        syntra_virtio_mmio_available
+            ? syntra_virtio_mmio_device.base : 0U,
+        syntra_virtio_mmio_available
+            ? syntra_virtio_mmio_device.region_size : 0U,
+        &plan);
     if (status != SYNTRA_STATUS_OK)
     {
         syntra_uart_puts("MMU mapping plan: FAIL\n");
@@ -967,6 +978,10 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
 
     syntra_uart_puts("MMU identity mapping audit: PASS entries=");
     syntra_uart_put_hex((uint64_t)plan.count);
+    if (syntra_virtio_mmio_available)
+    {
+        syntra_uart_puts(" VirtIO-MMIO=Device/RW/XN");
+    }
     syntra_uart_puts(" root=");
     syntra_uart_put_hex(page_table.root_physical_address);
     syntra_uart_puts("\n");
