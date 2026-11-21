@@ -48,6 +48,7 @@ add_library(syntra_kernel STATIC
     kernel/ipc/ipc.c
 
     kernel/interrupt/interrupt.c
+    kernel/sync/critical_section.c
     kernel/exception/exception.c
     kernel/timer/timer.c
     kernel/clock/clock.c
@@ -86,6 +87,7 @@ target_include_directories(syntra_kernel PUBLIC
     kernel/process
     kernel/ipc
     kernel/interrupt
+    kernel/sync
     kernel/exception
     kernel/timer
     kernel/clock
@@ -203,6 +205,15 @@ add_executable(panic_test
 )
 target_link_libraries(panic_test PRIVATE syntra_kernel)
 add_test(NAME KernelPanicV2Test COMMAND panic_test)
+
+# IRQ Critical Section V1 Test (host model)
+add_executable(critical_section_test
+    tests/sync/critical_section_test.c
+    kernel/sync/critical_section.c
+)
+target_include_directories(critical_section_test PRIVATE kernel/sync)
+target_compile_definitions(critical_section_test PRIVATE SYNTRA_CRITICAL_SECTION_TESTING)
+add_test(NAME IRQCriticalSectionV1Test COMMAND critical_section_test)
 
 # Interrupt Manager V1 Test
 add_executable(interrupt_test
