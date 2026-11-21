@@ -57,6 +57,7 @@ add_executable(syntraos_arm64
     "${SYNTRAOS_ROOT}/kernel/gui/ramfb.c"
     "${SYNTRAOS_ROOT}/kernel/gui/desktop_session.c"
     "${SYNTRAOS_ROOT}/kernel/gui/window_manager.c"
+    "${SYNTRAOS_ROOT}/kernel/gui/window_renderer.c"
     "${SYNTRAOS_ROOT}/kernel/input/input.c"
 )
 
