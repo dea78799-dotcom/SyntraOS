@@ -1267,28 +1267,28 @@ syntra_status_t syntra_arm64_boot_main(
             syntra_uart_put_hex(snapshot.device_id);
             syntra_uart_puts(" vendor=");
             syntra_uart_put_hex(snapshot.vendor_id);
-            syntra_uart_puts("\\n");
+            syntra_uart_puts("\n");
 
             status = syntra_virtio_mmio_decode_identity(
                 &snapshot, &identity);
             if (status == SYNTRA_STATUS_OK)
             {
                 if (identity.function == SYNTRA_VIRTIO_MMIO_FUNCTION_INPUT)
-                    syntra_uart_puts("VirtIO-MMIO function: INPUT\\n");
+                    syntra_uart_puts("VirtIO-MMIO function: INPUT\n");
                 else if (identity.function == SYNTRA_VIRTIO_MMIO_FUNCTION_OTHER)
-                    syntra_uart_puts("VirtIO-MMIO function: OTHER\\n");
+                    syntra_uart_puts("VirtIO-MMIO function: OTHER\n");
                 else
-                    syntra_uart_puts("VirtIO-MMIO function: EMPTY SLOT\\n");
+                    syntra_uart_puts("VirtIO-MMIO function: EMPTY SLOT\n");
             }
             else
             {
-                syntra_uart_puts("VirtIO-MMIO identity decode: UNAVAILABLE\\n");
+                syntra_uart_puts("VirtIO-MMIO identity decode: UNAVAILABLE\n");
             }
         }
         else
         {
             /* Optional input transport probe must not prevent the OS booting. */
-            syntra_uart_puts("VirtIO-MMIO mapped identity read: UNAVAILABLE\\n");
+            syntra_uart_puts("VirtIO-MMIO mapped identity read: UNAVAILABLE\n");
         }
     }
 
