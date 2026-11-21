@@ -10,6 +10,10 @@
  */
 syntra_status_t syntra_desktop_render(syntra_framebuffer_t *framebuffer);
 
+/* GUI v5 composed preview: desktop plus typed app windows on large displays. */
+syntra_status_t syntra_desktop_render_gui_v5(
+    syntra_framebuffer_t *framebuffer);
+
 /* Render the desktop and draw a visible focus outline around the focused app. */
 syntra_status_t syntra_desktop_render_session(
     syntra_framebuffer_t *framebuffer,
