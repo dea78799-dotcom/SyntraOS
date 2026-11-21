@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "memory_region.h"
+#include "../arch/irq.h"
 
 #define SYNTRA_PAGE_COUNT \
     ((size_t)(SYNTRA_PAGE_ALLOCATOR_MAX_PHYSICAL_ADDRESS / SYNTRA_PAGE_SIZE))
@@ -243,7 +244,7 @@ syntra_status_t syntra_page_allocator_init(void)
     return SYNTRA_STATUS_OK;
 }
 
-syntra_status_t syntra_page_alloc(uintptr_t *physical_address)
+static syntra_status_t page_alloc_unlocked(uintptr_t *physical_address)
 {
     size_t index;
 
@@ -277,7 +278,7 @@ syntra_status_t syntra_page_alloc(uintptr_t *physical_address)
     return SYNTRA_STATUS_OK;
 }
 
-syntra_status_t syntra_page_free(uintptr_t physical_address)
+static syntra_status_t page_free_unlocked(uintptr_t physical_address)
 {
     size_t index;
 
@@ -305,12 +306,51 @@ syntra_status_t syntra_page_free(uintptr_t physical_address)
     return SYNTRA_STATUS_OK;
 }
 
-size_t syntra_page_allocator_free_count(void)
+static size_t page_allocator_free_count_unlocked(void)
 {
     return initialized ? free_pages : 0U;
 }
 
-size_t syntra_page_allocator_total_count(void)
+static size_t page_allocator_total_count_unlocked(void)
 {
     return initialized ? total_pages : 0U;
+}
+
+/*
+ * These operations mutate or inspect shared allocator metadata. On the
+ * current single-core ARM64 target, masking local IRQ exceptions prevents an
+ * interrupt handler from re-entering the allocator halfway through an
+ * update. This is not an SMP lock and does not make the allocator safe for
+ * concurrent access from multiple CPU cores.
+ */
+syntra_status_t syntra_page_alloc(uintptr_t *physical_address)
+{
+    syntra_irq_state_t irq_state = syntra_irq_save();
+    syntra_status_t status = page_alloc_unlocked(physical_address);
+    syntra_irq_restore(irq_state);
+    return status;
+}
+
+syntra_status_t syntra_page_free(uintptr_t physical_address)
+{
+    syntra_irq_state_t irq_state = syntra_irq_save();
+    syntra_status_t status = page_free_unlocked(physical_address);
+    syntra_irq_restore(irq_state);
+    return status;
+}
+
+size_t syntra_page_allocator_free_count(void)
+{
+    syntra_irq_state_t irq_state = syntra_irq_save();
+    size_t count = page_allocator_free_count_unlocked();
+    syntra_irq_restore(irq_state);
+    return count;
+}
+
+size_t syntra_page_allocator_total_count(void)
+{
+    syntra_irq_state_t irq_state = syntra_irq_save();
+    size_t count = page_allocator_total_count_unlocked();
+    syntra_irq_restore(irq_state);
+    return count;
 }
