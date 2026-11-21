@@ -2,6 +2,79 @@
 
 #include <stddef.h>
 
+
+static uint32_t virtio_mmio_read_be32(const uint8_t *data)
+{
+    return ((uint32_t)data[0] << 24U) |
+           ((uint32_t)data[1] << 16U) |
+           ((uint32_t)data[2] << 8U) |
+           (uint32_t)data[3];
+}
+
+static syntra_status_t virtio_mmio_discover_interrupt(
+    const syntra_fdt_t *fdt,
+    const syntra_fdt_node_t *device_node,
+    uint32_t *interrupt_id,
+    uint32_t *interrupt_flags)
+{
+    const uint8_t *data;
+    uint32_t data_size;
+    uint32_t parent_phandle;
+    uint32_t interrupt_cells;
+    uint32_t type;
+    uint32_t number;
+    syntra_fdt_node_t controller;
+    syntra_status_t status;
+
+    status = syntra_fdt_get_property(
+        fdt, device_node, "interrupt-parent", &data, &data_size);
+    if (status != SYNTRA_STATUS_OK || data_size != 4U)
+        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+    parent_phandle = virtio_mmio_read_be32(data);
+    status = syntra_fdt_find_phandle(fdt, parent_phandle, &controller);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = syntra_fdt_get_property(
+        fdt, &controller, "#interrupt-cells", &data, &data_size);
+    if (status != SYNTRA_STATUS_OK || data_size != 4U)
+        return SYNTRA_STATUS_ERROR;
+    interrupt_cells = virtio_mmio_read_be32(data);
+    if (interrupt_cells != 3U)
+        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+
+    status = syntra_fdt_get_property(
+        fdt, device_node, "interrupts", &data, &data_size);
+    if (status != SYNTRA_STATUS_OK || data_size < 12U ||
+        (data_size % 12U) != 0U)
+        return SYNTRA_STATUS_ERROR;
+
+    type = virtio_mmio_read_be32(data);
+    number = virtio_mmio_read_be32(data + 4U);
+    *interrupt_flags = virtio_mmio_read_be32(data + 8U);
+
+    /* GIC binding: type 0 = SPI, type 1 = PPI. */
+    if (type == 0U)
+    {
+        if (number > 987U) return SYNTRA_STATUS_INVALID_ARGUMENT;
+        *interrupt_id = 32U + number;
+    }
+    else if (type == 1U)
+    {
+        if (number > 15U) return SYNTRA_STATUS_INVALID_ARGUMENT;
+        *interrupt_id = 16U + number;
+    }
+    else
+    {
+        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+    }
+
+    if (*interrupt_flags != 1U && *interrupt_flags != 2U &&
+        *interrupt_flags != 4U && *interrupt_flags != 8U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_virtio_mmio_validate(
     const syntra_virtio_mmio_device_t *device)
 {
@@ -24,6 +97,9 @@ syntra_status_t syntra_virtio_mmio_discover_first(
     uintptr_t base;
     size_t region_size;
     size_t reg_count;
+    syntra_fdt_node_t node;
+    uint32_t interrupt_id = 0U;
+    uint32_t interrupt_flags = 0U;
     syntra_status_t status;
 
     if (fdt == NULL || device == NULL)
@@ -32,6 +108,9 @@ syntra_status_t syntra_virtio_mmio_discover_first(
     device->base = 0U;
     device->region_size = 0U;
     device->reg_index = 0U;
+    device->interrupt_id = 0U;
+    device->interrupt_flags = 0U;
+    device->interrupt_valid = 0;
     device->discovered = 0;
 
     status = syntra_fdt_find_compatible(fdt, "virtio,mmio", &node);
@@ -52,6 +131,15 @@ syntra_status_t syntra_virtio_mmio_discover_first(
     device->region_size = region_size;
     device->reg_index = 0U;
     device->discovered = 1;
+
+    status = virtio_mmio_discover_interrupt(
+        fdt, &node, &interrupt_id, &interrupt_flags);
+    if (status == SYNTRA_STATUS_OK)
+    {
+        device->interrupt_id = interrupt_id;
+        device->interrupt_flags = interrupt_flags;
+        device->interrupt_valid = 1;
+    }
 
     return syntra_virtio_mmio_validate(device);
 }
