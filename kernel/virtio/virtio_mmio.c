@@ -91,6 +91,138 @@ syntra_status_t syntra_virtio_mmio_read_identity_mapped(
     return SYNTRA_STATUS_OK;
 }
 
+
+static syntra_status_t virtio_mmio_mapped_read32(
+    const syntra_virtio_mmio_device_t *device,
+    const volatile void *mapped_base,
+    size_t mapped_size,
+    size_t offset,
+    uint32_t *value)
+{
+    const volatile uint32_t *registers;
+    if (syntra_virtio_mmio_validate(device) != SYNTRA_STATUS_OK ||
+        mapped_base == NULL || value == NULL ||
+        mapped_size > device->region_size ||
+        offset > mapped_size || mapped_size - offset < sizeof(uint32_t) ||
+        (offset & 0x3U) != 0U ||
+        (((uintptr_t)mapped_base) & 0x3U) != 0U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    registers = (const volatile uint32_t *)mapped_base;
+    *value = registers[offset / sizeof(uint32_t)];
+    return SYNTRA_STATUS_OK;
+}
+
+static syntra_status_t virtio_mmio_mapped_write32(
+    const syntra_virtio_mmio_device_t *device,
+    volatile void *mapped_base,
+    size_t mapped_size,
+    size_t offset,
+    uint32_t value)
+{
+    volatile uint32_t *registers;
+    if (syntra_virtio_mmio_validate(device) != SYNTRA_STATUS_OK ||
+        mapped_base == NULL ||
+        mapped_size > device->region_size ||
+        offset > mapped_size || mapped_size - offset < sizeof(uint32_t) ||
+        (offset & 0x3U) != 0U ||
+        (((uintptr_t)mapped_base) & 0x3U) != 0U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    registers = (volatile uint32_t *)mapped_base;
+    registers[offset / sizeof(uint32_t)] = value;
+#if defined(__aarch64__)
+    __asm__ volatile("dsb oshst" ::: "memory");
+#endif
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t syntra_virtio_mmio_prepare_input_mapped(
+    const syntra_virtio_mmio_device_t *device,
+    volatile void *mapped_base,
+    size_t mapped_size,
+    const syntra_virtio_mmio_identity_t *identity)
+{
+    uint32_t status_value;
+    uint32_t device_id;
+    syntra_status_t status;
+
+    if (identity == NULL ||
+        identity->function != SYNTRA_VIRTIO_MMIO_FUNCTION_INPUT ||
+        identity->device_id != SYNTRA_VIRTIO_MMIO_DEVICE_ID_INPUT ||
+        (identity->version != SYNTRA_VIRTIO_MMIO_VERSION_LEGACY &&
+         identity->version != SYNTRA_VIRTIO_MMIO_VERSION_MODERN) ||
+        mapped_size < SYNTRA_VIRTIO_MMIO_DEVICE_STATUS_SIZE)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    status = virtio_mmio_mapped_read32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_DEVICE_ID, &device_id);
+    if (status != SYNTRA_STATUS_OK || device_id != identity->device_id)
+        return SYNTRA_STATUS_ERROR;
+
+    /* Reset, then perform the mandatory ACKNOWLEDGE -> DRIVER transition. */
+    status = virtio_mmio_mapped_write32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_DEVICE_STATUS, 0U);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = virtio_mmio_mapped_write32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_DEVICE_STATUS,
+        SYNTRA_VIRTIO_STATUS_ACKNOWLEDGE);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = virtio_mmio_mapped_write32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_DEVICE_STATUS,
+        SYNTRA_VIRTIO_STATUS_ACKNOWLEDGE | SYNTRA_VIRTIO_STATUS_DRIVER);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    /* No optional features are claimed until SyntraOS implements them. */
+    status = virtio_mmio_mapped_write32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES_SEL, 0U);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = virtio_mmio_mapped_write32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES, 0U);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = virtio_mmio_mapped_write32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES_SEL, 1U);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = virtio_mmio_mapped_write32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES, 0U);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    if (identity->version == SYNTRA_VIRTIO_MMIO_VERSION_MODERN)
+    {
+        status = virtio_mmio_mapped_write32(
+            device, mapped_base, mapped_size,
+            SYNTRA_VIRTIO_MMIO_DEVICE_STATUS,
+            SYNTRA_VIRTIO_STATUS_ACKNOWLEDGE |
+            SYNTRA_VIRTIO_STATUS_DRIVER |
+            SYNTRA_VIRTIO_STATUS_FEATURES_OK);
+        if (status != SYNTRA_STATUS_OK) return status;
+    }
+
+    status = virtio_mmio_mapped_read32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_DEVICE_STATUS, &status_value);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    if ((status_value & SYNTRA_VIRTIO_STATUS_FAILED) != 0U ||
+        (status_value & (SYNTRA_VIRTIO_STATUS_ACKNOWLEDGE |
+                         SYNTRA_VIRTIO_STATUS_DRIVER)) !=
+        (SYNTRA_VIRTIO_STATUS_ACKNOWLEDGE |
+         SYNTRA_VIRTIO_STATUS_DRIVER))
+        return SYNTRA_STATUS_ERROR;
+
+    if (identity->version == SYNTRA_VIRTIO_MMIO_VERSION_MODERN &&
+        (status_value & SYNTRA_VIRTIO_STATUS_FEATURES_OK) == 0U)
+        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_virtio_mmio_decode_identity(
     const syntra_virtio_mmio_register_snapshot_t *snapshot,
     syntra_virtio_mmio_identity_t *identity)
