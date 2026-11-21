@@ -161,7 +161,7 @@ static void build_test_fdt(int use_gic_v2)
 static void test_gic_mpidr_to_irouter(void)
 {
     /* MPIDR Aff3:Aff2:Aff1:Aff0 -> IROUTER Aff3 at [39:32]. */
-    assert(syntra_arm64_gic_mpidr_to_irouter(0x0000000100020304ULL) ==
+    assert(syntra_arm64_gic_mpidr_to_irouter(0x00000001FF020304ULL) ==
            0x0000000100020304ULL);
     assert(syntra_arm64_gic_mpidr_to_irouter(0x0000000000000001ULL) == 1ULL);
     assert(syntra_arm64_gic_mpidr_to_irouter(0x0000000100000000ULL) ==
