@@ -443,6 +443,30 @@ syntra_status_t syntra_arm64_gic_configure_interrupt(
 #endif
 }
 
+syntra_status_t syntra_arm64_gic_spi_route_offset(
+    uint32_t interrupt_id,
+    size_t distributor_size,
+    size_t *offset
+)
+{
+    size_t route_offset;
+
+    if (offset == NULL ||
+        interrupt_id < 32U ||
+        interrupt_id >= 1020U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    route_offset = (size_t)GICD_IROUTER +
+        ((size_t)interrupt_id * sizeof(uint64_t));
+
+    if (route_offset > distributor_size ||
+        distributor_size - route_offset < sizeof(uint64_t))
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    *offset = route_offset;
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_arm64_gic_enable_interrupt(uint32_t interrupt_id)
 {
     if (!gic_initialized) return SYNTRA_STATUS_ERROR;
@@ -480,12 +504,14 @@ syntra_status_t syntra_arm64_gic_enable_interrupt(uint32_t interrupt_id)
                  * GICD_IROUTER is indexed by the absolute INTID. SPI 48
                  * therefore uses GICD_IROUTER + 48 * 8 (not SPI-relative).
                  */
-                size_t route_offset = (size_t)GICD_IROUTER +
-                    ((size_t)interrupt_id * sizeof(uint64_t));
-                if (route_offset > gic_config.distributor_size ||
-                    gic_config.distributor_size - route_offset <
-                        sizeof(uint64_t))
-                    return SYNTRA_STATUS_INVALID_ARGUMENT;
+                size_t route_offset;
+                syntra_status_t route_status =
+                    syntra_arm64_gic_spi_route_offset(
+                        interrupt_id,
+                        gic_config.distributor_size,
+                        &route_offset);
+                if (route_status != SYNTRA_STATUS_OK)
+                    return route_status;
                 *(volatile uint64_t *)(gic_config.distributor_base +
                                        route_offset) =
                     gic_mpidr_affinity(gic_read_mpidr());
