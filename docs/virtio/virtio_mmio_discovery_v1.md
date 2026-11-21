@@ -1,6 +1,6 @@
 # SyntraOS VirtIO-MMIO Discovery, Mapping, and Input Queue Preparation v8
 
-Status: FDT discovery, MMU mapping, identity and feature negotiation, GIC trigger setup, legacy event queue construction/publication
+Status: FDT discovery, MMU mapping, identity and feature negotiation, GIC trigger setup, event queue publication, IRQ registration and queue start
 Target: QEMU ARM64 `virt`
 
 ## Implemented
@@ -15,7 +15,9 @@ Target: QEMU ARM64 `virt`
 - Allocate two contiguous pages for the legacy VirtIO split event queue.
 - Build eight writable event descriptors, the available ring, the used ring, and eight 8-byte event buffers.
 - Validate QueueNumMax, configure QueueNum and QueueAlign, and publish QueuePFN last after a memory write barrier.
-- Keep the device short of DRIVER_OK. The queue is configured but not started; the interrupt remains disabled.
+- Initialize normalized input state at 640x480.
+- Register the Input SPI handler in the generic interrupt framework, assign priority, and enable the SPI.
+- Set DRIVER_OK and notify queue 0, starting the device queue after the handler is registered.
 
 ## Runtime boundary
 
@@ -23,15 +25,12 @@ The queue layout is prepared and published, but the driver has not set DRIVER_OK
 
 ## Validation
 
-Host tests cover contiguous allocation, queue bounds, descriptor layout, available/used ring initialization, QueuePFN publication, and refusal to configure an undersized queue or a device already in DRIVER_OK. A fresh complete ARM64/QEMU CI run must verify the queue setup marker and all previous checks.
+Host tests cover contiguous allocation, queue bounds, descriptor layout, available/used ring initialization, QueuePFN publication, and refusal to configure an undersized queue or a device already in DRIVER_OK. CI requires markers for queue setup, IRQ registration, queue start, and all previous boot/MMU/framebuffer checks. Host tests simulate a keyboard press/release through the queue handler.
 
 ## Next stages
 
-1. Register a bounded VirtIO Input IRQ handler using the parsed SPI INTID.
-2. Enable the IRQ only after the queue is fully prepared.
-3. Set DRIVER_OK and notify queue 0.
-4. Consume used-ring entries, validate descriptor IDs/lengths, and recycle event buffers.
-5. Convert VirtIO input wire events into `syntra_input_event_t`.
-6. Route keyboard/pointer events into the desktop/window interaction loop and test actual key delivery in QEMU.
+1. Add QEMU test that injects a keyboard event and verifies IRQ handler receives and updates key state.
+2. Route keyboard/pointer state into the desktop/window interaction loop.
+3. Add pointer absolute-axis range discovery and test touch/mouse events.
 
 All implementation is original SyntraOS code using project FDT, MMU, page allocator, and interrupt components plus public VirtIO transport definitions. No proprietary vendor GUI source or third-party GUI toolkit is imported.
