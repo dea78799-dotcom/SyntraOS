@@ -137,7 +137,13 @@ static void test_identity_decode(void)
 static void test_input_transport_prepare(void)
 {
     syntra_virtio_mmio_device_t device = {
-        (uintptr_t)0x0A000000U, 0x200U, 0U, 1
+        .base = (uintptr_t)0x0A000000U,
+        .region_size = 0x200U,
+        .reg_index = 0U,
+        .interrupt_id = 0U,
+        .interrupt_flags = 0U,
+        .interrupt_valid = 0,
+        .discovered = 1
     };
     _Alignas(4) volatile uint32_t registers[0x200U / sizeof(uint32_t)] = {0};
     syntra_virtio_mmio_identity_t identity = {
