@@ -1,4 +1,5 @@
 #include "../../kernel/gui/desktop.h"
+#include "../../kernel/gui/desktop_session.h"
 
 #include <assert.h>
 #include <stdint.h>
@@ -63,6 +64,30 @@ int main(void)
            0xFF5578F2U);
     assert(compact_pixels[(size_t)(COMPACT_HEIGHT - 26U) * COMPACT_WIDTH] ==
            0xE8202D49U);
+
+
+    /*
+     * GUI v2 focus ring is drawn over the selected launcher without changing
+     * the existing base renderer or touching stride padding.
+     */
+    {
+        syntra_desktop_session_t session;
+        syntra_input_event_t right = {SYNTRA_INPUT_EV_KEY, 106U, 1};
+        assert(syntra_desktop_session_init(&session, TEST_WIDTH, TEST_HEIGHT) ==
+               SYNTRA_STATUS_OK);
+        assert(syntra_desktop_render_session(&framebuffer, &session) ==
+               SYNTRA_STATUS_OK);
+        assert(pixels[(size_t)180U * TEST_STRIDE + 24U] == 0xFFFFFFFFU);
+        assert(pixels[(size_t)181U * TEST_STRIDE + 25U] == 0xFFFFFFFFU);
+
+        assert(syntra_desktop_session_process(&session, &right) ==
+               SYNTRA_STATUS_OK);
+        assert(syntra_desktop_render_session(&framebuffer, &session) ==
+               SYNTRA_STATUS_OK);
+        assert(pixels[(size_t)180U * TEST_STRIDE + 104U] == 0xFFFFFFFFU);
+        assert(pixels[(size_t)180U * TEST_STRIDE + 24U] == 0xFF5578F2U);
+        assert(pixels[TEST_STRIDE + TEST_WIDTH] == 0U);
+    }
 
     puts("SyntraOS adaptive GUI desktop renderer tests passed.");
     return 0;
