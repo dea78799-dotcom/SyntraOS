@@ -380,6 +380,9 @@ syntra_status_t syntra_virtio_mmio_setup_input_event_queue_mapped(
     queue->event_buffer_offset = 0U;
     queue->queue_size = 0U;
     queue->last_used_index = 0U;
+    queue->software_event_head = 0U;
+    queue->software_event_tail = 0U;
+    queue->software_event_dropped = 0U;
     queue->event_count = 0U;
     queue->key_event_count = 0U;
     queue->key_a_press_count = 0U;
@@ -553,6 +556,36 @@ syntra_status_t syntra_virtio_mmio_start_input_mapped(
         SYNTRA_VIRTIO_MMIO_QUEUE_NOTIFY, 0U);
 }
 
+syntra_status_t syntra_virtio_mmio_pop_input_event(
+    syntra_virtio_input_queue_t *queue,
+    syntra_input_event_t *event)
+{
+    uint32_t tail;
+    uint32_t head;
+
+    if (queue == NULL || event == NULL || queue->ready != 1)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    tail = queue->software_event_tail;
+#if defined(__aarch64__)
+    __asm__ volatile("dmb oshld" ::: "memory");
+#else
+    __asm__ volatile("" ::: "memory");
+#endif
+    head = queue->software_event_head;
+    if (tail == head) return SYNTRA_STATUS_NOT_IMPLEMENTED;
+
+    *event = queue->software_events[
+        tail % SYNTRA_VIRTIO_INPUT_SOFTWARE_EVENT_QUEUE_SIZE];
+#if defined(__aarch64__)
+    __asm__ volatile("dmb oshst" ::: "memory");
+#else
+    __asm__ volatile("" ::: "memory");
+#endif
+    queue->software_event_tail = tail + 1U;
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_virtio_mmio_handle_input_irq(
     const syntra_virtio_mmio_device_t *device,
     volatile void *mapped_base,
@@ -645,6 +678,26 @@ syntra_status_t syntra_virtio_mmio_handle_input_irq(
             event_status = syntra_input_process(input_state, &event);
             if (event_status == SYNTRA_STATUS_OK)
             {
+                uint32_t head = queue->software_event_head;
+                uint32_t tail = queue->software_event_tail;
+                if ((uint32_t)(head - tail) <
+                    SYNTRA_VIRTIO_INPUT_SOFTWARE_EVENT_QUEUE_SIZE)
+                {
+                    queue->software_events[
+                        head % SYNTRA_VIRTIO_INPUT_SOFTWARE_EVENT_QUEUE_SIZE] =
+                        event;
+#if defined(__aarch64__)
+                    __asm__ volatile("dmb oshst" ::: "memory");
+#else
+                    __asm__ volatile("" ::: "memory");
+#endif
+                    queue->software_event_head = head + 1U;
+                }
+                else if (queue->software_event_dropped < UINT32_MAX)
+                {
+                    queue->software_event_dropped++;
+                }
+
                 if (queue->event_count < UINT32_MAX) queue->event_count++;
                 if (event.type == SYNTRA_INPUT_EV_KEY)
                 {
