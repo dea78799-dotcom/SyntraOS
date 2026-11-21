@@ -335,6 +335,16 @@ static void test_input_event_irq_drain(void)
         &queue) == SYNTRA_STATUS_OK);
     assert(syntra_input_init(&input_state, 640U, 480U) == SYNTRA_STATUS_OK);
 
+    /* Start must reject queue metadata that would expose truncated memory. */
+    {
+        size_t saved_size = queue.memory_size;
+        queue.memory_size = queue.event_buffer_offset;
+        assert(syntra_virtio_mmio_start_input_mapped(
+            &device, registers, sizeof(registers), &identity, &queue) ==
+            SYNTRA_STATUS_INVALID_ARGUMENT);
+        queue.memory_size = saved_size;
+    }
+
     assert(syntra_virtio_mmio_start_input_mapped(
         &device, registers, sizeof(registers), &identity, &queue) ==
         SYNTRA_STATUS_OK);
