@@ -1233,6 +1233,7 @@ static void syntra_virtio_input_qemu_diagnostic_wait(void)
 {
     uint64_t start;
     uint64_t frequency;
+    uint32_t spin;
     volatile uint32_t *registers;
     volatile uint8_t *queue_memory;
     uint16_t used_index;
@@ -1242,11 +1243,15 @@ static void syntra_virtio_input_qemu_diagnostic_wait(void)
         syntra_virtio_input_queue.mapped_memory == NULL)
         return;
 
+    syntra_uart_puts("VirtIO Input diagnostic: BEGIN\n");
     frequency = syntra_arm64_timer_read_frequency();
     start = syntra_arm64_timer_read_counter();
-    while ((syntra_arm64_timer_read_counter() - start) < frequency)
+    for (spin = 0U; spin < 20000000U; ++spin)
     {
-        /* One-second QEMU-only observation window for injected input. */
+        if (frequency != 0U &&
+            (syntra_arm64_timer_read_counter() - start) >=
+                (frequency / 4U))
+            break;
     }
 
     registers = (volatile uint32_t *)(uintptr_t)
@@ -1268,6 +1273,8 @@ static void syntra_virtio_input_qemu_diagnostic_wait(void)
     syntra_uart_put_hex(syntra_virtio_input_queue.event_count);
     syntra_uart_puts(" key_a=");
     syntra_uart_put_hex(syntra_virtio_input_queue.key_a_press_count);
+    syntra_uart_puts(" irq_errors=");
+    syntra_uart_put_hex(syntra_virtio_input_queue.irq_error_count);
     syntra_uart_puts("\n");
 }
 #endif
