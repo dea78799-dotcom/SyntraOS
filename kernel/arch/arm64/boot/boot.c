@@ -93,6 +93,22 @@ static void syntra_uart_puts(const char *message)
     }
 }
 
+static syntra_status_t syntra_arm64_verify_fp_simd_policy(void)
+{
+    uint64_t cpacr_el1;
+    const uint64_t fpen_mask = 3ULL << 20U;
+
+    __asm__ volatile("mrs %0, cpacr_el1" : "=r"(cpacr_el1));
+    if ((cpacr_el1 & fpen_mask) != 0U)
+    {
+        syntra_uart_puts("ARM64 FP/SIMD policy: FAIL CPACR_EL1.FPEN not disabled\\n");
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    syntra_uart_puts("ARM64 FP/SIMD policy: disabled (CPACR_EL1.FPEN=00) PASS\\n");
+    return SYNTRA_STATUS_OK;
+}
+
 
 
 void syntra_arm64_exception_uart_puts(const char *message) { syntra_uart_puts(message); }
@@ -1149,6 +1165,12 @@ syntra_status_t syntra_arm64_boot_main(
 
 
     syntra_uart_init();
+    status = syntra_arm64_verify_fp_simd_policy();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("SyntraOS boot failed: FP/SIMD policy verification\\n");
+        return status;
+    }
     syntra_boot_report_mmu_registers("MMU registers at boot: ");
     status = validate_dtb_and_discover_gic(dtb);
     if (status != SYNTRA_STATUS_OK)
