@@ -6,28 +6,74 @@
 
 #define SYNTRA_PAGE_COUNT \
     ((size_t)(SYNTRA_PAGE_ALLOCATOR_MAX_PHYSICAL_ADDRESS / SYNTRA_PAGE_SIZE))
-#define SYNTRA_BITMAP_BYTES ((SYNTRA_PAGE_COUNT + 7U) / 8U)
+#define SYNTRA_BITMAP_WORD_BITS 64U
+#define SYNTRA_BITMAP_WORD_COUNT (SYNTRA_PAGE_COUNT / SYNTRA_BITMAP_WORD_BITS)
+#define SYNTRA_SUMMARY_WORD_COUNT \
+    ((SYNTRA_BITMAP_WORD_COUNT + SYNTRA_BITMAP_WORD_BITS - 1U) / SYNTRA_BITMAP_WORD_BITS)
 
-static uint8_t free_bitmap[SYNTRA_BITMAP_BYTES];
-static uint8_t allocated_bitmap[SYNTRA_BITMAP_BYTES];
+static uint64_t free_bitmap[SYNTRA_BITMAP_WORD_COUNT];
+static uint64_t allocated_bitmap[SYNTRA_BITMAP_WORD_COUNT];
+/* Each summary bit marks one free_bitmap word that contains at least one free page. */
+static uint64_t free_summary[SYNTRA_SUMMARY_WORD_COUNT];
 static size_t total_pages;
 static size_t free_pages;
 static size_t allocation_cursor;
 static int initialized;
 
-static int bitmap_test(const uint8_t *bitmap, size_t index)
+static unsigned int bit_index(uint64_t value)
 {
-    return (bitmap[index / 8U] & (uint8_t)(1U << (index % 8U))) != 0U;
+#if defined(__GNUC__) || defined(__clang__)
+    return (unsigned int)__builtin_ctzll(value);
+#else
+    unsigned int index = 0U;
+    while ((value & UINT64_C(1)) == 0U)
+    {
+        value >>= 1U;
+        index++;
+    }
+    return index;
+#endif
 }
 
-static void bitmap_set(uint8_t *bitmap, size_t index)
+static int bitmap_test(const uint64_t *bitmap, size_t index)
 {
-    bitmap[index / 8U] |= (uint8_t)(1U << (index % 8U));
+    return (bitmap[index / SYNTRA_BITMAP_WORD_BITS] &
+            (UINT64_C(1) << (index % SYNTRA_BITMAP_WORD_BITS))) != 0U;
 }
 
-static void bitmap_clear(uint8_t *bitmap, size_t index)
+static void bitmap_set(uint64_t *bitmap, size_t index)
 {
-    bitmap[index / 8U] &= (uint8_t)~(uint8_t)(1U << (index % 8U));
+    bitmap[index / SYNTRA_BITMAP_WORD_BITS] |=
+        UINT64_C(1) << (index % SYNTRA_BITMAP_WORD_BITS);
+}
+
+static void bitmap_clear(uint64_t *bitmap, size_t index)
+{
+    bitmap[index / SYNTRA_BITMAP_WORD_BITS] &=
+        ~(UINT64_C(1) << (index % SYNTRA_BITMAP_WORD_BITS));
+}
+
+static void free_page_set(size_t page_index)
+{
+    size_t word_index = page_index / SYNTRA_BITMAP_WORD_BITS;
+    uint64_t old_word = free_bitmap[word_index];
+
+    bitmap_set(free_bitmap, page_index);
+    if (old_word == 0U)
+    {
+        bitmap_set(free_summary, word_index);
+    }
+}
+
+static void free_page_clear(size_t page_index)
+{
+    size_t word_index = page_index / SYNTRA_BITMAP_WORD_BITS;
+
+    bitmap_clear(free_bitmap, page_index);
+    if (free_bitmap[word_index] == 0U)
+    {
+        bitmap_clear(free_summary, word_index);
+    }
 }
 
 static uintptr_t align_up_page(uintptr_t address)
@@ -39,14 +85,81 @@ static uintptr_t align_up_page(uintptr_t address)
         : address + ((uintptr_t)SYNTRA_PAGE_SIZE - remainder);
 }
 
+/* Find a free page in [start_page, end_page), using summary bits to skip empty words. */
+static int find_free_page_range(size_t start_page, size_t end_page, size_t *found_page)
+{
+    size_t first_word;
+    size_t last_word;
+    size_t summary_index;
+
+    if (start_page >= end_page)
+    {
+        return 0;
+    }
+
+    first_word = start_page / SYNTRA_BITMAP_WORD_BITS;
+    last_word = (end_page - 1U) / SYNTRA_BITMAP_WORD_BITS;
+
+    for (summary_index = first_word / SYNTRA_BITMAP_WORD_BITS;
+         summary_index <= last_word / SYNTRA_BITMAP_WORD_BITS;
+         ++summary_index)
+    {
+        uint64_t candidates = free_summary[summary_index];
+        size_t summary_first_word = summary_index * SYNTRA_BITMAP_WORD_BITS;
+        size_t summary_last_word = summary_first_word + SYNTRA_BITMAP_WORD_BITS - 1U;
+
+        if (first_word > summary_first_word)
+        {
+            candidates &= UINT64_MAX << (first_word - summary_first_word);
+        }
+        if (last_word < summary_last_word)
+        {
+            size_t valid_bits = last_word - summary_first_word + 1U;
+            candidates &= (UINT64_C(1) << valid_bits) - 1U;
+        }
+
+        while (candidates != 0U)
+        {
+            size_t word_index = summary_first_word + bit_index(candidates);
+            uint64_t page_candidates = free_bitmap[word_index];
+            size_t word_page_start = word_index * SYNTRA_BITMAP_WORD_BITS;
+            size_t word_page_end = word_page_start + SYNTRA_BITMAP_WORD_BITS;
+
+            if (start_page > word_page_start)
+            {
+                page_candidates &= UINT64_MAX << (start_page - word_page_start);
+            }
+            if (end_page < word_page_end)
+            {
+                size_t valid_bits = end_page - word_page_start;
+                page_candidates &= (UINT64_C(1) << valid_bits) - 1U;
+            }
+
+            if (page_candidates != 0U)
+            {
+                *found_page = word_page_start + bit_index(page_candidates);
+                return 1;
+            }
+
+            candidates &= candidates - 1U;
+        }
+    }
+
+    return 0;
+}
+
 syntra_status_t syntra_page_allocator_init(void)
 {
     size_t index;
 
-    for (index = 0U; index < SYNTRA_PAGE_COUNT / 8U; ++index)
+    for (index = 0U; index < SYNTRA_BITMAP_WORD_COUNT; ++index)
     {
         free_bitmap[index] = 0U;
         allocated_bitmap[index] = 0U;
+    }
+    for (index = 0U; index < SYNTRA_SUMMARY_WORD_COUNT; ++index)
+    {
+        free_summary[index] = 0U;
     }
 
     total_pages = 0U;
@@ -79,12 +192,8 @@ syntra_status_t syntra_page_allocator_init(void)
 
         end = region.base + region.size;
 
-        /*
-         * V1 manages only physical addresses below 4 GiB. Clip crossing
-         * regions and ignore regions wholly above the supported window.
-         */
-        if (region.base >=
-                (uintptr_t)SYNTRA_PAGE_ALLOCATOR_MAX_PHYSICAL_ADDRESS)
+        /* V1 manages only physical addresses below 4 GiB. */
+        if (region.base >= (uintptr_t)SYNTRA_PAGE_ALLOCATOR_MAX_PHYSICAL_ADDRESS)
         {
             continue;
         }
@@ -93,12 +202,7 @@ syntra_status_t syntra_page_allocator_init(void)
             end = (uintptr_t)SYNTRA_PAGE_ALLOCATOR_MAX_PHYSICAL_ADDRESS;
         }
 
-        /*
-         * Aligning a high physical base upward must not wrap uintptr_t.
-         * Reject an unrepresentable alignment instead of creating low pages.
-         */
-        if (region.base > UINTPTR_MAX -
-                ((uintptr_t)SYNTRA_PAGE_SIZE - 1U))
+        if (region.base > UINTPTR_MAX - ((uintptr_t)SYNTRA_PAGE_SIZE - 1U))
         {
             return SYNTRA_STATUS_INVALID_ARGUMENT;
         }
@@ -113,10 +217,9 @@ syntra_status_t syntra_page_allocator_init(void)
         for (address = first; address < limit;
              address += (uintptr_t)SYNTRA_PAGE_SIZE)
         {
-            size_t page_index =
-                (size_t)(address / (uintptr_t)SYNTRA_PAGE_SIZE);
+            size_t page_index = (size_t)(address / (uintptr_t)SYNTRA_PAGE_SIZE);
 
-            bitmap_set(free_bitmap, page_index);
+            free_page_set(page_index);
             total_pages++;
             free_pages++;
         }
@@ -145,36 +248,23 @@ syntra_status_t syntra_page_alloc(uintptr_t *physical_address)
         return SYNTRA_STATUS_OUT_OF_MEMORY;
     }
 
-    /* Search from the cursor first, then wrap to the beginning. */
-    for (index = allocation_cursor; index < SYNTRA_PAGE_COUNT; ++index)
+    if (!find_free_page_range(allocation_cursor, SYNTRA_PAGE_COUNT, &index) &&
+        !find_free_page_range(0U, allocation_cursor, &index))
     {
-        if (bitmap_test(free_bitmap, index))
-        {
-            goto found;
-        }
+        return SYNTRA_STATUS_ERROR;
     }
 
-    for (index = 0U; index < allocation_cursor; ++index)
-    {
-        if (bitmap_test(free_bitmap, index))
-        {
-            goto found;
-        }
-    }
-
-    return SYNTRA_STATUS_ERROR;
-
-found:
-    bitmap_clear(free_bitmap, index);
+    free_page_clear(index);
     bitmap_set(allocated_bitmap, index);
     free_pages--;
+
     allocation_cursor = index + 1U;
     if (allocation_cursor == SYNTRA_PAGE_COUNT)
     {
         allocation_cursor = 0U;
     }
-    *physical_address =
-        (uintptr_t)(index * SYNTRA_PAGE_SIZE);
+
+    *physical_address = (uintptr_t)(index * SYNTRA_PAGE_SIZE);
     return SYNTRA_STATUS_OK;
 }
 
@@ -184,8 +274,7 @@ syntra_status_t syntra_page_free(uintptr_t physical_address)
 
     if (!initialized ||
         physical_address % (uintptr_t)SYNTRA_PAGE_SIZE != 0U ||
-        (uint64_t)physical_address >=
-            SYNTRA_PAGE_ALLOCATOR_MAX_PHYSICAL_ADDRESS)
+        (uint64_t)physical_address >= SYNTRA_PAGE_ALLOCATOR_MAX_PHYSICAL_ADDRESS)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
@@ -197,12 +286,13 @@ syntra_status_t syntra_page_free(uintptr_t physical_address)
     }
 
     bitmap_clear(allocated_bitmap, index);
-    bitmap_set(free_bitmap, index);
+    free_page_set(index);
     free_pages++;
     if (index < allocation_cursor)
     {
         allocation_cursor = index;
     }
+
     return SYNTRA_STATUS_OK;
 }
 
