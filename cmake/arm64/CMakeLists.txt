@@ -63,6 +63,10 @@ set_target_properties(syntraos_arm64 PROPERTIES
     SUFFIX ".elf"
 )
 
+target_compile_definitions(syntraos_arm64 PRIVATE
+    SYNTRA_ARM64_FREESTANDING_IMAGE=1
+)
+
 target_include_directories(syntraos_arm64 PRIVATE
     "${SYNTRAOS_ROOT}/kernel/core"
     "${SYNTRAOS_ROOT}/kernel/memory"
