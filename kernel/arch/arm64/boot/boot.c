@@ -1228,6 +1228,50 @@ static syntra_status_t syntra_arm64_run_el0_hello_test(void)
     return SYNTRA_STATUS_OK;
 }
 
+#if defined(SYNTRA_QEMU_INPUT_DIAGNOSTIC)
+static void syntra_virtio_input_qemu_diagnostic_wait(void)
+{
+    uint64_t start;
+    uint64_t frequency;
+    volatile uint32_t *registers;
+    volatile uint8_t *queue_memory;
+    uint16_t used_index;
+    uint32_t interrupt_status;
+
+    if (syntra_virtio_input_queue.ready != 1 ||
+        syntra_virtio_input_queue.mapped_memory == NULL)
+        return;
+
+    frequency = syntra_arm64_timer_read_frequency();
+    start = syntra_arm64_timer_read_counter();
+    while ((syntra_arm64_timer_read_counter() - start) < frequency)
+    {
+        /* One-second QEMU-only observation window for injected input. */
+    }
+
+    registers = (volatile uint32_t *)(uintptr_t)
+        syntra_virtio_mmio_device.base;
+    interrupt_status = registers[
+        SYNTRA_VIRTIO_MMIO_INTERRUPT_STATUS / sizeof(uint32_t)];
+    queue_memory = (volatile uint8_t *)
+        syntra_virtio_input_queue.mapped_memory;
+    used_index = (uint16_t)((uint16_t)queue_memory[
+        syntra_virtio_input_queue.used_ring_offset + 2U] |
+        ((uint16_t)queue_memory[
+        syntra_virtio_input_queue.used_ring_offset + 3U] << 8U);
+
+    syntra_uart_puts("VirtIO Input diagnostic: irq_status=");
+    syntra_uart_put_hex(interrupt_status);
+    syntra_uart_puts(" used_index=");
+    syntra_uart_put_hex(used_index);
+    syntra_uart_puts(" irq_events=");
+    syntra_uart_put_hex(syntra_virtio_input_queue.event_count);
+    syntra_uart_puts(" key_a=");
+    syntra_uart_put_hex(syntra_virtio_input_queue.key_a_press_count);
+    syntra_uart_puts("\n");
+}
+#endif
+
 syntra_status_t syntra_arm64_boot_main(
     uint64_t dtb_address,
     uint64_t current_el
@@ -1491,5 +1535,8 @@ syntra_status_t syntra_arm64_boot_main(
 #endif
 
     syntra_uart_puts("SyntraOS boot OK\n");
+#if defined(SYNTRA_QEMU_INPUT_DIAGNOSTIC)
+    syntra_virtio_input_qemu_diagnostic_wait();
+#endif
     return SYNTRA_STATUS_OK;
 }
