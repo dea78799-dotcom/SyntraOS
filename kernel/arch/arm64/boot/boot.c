@@ -23,6 +23,30 @@ static size_t syntra_fw_cfg_size;
 static syntra_virtio_mmio_device_t syntra_virtio_mmio_device;
 static int syntra_virtio_mmio_available;
 static syntra_virtio_input_queue_t syntra_virtio_input_queue;
+static syntra_input_state_t syntra_virtio_input_state;
+static int syntra_virtio_input_irq_registered;
+
+static void syntra_virtio_input_irq_handler(
+    syntra_interrupt_id_t interrupt_id,
+    void *context)
+{
+    syntra_virtio_input_queue_t *queue =
+        (syntra_virtio_input_queue_t *)context;
+    syntra_status_t status;
+
+    if (queue == NULL ||
+        interrupt_id != syntra_virtio_mmio_device.interrupt_id)
+        return;
+
+    status = syntra_virtio_mmio_handle_input_irq(
+        &syntra_virtio_mmio_device,
+        (volatile void *)(uintptr_t)syntra_virtio_mmio_device.base,
+        syntra_virtio_mmio_device.region_size,
+        queue,
+        &syntra_virtio_input_state);
+    if (status != SYNTRA_STATUS_OK)
+        queue->irq_error_count++;
+}
 #include "../timer.h"
 #include "../../../timer/timer.h"
 #include "../../../interrupt/interrupt.h"
@@ -1321,7 +1345,49 @@ syntra_status_t syntra_arm64_boot_main(
                                         &syntra_virtio_input_queue);
                                     if (status == SYNTRA_STATUS_OK)
                                     {
-                                        syntra_uart_puts("VirtIO Input event queue: CONFIGURED (NOT STARTED)\n");
+                                        syntra_uart_puts("VirtIO Input event queue: CONFIGURED\\n");
+                                        status = syntra_input_init(
+                                            &syntra_virtio_input_state,
+                                            640U, 480U);
+                                        if (status == SYNTRA_STATUS_OK)
+                                            status = interrupt_register(
+                                                syntra_virtio_mmio_device.interrupt_id,
+                                                syntra_virtio_input_irq_handler,
+                                                &syntra_virtio_input_queue);
+                                        if (status == SYNTRA_STATUS_OK)
+                                        {
+                                            syntra_virtio_input_irq_registered = 1;
+                                            status = interrupt_set_priority(
+                                                syntra_virtio_mmio_device.interrupt_id,
+                                                0xA0U);
+                                        }
+                                        if (status == SYNTRA_STATUS_OK)
+                                            status = interrupt_enable(
+                                                syntra_virtio_mmio_device.interrupt_id);
+                                        if (status == SYNTRA_STATUS_OK)
+                                            status = syntra_virtio_mmio_start_input_mapped(
+                                                &syntra_virtio_mmio_device,
+                                                (volatile void *)(uintptr_t)syntra_virtio_mmio_device.base,
+                                                syntra_virtio_mmio_device.region_size,
+                                                &identity,
+                                                &syntra_virtio_input_queue);
+                                        if (status == SYNTRA_STATUS_OK)
+                                        {
+                                            syntra_uart_puts("VirtIO Input IRQ: REGISTERED\\n");
+                                            syntra_uart_puts("VirtIO Input queue: STARTED\\n");
+                                        }
+                                        else
+                                        {
+                                            (void)interrupt_disable(
+                                                syntra_virtio_mmio_device.interrupt_id);
+                                            if (syntra_virtio_input_irq_registered)
+                                            {
+                                                (void)interrupt_unregister(
+                                                    syntra_virtio_mmio_device.interrupt_id);
+                                                syntra_virtio_input_irq_registered = 0;
+                                            }
+                                            syntra_uart_puts("VirtIO Input IRQ/queue: UNAVAILABLE\\n");
+                                        }
                                     }
                                     else
                                     {
