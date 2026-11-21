@@ -121,6 +121,7 @@ syntra_status_t syntra_virtio_mmio_read_identity_mapped(
 typedef struct
 {
     uintptr_t physical_base;
+    volatile void *mapped_memory;
     size_t memory_size;
     size_t used_ring_offset;
     size_t event_buffer_offset;
