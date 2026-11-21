@@ -7,6 +7,7 @@ TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-20}"
 LOG_DIR="${LOG_DIR:-build/arm64/el0-no-gdb-logs}"
 UART_LOG="$LOG_DIR/uart.log"
 QEMU_LOG="$LOG_DIR/qemu.stderr.log"
+QEMU_INT_LOG="$LOG_DIR/qemu-int.log"
 
 if [[ ! -f "$ELF_PATH" ]]; then
     echo "FAIL: ARM64 ELF not found: $ELF_PATH" >&2
@@ -25,8 +26,10 @@ command -v timeout >/dev/null 2>&1 || {
 mkdir -p "$LOG_DIR"
 : > "$UART_LOG"
 : > "$QEMU_LOG"
+: > "$QEMU_INT_LOG"
 
 echo "Running SyntraOS on QEMU without GDB; timeout=${TIMEOUT_SECONDS}s"
+echo "QEMU exception tracing enabled: -d int -D $QEMU_INT_LOG"
 set +e
 timeout --signal=TERM --kill-after=2 "${TIMEOUT_SECONDS}s" "$QEMU_BIN" \
     -machine virt,gic-version=3,virtualization=off,secure=off \
@@ -39,6 +42,8 @@ timeout --signal=TERM --kill-after=2 "${TIMEOUT_SECONDS}s" "$QEMU_BIN" \
     -monitor none \
     -no-reboot \
     -no-shutdown \
+    -d int \
+    -D "$QEMU_INT_LOG" \
     >"$QEMU_LOG" 2>&1
 QEMU_STATUS=$?
 set -e
@@ -48,6 +53,8 @@ echo "=== QEMU stderr ==="
 cat "$QEMU_LOG"
 echo "=== UART output ==="
 cat "$UART_LOG"
+echo "=== QEMU exception trace (last 250 lines) ==="
+tail -n 250 "$QEMU_INT_LOG" || true
 
 check_marker() {
     local marker="$1"
@@ -66,7 +73,7 @@ check_marker "EL0 test returned to EL1: PASS" || FAILURES=1
 
 if [[ "$FAILURES" -ne 0 ]]; then
     echo "FAIL: EL0 no-GDB QEMU test did not observe every required marker." >&2
-    echo "Diagnostic logs are retained in: $LOG_DIR" >&2
+    echo "Full UART, QEMU stderr, and exception trace are retained in: $LOG_DIR" >&2
     exit 1
 fi
 
