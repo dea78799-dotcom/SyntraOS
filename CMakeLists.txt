@@ -22,6 +22,7 @@ add_library(syntra_gui STATIC
     kernel/gui/window_manager.c
     kernel/gui/window_renderer.c
     kernel/gui/window_interaction.c
+    kernel/gui/gui_runtime.c
     kernel/input/input.c
 )
 target_include_directories(syntra_gui PUBLIC
