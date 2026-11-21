@@ -275,13 +275,44 @@ syntra_status_t syntra_desktop_render(syntra_framebuffer_t *framebuffer)
  * tests or a future QEMU VirtIO input backend.
  */
 
+syntra_status_t syntra_desktop_gui_v5_init_windows(
+    syntra_gui_window_manager_t *manager,
+    uint32_t width,
+    uint32_t height)
+{
+    uint32_t files_id;
+    uint32_t settings_id;
+    uint32_t launcher_id;
+    syntra_status_t status;
+
+    if (manager == NULL || width < 640U || height < 480U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    status = syntra_gui_window_manager_init(manager, width, height);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = syntra_gui_window_open_app(
+        manager, 20U, 190U, 270U, 230U,
+        SYNTRA_GUI_APP_FILES, &files_id);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = syntra_gui_window_open_app(
+        manager, 330U, 190U, 270U, 230U,
+        SYNTRA_GUI_APP_SETTINGS, &settings_id);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = syntra_gui_window_open_app(
+        manager, 230U, 60U, 180U, 140U,
+        SYNTRA_GUI_APP_LAUNCHER, &launcher_id);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_desktop_render_gui_v5(
     syntra_framebuffer_t *framebuffer)
 {
     syntra_gui_window_manager_t manager;
-    uint32_t files_id;
-    uint32_t settings_id;
-    uint32_t launcher_id;
     syntra_status_t status;
 
     status = syntra_framebuffer_validate(framebuffer);
@@ -294,23 +325,8 @@ syntra_status_t syntra_desktop_render_gui_v5(
     if (framebuffer->width < 640U || framebuffer->height < 480U)
         return SYNTRA_STATUS_OK;
 
-    status = syntra_gui_window_manager_init(
+    status = syntra_desktop_gui_v5_init_windows(
         &manager, framebuffer->width, framebuffer->height);
-    if (status != SYNTRA_STATUS_OK) return status;
-
-    status = syntra_gui_window_open_app(
-        &manager, 20U, 190U, 270U, 230U,
-        SYNTRA_GUI_APP_FILES, &files_id);
-    if (status != SYNTRA_STATUS_OK) return status;
-
-    status = syntra_gui_window_open_app(
-        &manager, 330U, 190U, 270U, 230U,
-        SYNTRA_GUI_APP_SETTINGS, &settings_id);
-    if (status != SYNTRA_STATUS_OK) return status;
-
-    status = syntra_gui_window_open_app(
-        &manager, 230U, 60U, 180U, 140U,
-        SYNTRA_GUI_APP_LAUNCHER, &launcher_id);
     if (status != SYNTRA_STATUS_OK) return status;
 
     return syntra_gui_render_windows(framebuffer, &manager);
