@@ -81,6 +81,13 @@ syntra_status_t syntra_fdt_find_compatible(
     syntra_fdt_node_t *node
 );
 
+/* Resolve a node by its standard phandle or legacy linux,phandle property. */
+syntra_status_t syntra_fdt_find_phandle(
+    const syntra_fdt_t *fdt,
+    uint32_t phandle,
+    syntra_fdt_node_t *node
+);
+
 /*
  * Find a property belonging directly to a node, not one of its children.
  * Returns SYNTRA_STATUS_NOT_IMPLEMENTED when the property is absent.
