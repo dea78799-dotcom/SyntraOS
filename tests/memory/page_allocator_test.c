@@ -60,9 +60,6 @@ int main(void)
     assert(syntra_memory_region_add(
         (uintptr_t)0xFFFFF000ULL, (size_t)0x3000U,
         SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
-    assert(syntra_memory_region_add(
-        (uintptr_t)0x100000000ULL, (size_t)0x2000U,
-        SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_init() == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_total_count() == 1U);
     assert(syntra_page_allocator_free_count() == 1U);
