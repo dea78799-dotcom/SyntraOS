@@ -46,6 +46,7 @@ timeout --signal=TERM --kill-after=2 "${TIMEOUT_SECONDS}s" "$QEMU_BIN" \
     -m 512M \
     -nic none \
     -device virtio-keyboard-device,bus=virtio-mmio-bus.0 \
+    -device ramfb \
     -kernel "$ELF_PATH" \
     -display none \
     -serial "file:$LOG_FILE" \
