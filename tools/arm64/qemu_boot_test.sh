@@ -22,6 +22,7 @@ command -v "$GDB_BIN" >/dev/null 2>&1 || {
 
 QEMU_LOG="$(mktemp)"
 UART_LOG="$(mktemp)"
+GDB_COMMANDS="$(mktemp)"
 QEMU_PID=""
 
 cleanup() {
@@ -29,7 +30,7 @@ cleanup() {
         kill "$QEMU_PID" >/dev/null 2>&1 || true
         wait "$QEMU_PID" >/dev/null 2>&1 || true
     fi
-    rm -f "$QEMU_LOG" "$UART_LOG"
+    rm -f "$QEMU_LOG" "$UART_LOG" "$GDB_COMMANDS"
 }
 trap cleanup EXIT
 
@@ -58,29 +59,41 @@ fi
 
 echo "Waiting for SyntraOS boot stage to return from QEMU virt..."
 
+cat > "$GDB_COMMANDS" <<'GDB_EOF'
+if $pc == (unsigned long)&syntra_arm64_el0_return_trampoline
+    printf "EL0_RETURN_STOP PC=%#lx\n", $pc
+    detach
+else
+    printf "EL0_RETURN_WRONG_STOP PC=%#lx expected=%#lx\n", $pc, (unsigned long)&syntra_arm64_el0_return_trampoline
+    quit 1
+end
+GDB_EOF
+
 GDB_OUTPUT="$(timeout 15s "$GDB_BIN" -q -batch "$ELF_PATH" \
     -ex "set architecture aarch64" \
     -ex "set pagination off" \
     -ex "set confirm off" \
+    -ex "maint set target-async off" \
     -ex "target remote 127.0.0.1:$GDB_PORT" \
     -ex "hbreak *0x10000000" \
-    -ex "break syntra_arm64_exception_handle_and_select" \
-    -ex "commands 2" \
-    -ex "silent" \
-    -ex 'if *(unsigned long*)($x0+288)==8 && (((*(unsigned long*)($x0+272)>>26)&0x3f)==0x15)' \
-    -ex 'printf "EL0_SVC_BREAK_HIT\n"' \
-    -ex "else" \
-    -ex 'printf "EXCEPTION_TRACE vector=%lu ESR=%#lx ELR=%#lx FAR=%#lx SPSR=%#lx\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+280), *(unsigned long*)($x0+264)' \
     -ex "continue" \
-    -ex "end" \
-    -ex "end" \
     -ex 'printf "EL0_ENTRY_STOP PC=%#lx\n", $pc' \
+    -ex "break syntra_arm64_exception_handle_and_select" \
+    -ex 'condition 2 *(unsigned long*)($x0+288)==8 && (((*(unsigned long*)($x0+272)>>26)&0x3f)==0x15) && ((*(unsigned long*)($x0+264)&0xf)==0) && ((*(unsigned long*)($x0+272)&0xffff)==0x44)' \
     -ex "continue" \
     -ex 'printf "EL0_SVC_STOP vector=%lu ESR=%#lx ELR=%#lx FAR=%#lx SPSR=%#lx SVC_IMM=%#lx\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+280), *(unsigned long*)($x0+264), (*(unsigned long*)($x0+272)&0xffff)' \
-    -ex "detach" 2>&1)" || { \
-        printf '%s\n' "$GDB_OUTPUT" >&2; \
-        echo "GDB diagnostic breakpoint did not complete (timeout or remote error)." >&2; \
-        echo "Continuing with UART smoke-test checks." >&2; \
+    -ex "disable 2" \
+    -ex "break syntra_arm64_exception_handle_and_select" \
+    -ex 'condition 3 *(unsigned long*)($x0+288)==8 && (((*(unsigned long*)($x0+272)>>26)&0x3f)==0x15) && ((*(unsigned long*)($x0+264)&0xf)==0) && ((*(unsigned long*)($x0+272)&0xffff)==0x45)' \
+    -ex "break syntra_arm64_el0_return_trampoline" \
+    -ex "continue" \
+    -ex 'printf "EL0_EXIT_SVC_STOP vector=%lu ESR=%#lx ELR=%#lx SPSR=%#lx SVC_IMM=%#lx\n", *(unsigned long*)($x0+288), *(unsigned long*)($x0+272), *(unsigned long*)($x0+256), *(unsigned long*)($x0+264), (*(unsigned long*)($x0+272)&0xffff)' \
+    -ex "disable 3" \
+    -ex "continue" \
+    -x "$GDB_COMMANDS" 2>&1)" || {
+        printf '%s\n' "$GDB_OUTPUT" >&2
+        echo "GDB diagnostic breakpoint did not complete (timeout or remote error)." >&2
+        echo "Continuing with UART smoke-test checks." >&2
     }
 printf '%s\n' "$GDB_OUTPUT"
 
@@ -102,6 +115,18 @@ fi
 
 if ! grep -Fq 'EL0_ENTRY_STOP PC=0x10000000' <<<"$GDB_OUTPUT"; then
     echo "GDB did not stop at EL0 entry PC 0x10000000." >&2
+    exit 1
+fi
+if ! grep -Fq 'EL0_SVC_STOP vector=8 ' <<<"$GDB_OUTPUT" || ! grep -Fq 'SVC_IMM=0x44' <<<"$GDB_OUTPUT"; then
+    echo "GDB did not stop at EL0 SVC #0x44 breakpoint." >&2
+    exit 1
+fi
+if ! grep -Fq 'EL0_EXIT_SVC_STOP vector=8 ' <<<"$GDB_OUTPUT" || ! grep -Fq 'SVC_IMM=0x45' <<<"$GDB_OUTPUT"; then
+    echo "GDB did not stop at EL0 SVC #0x45 breakpoint after SVC #0x44." >&2
+    exit 1
+fi
+if ! grep -Fq 'EL0_RETURN_STOP PC=' <<<"$GDB_OUTPUT" || grep -Fq 'EL0_RETURN_WRONG_STOP' <<<"$GDB_OUTPUT"; then
+    echo "GDB did not observe the exact EL0 return trampoline." >&2
     exit 1
 fi
 
