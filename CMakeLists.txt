@@ -80,6 +80,8 @@ add_library(syntra_kernel STATIC
     kernel/hal/hal_device_event_dispatcher.c
     kernel/hal/hal_device_event_router.c
     kernel/input/input.c
+    kernel/arch/arm64/boot/fdt.c
+    kernel/virtio/virtio_mmio.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
@@ -98,6 +100,7 @@ target_include_directories(syntra_kernel PUBLIC
     kernel/config
     kernel/hal
     kernel/input
+    kernel/virtio
 )
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -115,6 +118,11 @@ endif()
 # ==================================================
 
 enable_testing()
+
+# VirtIO-MMIO metadata validation test
+add_executable(virtio_mmio_test tests/virtio/virtio_mmio_test.c)
+target_link_libraries(virtio_mmio_test PRIVATE syntra_kernel)
+add_test(NAME VirtIOMMIOValidationTest COMMAND virtio_mmio_test)
 
 # SyntraOS input event core test
 add_executable(input_test tests/input/input_test.c)
