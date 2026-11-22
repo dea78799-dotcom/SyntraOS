@@ -46,6 +46,13 @@ static syntra_status_t draw_app_surface(
         {
             row_y = top + 8U + row * 22U;
             if (row_y + 16U >= top + inner_height) break;
+            if (window->app_selection == row)
+            {
+                status = syntra_framebuffer_fill_rect(
+                    framebuffer, left + 38U, row_y - 2U,
+                    inner_width - 42U, 18U, 0xFF25466FU);
+                if (status != SYNTRA_STATUS_OK) return status;
+            }
             status = syntra_framebuffer_fill_rect(
                 framebuffer, left + 42U, row_y, 12U, 9U, 0xFF54D6E8U);
             if (status != SYNTRA_STATUS_OK) return status;
@@ -75,7 +82,7 @@ static syntra_status_t draw_app_surface(
             if (row_y + 18U >= top + inner_height) break;
             status = syntra_framebuffer_fill_rect(
                 framebuffer, left + 5U, row_y, inner_width - 10U, 17U,
-                0xFF1A2948U);
+                window->app_selection == row ? 0xFF25466FU : 0xFF1A2948U);
             if (status != SYNTRA_STATUS_OK) return status;
             status = syntra_framebuffer_fill_rect(
                 framebuffer, left + 8U, row_y + 4U, 5U, 9U,
@@ -83,7 +90,9 @@ static syntra_status_t draw_app_surface(
             if (status != SYNTRA_STATUS_OK) return status;
             status = syntra_framebuffer_draw_text(
                 framebuffer, left + 20U, row_y + 5U, names[row],
-                COLOR_WINDOW_TEXT, 0xFF1A2948U, 1U);
+                COLOR_WINDOW_TEXT,
+                window->app_selection == row ? 0xFF25466FU : 0xFF1A2948U,
+                1U);
             if (status != SYNTRA_STATUS_OK) return status;
         }
         return SYNTRA_STATUS_OK;
