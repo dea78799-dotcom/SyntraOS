@@ -12,9 +12,29 @@ static uint64_t registered_kernel_root_physical_address;
 static uint64_t active_root_physical_address;
 static syntra_arm64_address_space_t *active_address_space;
 
+#if defined(SYNTRA_ARM64_ADDRESS_SPACE_TESTING)
+static syntra_arm64_test_read_ttbr0_fn test_read_ttbr0;
+static syntra_arm64_test_write_ttbr0_fn test_write_ttbr0;
+static void *test_mmu_context;
+
+void syntra_arm64_address_space_test_set_mmu_hooks(
+    syntra_arm64_test_read_ttbr0_fn read_ttbr0,
+    syntra_arm64_test_write_ttbr0_fn write_ttbr0,
+    void *context)
+{
+    test_read_ttbr0 = read_ttbr0;
+    test_write_ttbr0 = write_ttbr0;
+    test_mmu_context = context;
+}
+#endif
+
 static syntra_status_t write_ttbr0_and_flush(uint64_t root_physical_address)
 {
-#if defined(__aarch64__)
+#if defined(SYNTRA_ARM64_ADDRESS_SPACE_TESTING)
+    if (test_write_ttbr0 == NULL)
+        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+    return test_write_ttbr0(root_physical_address, test_mmu_context);
+#elif defined(__aarch64__)
     __asm__ volatile("dsb ishst" ::: "memory");
     __asm__ volatile("msr ttbr0_el1, %0" ::
         "r"(root_physical_address) : "memory");
@@ -667,7 +687,17 @@ syntra_status_t syntra_arm64_address_space_register_kernel_root(
             SYNTRA_PAGE_OWNER_PAGE_TABLE) != SYNTRA_STATUS_OK)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
-#if defined(__aarch64__)
+#if defined(SYNTRA_ARM64_ADDRESS_SPACE_TESTING)
+    {
+        uint64_t current_ttbr0;
+        if (test_read_ttbr0 == NULL)
+            return SYNTRA_STATUS_NOT_IMPLEMENTED;
+        current_ttbr0 = test_read_ttbr0(test_mmu_context);
+        if ((current_ttbr0 & SYNTRA_ARM64_MMU_PA_MASK) !=
+            kernel_root_physical_address)
+            return SYNTRA_STATUS_ERROR;
+    }
+#elif defined(__aarch64__)
     {
         uint64_t current_ttbr0;
         __asm__ volatile("mrs %0, ttbr0_el1" : "=r"(current_ttbr0));
