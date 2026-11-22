@@ -4,6 +4,13 @@
 #include "desktop.h"
 #include "window_renderer.h"
 
+#define TASKBAR_START_X 148U
+#define TASKBAR_RIGHT_MARGIN 12U
+#define TASKBAR_GAP 3U
+#define TASKBAR_HEIGHT 26U
+#define TASKBAR_BOTTOM_MARGIN 8U
+
+
 static uint32_t gesture_target_at(const syntra_gui_runtime_t *runtime,
                                   uint32_t x, uint32_t y)
 {
@@ -23,12 +30,6 @@ static uint32_t gesture_target_at(const syntra_gui_runtime_t *runtime,
     }
     return UINT32_MAX; /* Reserved ID: cannot collide with a managed window. */
 }
-
-#define TASKBAR_START_X 148U
-#define TASKBAR_RIGHT_MARGIN 12U
-#define TASKBAR_GAP 3U
-#define TASKBAR_HEIGHT 26U
-#define TASKBAR_BOTTOM_MARGIN 8U
 
 static int taskbar_geometry(
     const syntra_gui_runtime_t *runtime, uint32_t *slot_width)
