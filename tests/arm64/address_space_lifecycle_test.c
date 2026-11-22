@@ -26,6 +26,12 @@ static uint64_t *resolve_page(uint64_t physical_address, void *context)
         (physical_address - TEST_RAM_BASE) / SYNTRA_PAGE_SIZE];
 }
 
+static const uint64_t *resolve_const_page(
+    uint64_t physical_address, void *context)
+{
+    return resolve_page(physical_address, context);
+}
+
 static syntra_status_t allocate_table_page(void *context, uint64_t *physical_address)
 {
     uintptr_t page;
@@ -184,7 +190,7 @@ int main(void)
     assert(kernel_l2_entries[0] != 0ULL);
     assert((kernel_l2_entries[0] & SYNTRA_ARM64_MMU_PA_MASK) == kernel_l3);
     assert(syntra_arm64_mmu_walk(
-        kernel_root, TEST_KERNEL_VA, resolve_page, NULL, &translation) ==
+        kernel_root, TEST_KERNEL_VA, resolve_const_page, NULL, &translation) ==
         SYNTRA_STATUS_OK);
     assert(translation.physical_address == (uint64_t)kernel_data_page);
     assert_owner_count(SYNTRA_PAGE_OWNER_PAGE_TABLE, 3U);
