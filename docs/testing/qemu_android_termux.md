@@ -4,10 +4,10 @@ This guide runs the existing SyntraOS ARM64 kernel in QEMU's **system emulator**
 
 ## 1. Download a CI-tested kernel
 
-1. Open the SyntraOS repository on GitHub.
-2. Open **Actions** and select the latest successful **SyntraOS CI** run on the `main` branch.
-3. In the run's **Artifacts** section, download `syntraos-arm64-qemu-<commit-sha>`.
-4. The ZIP contains `syntraos_arm64.elf`. Keep the file; it is a kernel ELF for QEMU's `-kernel` option, not a bootable disk image.
+1. Open the [successful SyntraOS CI #923 run for the current GUI branch](https://github.com/dea78799-dotcom/SyntraOS/actions/runs/45002896218).
+2. In the run's **Artifacts** section, download `syntraos-arm64-qemu-351e301b272907388a2a44502955a7b3523255f3`.
+3. The ZIP contains `syntraos_arm64.elf`. Keep the file; it is a kernel ELF for QEMU's `-kernel` option, not a bootable disk image.
+4. For later versions, use the matching ARM64 artifact from the latest successful CI run for the branch you want to test.
 
 The artifact is uploaded only after the ARM64 ELF has built and passed the QEMU boot test. Artifacts are retained for 14 days; download a fresh one from a later successful run if it expires.
 
@@ -58,7 +58,8 @@ The terminal is the virtual machine's serial console. You should see the same fa
 
 ## Notes and limitations
 
-- This is a console-only development test, not a graphical desktop or touch UI.
+- This command is a console boot test, not a live graphical desktop test. It verifies the kernel boot path and prints serial diagnostics.
+- The CI run also validates the composed GUI framebuffer pixels and the VirtIO keyboard event transport. It does not yet validate live pointer/touch interaction with the GUI task switcher.
 - QEMU uses software emulation on many Android devices, so execution may be slow and battery use may increase.
 - The tested machine profile is `virt` + GICv3 + Cortex-A57. Keep it aligned with `tools/arm64/run_qemu.sh` and the CI workflow.
 - Do not flash this ELF to the phone or replace Android boot files. It is intended to run inside QEMU only.
@@ -67,7 +68,7 @@ The terminal is the virtual machine's serial console. You should see the same fa
 
 ## 5. Optional graphical desktop preview (QEMU with ramfb)
 
-The repository also provides a separate graphical test script. It enables QEMU's RAM framebuffer device and leaves the original headless UART test unchanged.
+The repository also provides a separate graphical preview script. It enables QEMU's RAM framebuffer device and leaves the original headless UART test unchanged. This currently previews the composed framebuffer; it is not yet an end-to-end interactive pointer/touch test.
 
 On a desktop Linux host with a QEMU display backend installed:
 
@@ -75,7 +76,7 @@ On a desktop Linux host with a QEMU display backend installed:
 bash tools/arm64/run_qemu_gui.sh build/arm64/syntraos_arm64.elf
 ```
 
-The script defaults to GTK. To select another QEMU display backend, set `QEMU_DISPLAY`, for example `QEMU_DISPLAY=sdl`. This preview currently draws a static SyntraOS desktop; pointer input, keyboard input, windows, and applications are not implemented yet.
+The script defaults to GTK. To select another QEMU display backend, set `QEMU_DISPLAY`, for example `QEMU_DISPLAY=sdl`. The preview displays the SyntraOS framebuffer composition. Window management and pointer interaction have host-side runtime tests, but the current graphical QEMU script does not yet attach a pointer/touch input device to exercise those controls live.
 
 On Android/Termux, the headless QEMU package may not include GTK, SDL, or VNC support. Check available backends with:
 
