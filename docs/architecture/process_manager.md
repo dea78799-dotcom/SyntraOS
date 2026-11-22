@@ -47,6 +47,10 @@ The ARM64 QEMU boot tests cover two levels of address-space execution:
    program executes two SVC calls from EL0, and the user-thread exit trampoline
    terminates the thread. The scheduler then restores the kernel root and the
    Process Manager releases the process address space.
+3. A separate EL0 test attempts to write into its Read-Only+Executable code
+   page. QEMU reports a lower-EL Data Abort; the handler terminates only that
+   user thread through the scheduler-safe trampoline, restores the kernel root,
+   and releases the faulting process address space.
 
 These tests demonstrate the configured QEMU ARM64 path only. They do not prove
 physical-device support, SMP safety, or a general executable-loading facility.
@@ -74,8 +78,9 @@ and remote TLB shootdown remain absent.
 - General ELF loading, executable validation, relocation, and multi-segment
   user-image construction.
 - Per-process heap and stack allocation services beyond the fixed smoke test.
-- Robust user-mode fault handling, process exit status, parent/child
-  relationships, wait semantics, and restart policies.
+- Complete user-fault attribution and exit reporting, execute-from-NX and
+  unmapped-access tests, process exit status, parent/child relationships, wait
+  semantics, and restart policies.
 - Per-process resource handles, automatic IPC cleanup, and capability policy.
 - Transactional process/thread creation and rollback.
 - Thread stack ownership transfer and stack reclamation.
@@ -91,8 +96,9 @@ generic Process Manager.
 1. Build a validated user-image loader with explicit code, data, and stack
    segments and a defined user-process ABI.
 2. Add process-scoped syscalls, resource handles, and capability checks.
-3. Add fault-isolation tests for unmapped access, write-to-code, and execute-from
-   NX stack pages; terminate only the offending process.
+3. Expand fault-isolation tests to unmapped access and execute-from-NX stack
+   pages, and add per-process fault reporting; write-to-code termination is
+   already covered by the QEMU smoke test.
 4. Add process resource cleanup and transactional creation rollback.
 5. Add SMP-safe active-root tracking and remote TLB shootdown before SMP use.
 
@@ -101,4 +107,4 @@ generic Process Manager.
 SyntraOS remains v0.1.0 (Early Development). It now has a tested QEMU prototype
 for per-process TTBR0 switching and one EL0 user thread with separate code and
 stack mappings. It does not yet provide a general-purpose executable loader,
-complete process ABI, robust fault isolation, or physical-device support.
+complete process ABI, comprehensive fault isolation, or physical-device support.

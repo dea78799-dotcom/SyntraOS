@@ -88,7 +88,10 @@ a general-purpose kernel heap or per-process allocation accounting.
   kernel root. A separate EL0 process smoke test copies user code into a
   PROCESS-owned page, maps code Read-Only+Executable and stack Read-Write+XN,
   executes both SVC calls from EL0, exits through the scheduler-safe trampoline,
-  restores the kernel root, and tears down the process.
+  restores the kernel root, and tears down the process. A separate QEMU test
+  writes to the Read-Only+Executable code page; the lower-EL Data Abort is
+  routed to the user-thread exit trampoline, and the kernel resumes under its
+  own root after the faulting process is terminated.
 - Host integration tests also create independent roots, map the same virtual
   address to different physical pages, verify distinct software translations
   and permissions, and validate page reclamation. QEMU results apply to the
@@ -112,8 +115,9 @@ it is not evidence of physical-device support.
   coordination and remote TLB shootdown are not implemented. The reserved
   upper-half user VA range is a V1 convention, not yet a process ABI.
 - The EL0 process test is a fixed boot-time smoke test, not a general executable
-  loader. Dynamic ELF loading, per-process heap management, robust user-fault
-  recovery, and application launch services are not implemented.
+  loader. Dynamic ELF loading, per-process heap management, complete fault
+  attribution/exit reporting, execute-from-NX and unmapped-access tests, and
+  application launch services are not implemented.
 - Shared-page reference counting, copy-on-write, demand paging, swapping, and
   memory-mapped file support are not implemented. The V1 registry and its
   single-core ownership checks are not SMP-safe.
@@ -136,7 +140,8 @@ it is not evidence of physical-device support.
 4. Build a validated user-image loader and expand EL0 permission-fault and
    cross-process isolation tests.
 5. Add SMP-safe synchronization and TLB shootdown before multi-core execution.
-6. Add robust EL0 fault isolation and multi-process executable-loading tests.
+6. Expand EL0 fault tests to cover execute-from-NX, unmapped access, and
+   per-process fault reporting before multi-process executable loading.
 
 ## 5. Verification requirements
 
