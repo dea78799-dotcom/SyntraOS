@@ -211,6 +211,53 @@ syntra_status_t process_refresh_state(unsigned int process_id)
     return SYNTRA_STATUS_OK;
 }
 
+syntra_status_t process_refresh_all_states(void)
+{
+    if (!process_initialized)
+        return SYNTRA_STATUS_OK;
+
+    /*
+     * Process state is derived from scheduler thread states. Refresh the
+     * complete table because a just-terminated thread may no longer be the
+     * scheduler's current thread, so its ID is not available to the IRQ path.
+     */
+    for (unsigned int i = 0U; i < process_count; ++i)
+    {
+        syntra_status_t status =
+            process_refresh_state(processes[i].process_id);
+        if (status != SYNTRA_STATUS_OK)
+            return status;
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t process_reap_terminated(void)
+{
+    if (!process_initialized)
+        return SYNTRA_STATUS_OK;
+
+    for (unsigned int i = 0U; i < process_count; ++i)
+    {
+        syntra_process_t *process = &processes[i];
+        if (process->state != PROCESS_TERMINATED ||
+            process->address_space == NULL)
+            continue;
+
+        /*
+         * Address-space destruction rejects the active TTBR0 root. Callers
+         * must first switch to another process or the kernel root.
+         */
+        {
+            syntra_status_t status = process_terminate(process->process_id);
+            if (status != SYNTRA_STATUS_OK)
+                return status;
+        }
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t process_set_state(
     unsigned int process_id,
     syntra_process_state_t state)
@@ -289,8 +336,11 @@ syntra_status_t process_validate(void)
 
         if (process->address_space != NULL)
         {
-            if (process->state == PROCESS_TERMINATED ||
-                syntra_arm64_address_space_validate(
+            /*
+             * A TERMINATED process may temporarily retain its address space
+             * until the scheduler switches TTBR0 away and the reaper runs.
+             */
+            if (syntra_arm64_address_space_validate(
                     process->address_space) != SYNTRA_STATUS_OK)
                 return SYNTRA_STATUS_ERROR;
         }

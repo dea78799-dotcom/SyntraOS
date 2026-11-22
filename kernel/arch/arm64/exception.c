@@ -3,6 +3,7 @@
 #include "exception.h"
 #include "context.h"
 #include "address_space.h"
+#include "../../process/process.h"
 
 /*
  * The freestanding ARM64 image provides these symbols in boot.c,
@@ -372,6 +373,16 @@ int syntra_arm64_exception_has_last_context(void)
 #define SYNTRA_ARM64_BOOT_THREAD_ID 1U
 static int scheduler_context_switching_active;
 
+static syntra_status_t refresh_process_states_after_switch(void)
+{
+    /*
+     * Do not free a terminated process here: diagnostic callers may still
+     * inspect its completed output. Reaping is an explicit process-manager
+     * operation and is permitted only after the caller has switched roots.
+     */
+    return process_refresh_all_states();
+}
+
 static syntra_status_t activate_thread_address_space(unsigned int thread_id)
 {
     syntra_thread_t *thread = scheduler_get_thread(thread_id);
@@ -452,15 +463,27 @@ syntra_arm64_exception_handle_and_select(
              * No task was selected. Keep the interrupted boot context even
              * when the kernel-root check fails; never return a null frame.
              */
-            (void)activate_thread_address_space(SYNTRA_ARM64_BOOT_THREAD_ID);
+            if (activate_thread_address_space(SYNTRA_ARM64_BOOT_THREAD_ID) ==
+                SYNTRA_STATUS_OK)
+                (void)refresh_process_states_after_switch();
             return context;
         }
-        if (activate_thread_address_space(next->thread_id) != SYNTRA_STATUS_OK)
+        status = activate_thread_address_space(next->thread_id);
+        if (status != SYNTRA_STATUS_OK)
         {
             (void)scheduler_rollback_context_switch(
                 SYNTRA_ARM64_BOOT_THREAD_ID, next->thread_id);
             scheduler_context_switching_active = 0;
+            (void)process_refresh_all_states();
             return context;
+        }
+        status = refresh_process_states_after_switch();
+        if (status != SYNTRA_STATUS_OK)
+        {
+            /* Keep the successfully activated context; report lifecycle fault. */
+            syntra_exception_uart_puts("Process lifecycle refresh failed: ");
+            syntra_exception_uart_hex((uint64_t)(int64_t)status);
+            syntra_exception_uart_puts("\\n");
         }
         return (syntra_arm64_exception_context_t *)next->cpu_context;
     }
@@ -479,7 +502,17 @@ syntra_arm64_exception_handle_and_select(
          */
         next = scheduler_schedule_next_with_context();
         if (next == NULL)
+        {
+            /*
+             * No runnable context remains. Return to the shared kernel root;
+             * process cleanup remains an explicit operation after state
+             * observers have consumed any final process output.
+             */
+            status = syntra_arm64_address_space_activate_kernel_root();
+            if (status == SYNTRA_STATUS_OK)
+                (void)refresh_process_states_after_switch();
             return context;
+        }
 
         status = activate_thread_address_space(next->thread_id);
         if (status != SYNTRA_STATUS_OK)
@@ -495,7 +528,22 @@ syntra_arm64_exception_handle_and_select(
             syntra_exception_uart_puts("\\n");
             (void)scheduler_rollback_context_switch(
                 previous_id, next->thread_id);
+            if (previous_id == 0U &&
+                syntra_arm64_address_space_activate_kernel_root() ==
+                    SYNTRA_STATUS_OK)
+                (void)refresh_process_states_after_switch();
+            else
+                (void)process_refresh_all_states();
             return context;
+        }
+
+        status = refresh_process_states_after_switch();
+        if (status != SYNTRA_STATUS_OK)
+        {
+            /* Activation succeeded; do not return a stale exception frame. */
+            syntra_exception_uart_puts("Process lifecycle refresh failed: ");
+            syntra_exception_uart_hex((uint64_t)(int64_t)status);
+            syntra_exception_uart_puts("\\n");
         }
         return (syntra_arm64_exception_context_t *)next->cpu_context;
     }
