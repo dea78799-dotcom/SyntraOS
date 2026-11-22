@@ -101,10 +101,10 @@ int main(void)
 
     /* Closing Files then choosing it from the launcher creates it again. */
     /* Launcher overlaps Files close control, so focus Files first. */
-    move_pointer(&runtime, -180, 5); /* Files title bar */
+    move_pointer(&runtime, -262, 105); /* Files title bar */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
-    move_pointer(&runtime, 180, -5); /* Files close control */
+    move_pointer(&runtime, 180, 0); /* Files close control */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(runtime.windows.count == 2U);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
