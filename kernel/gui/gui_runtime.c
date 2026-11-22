@@ -8,6 +8,10 @@ static uint32_t gesture_target_at(const syntra_gui_runtime_t *runtime,
                                   uint32_t x, uint32_t y)
 {
     uint32_t index = runtime->windows.count;
+    if (runtime->input.width >= 640U && runtime->input.height >= 480U &&
+        x >= TASKBAR_START_X &&
+        y >= runtime->input.height - TASKBAR_BOTTOM_MARGIN - TASKBAR_HEIGHT - 2U)
+        return UINT32_MAX;
     while (index > 0U)
     {
         const syntra_gui_window_t *window = &runtime->windows.windows[--index];
@@ -20,6 +24,104 @@ static uint32_t gesture_target_at(const syntra_gui_runtime_t *runtime,
     return UINT32_MAX; /* Reserved ID: cannot collide with a managed window. */
 }
 
+#define TASKBAR_START_X 148U
+#define TASKBAR_RIGHT_MARGIN 12U
+#define TASKBAR_GAP 3U
+#define TASKBAR_HEIGHT 26U
+#define TASKBAR_BOTTOM_MARGIN 8U
+
+static int taskbar_geometry(
+    const syntra_gui_runtime_t *runtime, uint32_t *slot_width)
+{
+    uint32_t count, available, width;
+    if (runtime->input.width < 640U || runtime->input.height < 480U ||
+        runtime->windows.count == 0U || slot_width == NULL)
+        return 0;
+    count = runtime->windows.count;
+    available = runtime->input.width - TASKBAR_START_X -
+                TASKBAR_RIGHT_MARGIN - TASKBAR_GAP * (count - 1U);
+    width = available / count;
+    if (width > 92U) width = 92U;
+    if (width < 48U) return 0;
+    *slot_width = width;
+    return 1;
+}
+
+static syntra_status_t handle_taskbar_click(
+    syntra_gui_runtime_t *runtime, uint32_t x, uint32_t y, int *handled)
+{
+    uint32_t slot_width, index, taskbar_y;
+    syntra_status_t status;
+    *handled = 0;
+    if (!taskbar_geometry(runtime, &slot_width)) return SYNTRA_STATUS_OK;
+    taskbar_y = runtime->input.height - TASKBAR_BOTTOM_MARGIN - TASKBAR_HEIGHT;
+    if (x < TASKBAR_START_X || y < taskbar_y ||
+        y >= taskbar_y + TASKBAR_HEIGHT)
+        return SYNTRA_STATUS_OK;
+
+    /* The taskbar owns its full strip, including gaps between buttons. */
+    *handled = 1;
+    for (index = 0U; index < runtime->windows.count; ++index)
+    {
+        uint32_t left = TASKBAR_START_X + index * (slot_width + TASKBAR_GAP);
+        uint32_t right = left + slot_width;
+        if (x >= left && x < right)
+        {
+            uint32_t id = runtime->windows.windows[index].id;
+            status = runtime->windows.windows[index].minimized != 0U
+                ? syntra_gui_window_restore(&runtime->windows, id)
+                : syntra_gui_window_focus(&runtime->windows, id);
+            if (status != SYNTRA_STATUS_OK) return status;
+            break;
+        }
+    }
+    runtime->interaction.drag_window_id = 0U;
+    runtime->interaction.previous_buttons = runtime->input.buttons;
+    return SYNTRA_STATUS_OK;
+}
+
+static syntra_status_t render_taskbar(
+    const syntra_gui_runtime_t *runtime, syntra_framebuffer_t *framebuffer)
+{
+    uint32_t slot_width, index, y;
+    syntra_status_t status;
+    if (!taskbar_geometry(runtime, &slot_width)) return SYNTRA_STATUS_OK;
+    y = framebuffer->height - TASKBAR_BOTTOM_MARGIN - TASKBAR_HEIGHT;
+    status = syntra_framebuffer_fill_rect(
+        framebuffer, TASKBAR_START_X - 6U, y - 2U,
+        framebuffer->width - TASKBAR_START_X + 6U,
+        TASKBAR_HEIGHT + 4U, 0xFF101A2CU);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    for (index = 0U; index < runtime->windows.count; ++index)
+    {
+        const syntra_gui_window_t *window = &runtime->windows.windows[index];
+        uint32_t x = TASKBAR_START_X + index * (slot_width + TASKBAR_GAP);
+        uint32_t color = window->minimized != 0U ? 0xFF263D66U :
+            (syntra_gui_window_active(&runtime->windows) == window
+                ? 0xFF25466FU : 0xFF1A2948U);
+        const char *label = "WINDOW";
+        if (window->app_type == SYNTRA_GUI_APP_FILES) label = "FILES";
+        else if (window->app_type == SYNTRA_GUI_APP_SETTINGS) label = "SETTINGS";
+        else if (window->app_type == SYNTRA_GUI_APP_LAUNCHER) label = "LAUNCHER";
+        status = syntra_framebuffer_fill_rect(
+            framebuffer, x, y, slot_width, TASKBAR_HEIGHT, color);
+        if (status != SYNTRA_STATUS_OK) return status;
+        if (window->minimized == 0U &&
+            syntra_gui_window_active(&runtime->windows) == window)
+        {
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, x, y, 3U, TASKBAR_HEIGHT, 0xFF54D6E8U);
+            if (status != SYNTRA_STATUS_OK) return status;
+        }
+        status = syntra_framebuffer_draw_text(
+            framebuffer, x + 5U, y + 10U, label,
+            window->minimized != 0U ? 0xFFB7C5E0U : 0xFFF4F7FFU,
+            color, 1U);
+        if (status != SYNTRA_STATUS_OK) return status;
+    }
+    return SYNTRA_STATUS_OK;
+}
 static syntra_gui_window_t *active_window_mutable(
     syntra_gui_window_manager_t *manager)
 {
@@ -556,8 +658,25 @@ syntra_status_t syntra_gui_runtime_process_event_at(
         return handle_context_menu_click(
             runtime, runtime->input.pointer_x, runtime->input.pointer_y);
 
-    status = syntra_gui_window_interaction_process(
-        &runtime->interaction, &runtime->windows, &runtime->input);
+    {
+        int taskbar_handled = 0;
+        if (event->type == SYNTRA_INPUT_EV_KEY &&
+            (event->code == SYNTRA_INPUT_BTN_LEFT ||
+             event->code == SYNTRA_INPUT_BTN_TOUCH) &&
+            event->value == 1 &&
+            (old_buttons & SYNTRA_INPUT_BUTTON_LEFT) == 0U)
+        {
+            status = handle_taskbar_click(
+                runtime, runtime->input.pointer_x, runtime->input.pointer_y,
+                &taskbar_handled);
+            if (status != SYNTRA_STATUS_OK) return status;
+        }
+        if (taskbar_handled != 0)
+            status = SYNTRA_STATUS_OK;
+        else
+            status = syntra_gui_window_interaction_process(
+                &runtime->interaction, &runtime->windows, &runtime->input);
+    }
     if (status != SYNTRA_STATUS_OK) return status;
 
     update_hover(runtime);
@@ -642,6 +761,9 @@ syntra_status_t syntra_gui_runtime_render(
     }
 
     status = render_hover_outline(runtime, framebuffer);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = render_taskbar(runtime, framebuffer);
     if (status != SYNTRA_STATUS_OK) return status;
 
     if (runtime->context_menu_visible != 0U)
