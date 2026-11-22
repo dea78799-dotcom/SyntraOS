@@ -2162,7 +2162,14 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
     status = syntra_arm64_process_el0_scheduler_test();
     if (status != SYNTRA_STATUS_OK)
     {
-        syntra_uart_puts("Process EL0 scheduler execution: FAIL\\n");
+        syntra_uart_puts("Process EL0 A execution: FAIL\\n");
+        return status;
+    }
+
+    status = syntra_arm64_process_el0_isolation_b_test();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("Process EL0 B isolation execution: FAIL\\n");
         return status;
     }
 
