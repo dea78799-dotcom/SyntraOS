@@ -87,17 +87,20 @@ static syntra_status_t draw_app_surface(
             uint32_t track_x = left + inner_width - 5U;
             uint32_t track_y = top + 6U;
             uint32_t track_height = inner_height - 12U;
-            uint32_t thumb_height =
-                (track_height * visible_rows) / SYNTRA_GUI_FILES_ENTRY_COUNT;
+            uint32_t thumb_height = (uint32_t)(
+                ((uint64_t)track_height * visible_rows) /
+                SYNTRA_GUI_FILES_ENTRY_COUNT);
             uint32_t max_offset =
                 SYNTRA_GUI_FILES_ENTRY_COUNT - visible_rows;
             uint32_t thumb_y;
+            if (scroll_offset > max_offset) scroll_offset = max_offset;
             if (thumb_height < 8U) thumb_height = 8U;
             if (thumb_height > track_height) thumb_height = track_height;
             thumb_y = track_y;
             if (max_offset != 0U)
-                thumb_y += ((track_height - thumb_height) *
-                            scroll_offset) / max_offset;
+                thumb_y += (uint32_t)(
+                    ((uint64_t)(track_height - thumb_height) *
+                     scroll_offset) / max_offset);
             status = syntra_framebuffer_fill_rect(
                 framebuffer, track_x, track_y, 3U, track_height,
                 0xFF263D66U);
