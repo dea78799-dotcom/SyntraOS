@@ -8,6 +8,7 @@
 static uint64_t storage[TABLES][512];
 static unsigned int used;
 static unsigned int released;
+static unsigned int release_attempts;
 
 static syntra_status_t alloc_cb(void *ctx, uint64_t *pa)
 {
@@ -39,10 +40,19 @@ static void reset(void)
 static syntra_status_t release_cb(void *ctx, uint64_t pa)
 {
     (void)ctx;
+    ++release_attempts;
     if (pa < BASE_PA || pa >= BASE_PA + (uint64_t)TABLES * 4096ULL ||
         ((pa - BASE_PA) & 4095ULL) != 0ULL)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     ++released;
+    return SYNTRA_STATUS_OK;
+}
+
+static syntra_status_t alloc_invalid_pa_cb(void *ctx, uint64_t *pa)
+{
+    (void)ctx;
+    if (pa == NULL) return SYNTRA_STATUS_INVALID_ARGUMENT;
+    *pa = BASE_PA + 1ULL; /* allocator contract violation: unaligned PA */
     return SYNTRA_STATUS_OK;
 }
 
@@ -51,6 +61,20 @@ static uint64_t *resolve_fail_cb(uint64_t pa, void *ctx)
     (void)pa;
     (void)ctx;
     return NULL;
+}
+
+static void test_init_releases_invalid_allocator_result(void)
+{
+    syntra_arm64_page_table_t pt;
+    reset();
+    released = 0U;
+    release_attempts = 0U;
+    assert(syntra_arm64_page_table_init_ex(
+        &pt, alloc_invalid_pa_cb, release_cb, resolve_cb, NULL) ==
+        SYNTRA_STATUS_ERROR);
+    assert(release_attempts == 1U);
+    assert(released == 0U);
+    assert(pt.root_physical_address == 0ULL);
 }
 
 static void test_init_reclaims_unresolvable_root(void)
@@ -262,6 +286,7 @@ static void test_partial_overlap_preflight(void)
 
 int main(void)
 {
+    test_init_releases_invalid_allocator_result();
     test_init_reclaims_unresolvable_root();
     test_build_and_walk_verify();
     test_user_page_mappings();
