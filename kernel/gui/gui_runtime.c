@@ -11,6 +11,7 @@ static uint32_t gesture_target_at(const syntra_gui_runtime_t *runtime,
     while (index > 0U)
     {
         const syntra_gui_window_t *window = &runtime->windows.windows[--index];
+        if (window->minimized != 0U) continue;
         if (x >= window->x && y >= window->y &&
             x - window->x < window->width &&
             y - window->y < window->height)
@@ -404,7 +405,7 @@ static syntra_status_t handle_launcher_click(
 }
 
 #define SYNTRA_CONTEXT_MENU_WIDTH 136U
-#define SYNTRA_CONTEXT_MENU_HEIGHT 72U
+#define SYNTRA_CONTEXT_MENU_HEIGHT 87U
 
 static void open_context_menu(syntra_gui_runtime_t *runtime,
                               uint32_t x, uint32_t y, uint32_t target)
@@ -427,18 +428,26 @@ static syntra_status_t handle_context_menu_click(
     syntra_status_t status = SYNTRA_STATUS_OK;
 
     if (x >= menu_x && x < menu_x + SYNTRA_CONTEXT_MENU_WIDTH &&
-        y >= menu_y + 22U && y < menu_y + 67U)
+        y >= menu_y + 22U && y < menu_y + 82U)
     {
         row = (y - menu_y - 22U) / 15U;
-        if (row < 2U)
+        if (target == UINT32_MAX)
         {
-            if (target == UINT32_MAX)
-                status = activate_launcher_tile(runtime, row);
-            else if (row == 0U)
-                status = syntra_gui_window_focus(&runtime->windows, target);
-            else
-                status = syntra_gui_window_close(&runtime->windows, target);
+            if (row < 2U) status = activate_launcher_tile(runtime, row);
         }
+        else if (row == 0U)
+            status = syntra_gui_window_minimize(&runtime->windows, target);
+        else if (row == 1U)
+        {
+            const syntra_gui_window_t *window = NULL;
+            status = syntra_gui_window_get(&runtime->windows, target, &window);
+            if (status == SYNTRA_STATUS_OK)
+                status = window->maximized != 0U
+                    ? syntra_gui_window_restore(&runtime->windows, target)
+                    : syntra_gui_window_maximize(&runtime->windows, target);
+        }
+        else if (row == 2U)
+            status = syntra_gui_window_close(&runtime->windows, target);
     }
 
     runtime->context_menu_visible = 0U;
@@ -449,7 +458,9 @@ static syntra_status_t handle_context_menu_click(
 static syntra_status_t render_context_menu(
     syntra_gui_runtime_t *runtime, syntra_framebuffer_t *framebuffer)
 {
-    static const char *const window_items[] = {"FOCUS", "CLOSE", "DISMISS"};
+    static const char *const window_items[] = {
+        "MINIMIZE", "MAXIMIZE / RESTORE", "CLOSE", "DISMISS"
+    };
     static const char *const desktop_items[] = {
         "OPEN FILES", "OPEN SETTINGS", "DISMISS"
     };
@@ -478,12 +489,14 @@ static syntra_status_t render_context_menu(
         0xFFF4F7FFU, 0xFF263D66U, 1U);
     if (status != SYNTRA_STATUS_OK) return status;
 
-    for (row = 0U; row < 3U; ++row)
+    for (row = 0U; row <
+         (runtime->context_menu_target == UINT32_MAX ? 3U : 4U); ++row)
     {
         uint32_t row_y = y + 22U + row * 15U;
         status = syntra_framebuffer_draw_text(
             framebuffer, x + 8U, row_y + 4U, items[row],
-            row == 2U ? 0xFF9BAAC2U : 0xFFF4F7FFU,
+            row == (runtime->context_menu_target == UINT32_MAX ? 2U : 3U)
+                ? 0xFF9BAAC2U : 0xFFF4F7FFU,
             0xFF101A2CU, 1U);
         if (status != SYNTRA_STATUS_OK) return status;
     }
