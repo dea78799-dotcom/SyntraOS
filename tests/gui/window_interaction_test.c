@@ -98,10 +98,10 @@ int main(void)
                window->y == 0U && window->width == 640U &&
                window->height == 480U);
 
-        set_pointer(&input, 606U, 110U, 0U);
+        set_pointer(&input, 606U, 10U, 0U);
         assert(syntra_gui_window_interaction_process(
             &interaction, &manager, &input) == SYNTRA_STATUS_OK);
-        set_pointer(&input, 606U, 110U, SYNTRA_INPUT_BUTTON_LEFT);
+        set_pointer(&input, 606U, 10U, SYNTRA_INPUT_BUTTON_LEFT);
         assert(syntra_gui_window_interaction_process(
             &interaction, &manager, &input) == SYNTRA_STATUS_OK);
         assert(syntra_gui_window_get(&manager, control_id, &window) ==
