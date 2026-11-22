@@ -143,7 +143,8 @@ syntra_status_t syntra_arm64_user_context_initialize(
 void syntra_arm64_thread_exit(void)
 {
     syntra_thread_t *current = scheduler_get_current();
-    unsigned int process_id = current != NULL
+    unsigned int process_id = current != NULL &&
+        current->is_user_thread != 0U
         ? process_get_id_for_thread(current->thread_id) : 0U;
 
     if (process_id != 0U)
