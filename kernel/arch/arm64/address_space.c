@@ -4,6 +4,58 @@
 
 #include "../../memory/page_allocator.h"
 
+static syntra_arm64_address_space_t *registered_spaces[
+    SYNTRA_ARM64_ADDRESS_SPACE_MAX_INSTANCES];
+
+static int address_space_registry_slot(
+    const syntra_arm64_address_space_t *space, size_t *free_slot)
+{
+    size_t i;
+    for (i = 0U; i < SYNTRA_ARM64_ADDRESS_SPACE_MAX_INSTANCES; ++i)
+    {
+        if (registered_spaces[i] == space)
+            return 1;
+        if (registered_spaces[i] == NULL && free_slot != NULL &&
+            *free_slot == SYNTRA_ARM64_ADDRESS_SPACE_MAX_INSTANCES)
+            *free_slot = i;
+    }
+    return 0;
+}
+
+static int address_space_is_registered(
+    const syntra_arm64_address_space_t *space)
+{
+    size_t unused = SYNTRA_ARM64_ADDRESS_SPACE_MAX_INSTANCES;
+    return address_space_registry_slot(space, &unused);
+}
+
+static int physical_page_is_mapped(
+    uint64_t physical_address,
+    const syntra_arm64_address_space_t *except_space)
+{
+    for (size_t i = 0U; i < SYNTRA_ARM64_ADDRESS_SPACE_MAX_INSTANCES; ++i)
+    {
+        const syntra_arm64_address_space_t *candidate = registered_spaces[i];
+        if (candidate == NULL || candidate == except_space)
+            continue;
+        for (size_t j = 0U; j < candidate->mapping_count; ++j)
+            if (candidate->mappings[j].physical_address == physical_address)
+                return 1;
+    }
+    return 0;
+}
+
+static void address_space_unregister(
+    const syntra_arm64_address_space_t *space)
+{
+    for (size_t i = 0U; i < SYNTRA_ARM64_ADDRESS_SPACE_MAX_INSTANCES; ++i)
+        if (registered_spaces[i] == space)
+        {
+            registered_spaces[i] = NULL;
+            return;
+        }
+}
+
 #define DESC_VALID (1ULL << 0U)
 #define DESC_TYPE  (1ULL << 1U)
 #define DESC_ADDR  SYNTRA_ARM64_MMU_PA_MASK
@@ -64,11 +116,15 @@ syntra_status_t syntra_arm64_address_space_create(
     void *resolve_context)
 {
     syntra_status_t status;
+    size_t registry_slot = SYNTRA_ARM64_ADDRESS_SPACE_MAX_INSTANCES;
 
     if (space == NULL || address_space_id == 0U || resolve == NULL)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
-    if (space->initialized)
+    if (space->initialized ||
+        address_space_registry_slot(space, &registry_slot))
         return SYNTRA_STATUS_ERROR;
+    if (registry_slot == SYNTRA_ARM64_ADDRESS_SPACE_MAX_INSTANCES)
+        return SYNTRA_STATUS_OUT_OF_MEMORY;
 
     space->address_space_id = address_space_id;
     space->initialized = 0U;
@@ -97,8 +153,15 @@ syntra_status_t syntra_arm64_address_space_create(
         space->page_table.root_physical_address,
         SYNTRA_PAGE_OWNER_PAGE_TABLE);
     if (status != SYNTRA_STATUS_OK)
+    {
+        (void)syntra_page_free_owned(
+            (uintptr_t)space->page_table.root_physical_address,
+            SYNTRA_PAGE_OWNER_PAGE_TABLE);
+        space->page_table.root_physical_address = 0ULL;
         return status;
+    }
 
+    registered_spaces[registry_slot] = space;
     space->initialized = 1U;
     return SYNTRA_STATUS_OK;
 }
@@ -113,9 +176,13 @@ syntra_status_t syntra_arm64_address_space_map_user_page(
     syntra_status_t status;
 
     if (space == NULL || !space->initialized ||
+        !address_space_is_registered(space) ||
         (virtual_address & (SYNTRA_ARM64_MMU_PAGE_SIZE - 1ULL)) != 0ULL ||
         space->mapping_count >= SYNTRA_ARM64_ADDRESS_SPACE_MAX_MAPPINGS)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    if (physical_page_is_mapped(physical_address, NULL))
+        return SYNTRA_STATUS_PERMISSION_DENIED;
 
     status = page_owner_is(physical_address, SYNTRA_PAGE_OWNER_PROCESS);
     if (status != SYNTRA_STATUS_OK)
@@ -274,6 +341,7 @@ syntra_status_t syntra_arm64_address_space_validate(
     syntra_status_t status;
 
     if (space == NULL || !space->initialized ||
+        !address_space_is_registered(space) ||
         space->address_space_id == 0U ||
         space->mapping_count > SYNTRA_ARM64_ADDRESS_SPACE_MAX_MAPPINGS ||
         space->page_table.root_physical_address == 0ULL)
@@ -440,6 +508,7 @@ syntra_status_t syntra_arm64_address_space_destroy(
     space->address_space_id = 0U;
     space->page_table.root_physical_address = 0ULL;
     space->mapping_count = 0U;
+    address_space_unregister(space);
     space->resolve = NULL;
     space->resolve_context = NULL;
     return SYNTRA_STATUS_OK;

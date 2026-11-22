@@ -7,6 +7,7 @@
 #include "page_table_builder.h"
 
 #define SYNTRA_ARM64_ADDRESS_SPACE_MAX_MAPPINGS 256U
+#define SYNTRA_ARM64_ADDRESS_SPACE_MAX_INSTANCES 64U
 
 typedef uint64_t *(*syntra_arm64_address_space_resolve_fn)(
     uint64_t physical_address, void *context);
@@ -37,7 +38,9 @@ typedef struct
 
 /*
  * Creates an independent L1 root; all page-table pages are tagged PAGE_TABLE.
- * The caller must pass a zero-initialized space object on first creation.
+ * The caller must pass a zero-initialized space object on first creation and
+ * keep it at a stable address until destruction. V1 permits each PROCESS page
+ * to be mapped by only one registered address space (no shared-page refcounts).
  */
 syntra_status_t syntra_arm64_address_space_create(
     syntra_arm64_address_space_t *space,

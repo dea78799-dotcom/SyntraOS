@@ -56,6 +56,11 @@ int main(void)
     assert(syntra_arm64_address_space_map_user_page(
         &first, 0x40000000ULL, first_process_page,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    /* A PROCESS page cannot be aliased into a second address space in V1. */
+    assert(syntra_arm64_address_space_map_user_page(
+        &second, 0x40001000ULL, first_process_page,
+        SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 0) ==
+        SYNTRA_STATUS_PERMISSION_DENIED);
     assert(syntra_arm64_address_space_map_user_page(
         &second, 0x40000000ULL, second_process_page,
         SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 0) == SYNTRA_STATUS_OK);
