@@ -70,6 +70,8 @@ int main(void)
            0xFF5578F2U);
     assert(compact_pixels[(size_t)(COMPACT_HEIGHT - 26U) * COMPACT_WIDTH] ==
            0xE8202D49U);
+    assert(compact_pixels[(size_t)220U * COMPACT_WIDTH + 20U] ==
+           0xFF54D6E8U);
 
 
     /*
