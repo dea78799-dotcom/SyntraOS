@@ -78,13 +78,13 @@ int main(void)
     /* Renderer padding and inter-tile gaps are not clickable. */
     assert(syntra_gui_runtime_init(&runtime, 640U, 480U) ==
            SYNTRA_STATUS_OK);
-    move_pointer(&runtime, -80, -140); /* launcher left padding */
+    move_pointer(&runtime, -85, -150); /* launcher left padding */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(runtime.windows.count == 3U);
     assert(syntra_gui_window_active(&runtime.windows)->app_type ==
            SYNTRA_GUI_APP_LAUNCHER);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
-    move_pointer(&runtime, 84, 0); /* inter-column gap */
+    move_pointer(&runtime, 85, 0); /* inter-column gap */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(runtime.windows.count == 3U);
     assert(syntra_gui_window_active(&runtime.windows)->app_type ==
@@ -92,7 +92,7 @@ int main(void)
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
 
     /* Settings tile also focuses its existing window without duplication. */
-    move_pointer(&runtime, 126, 12); /* Files -> Settings tile center */
+    move_pointer(&runtime, 42, 14); /* gap -> Settings tile */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(syntra_gui_window_active(&runtime.windows)->app_type ==
            SYNTRA_GUI_APP_SETTINGS);
