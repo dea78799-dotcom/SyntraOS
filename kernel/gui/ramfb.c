@@ -5,6 +5,8 @@
 
 #include "desktop.h"
 #include "framebuffer.h"
+#include "gui_runtime.h"
+#include "../virtio/virtio_mmio.h"
 
 #define FW_CFG_FILE_DIR 0x0019U
 #define FW_CFG_DMA_SELECT 0x00000008U
@@ -293,5 +295,47 @@ syntra_status_t syntra_ramfb_init(uintptr_t fw_cfg_base, size_t fw_cfg_size)
         fw_cfg_base, ramfb_selector, ramfb_config,
         SYNTRA_RAMFB_CONFIG_SIZE, 1);
     syntra_dma_barrier();
+    return status;
+}
+
+/*
+ * Drain IRQ-produced VirtIO events in normal context. Rendering is performed
+ * once after the batch, never from the interrupt handler. The boot idle loop
+ * must call this function periodically after IRQs are enabled to make GUI
+ * input interactive.
+ */
+syntra_status_t syntra_ramfb_process_input_events(
+    syntra_virtio_input_queue_t *input_queue)
+{
+    syntra_framebuffer_t framebuffer;
+    syntra_input_event_t event;
+    int available;
+    int processed = 0;
+    syntra_status_t status;
+
+    if (input_queue == NULL || !ramfb_gui_runtime_ready)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    for (;;)
+    {
+        status = syntra_virtio_mmio_pop_input_event(
+            input_queue, &event, &available);
+        if (status != SYNTRA_STATUS_OK) return status;
+        if (!available) break;
+
+        status = syntra_gui_runtime_process_event(&ramfb_gui_runtime, &event);
+        if (status != SYNTRA_STATUS_OK) return status;
+        processed = 1;
+    }
+
+    if (!processed) return SYNTRA_STATUS_OK;
+
+    framebuffer.pixels = ramfb_pixels;
+    framebuffer.width = SYNTRA_RAMFB_WIDTH;
+    framebuffer.height = SYNTRA_RAMFB_HEIGHT;
+    framebuffer.stride_pixels = SYNTRA_RAMFB_WIDTH;
+
+    status = syntra_gui_runtime_render(&ramfb_gui_runtime, &framebuffer);
+    if (status == SYNTRA_STATUS_OK) syntra_dma_barrier();
     return status;
 }
