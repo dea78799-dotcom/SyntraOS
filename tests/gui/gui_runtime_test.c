@@ -170,6 +170,7 @@ int main(void)
         assert(syntra_gui_runtime_render(&runtime, &framebuffer) ==
                SYNTRA_STATUS_OK);
         assert(pixels[40U * 320U + 10U] == 0xFF54D6E8U);
+        assert(pixels[86U * 320U + 241U] == 0xFF54D6E8U);
     }
 
     /* A covered launcher must not intercept clicks from the front app. */
