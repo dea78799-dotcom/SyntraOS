@@ -95,6 +95,18 @@ int main(void)
            SYNTRA_GUI_APP_FILES);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
 
+    /* Close launcher, then restore it with the desktop dock home control. */
+    move_pointer(&runtime, 133, -32);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(runtime.windows.count == 2U);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+    move_pointer(&runtime, -373, 392); /* dock home */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(runtime.windows.count == 3U);
+    assert(syntra_gui_window_active(&runtime.windows)->app_type ==
+           SYNTRA_GUI_APP_LAUNCHER);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+
     /* Invalid dimensions must be rejected rather than creating partial state. */
     assert(syntra_gui_runtime_init(&runtime, 200U, 100U) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
