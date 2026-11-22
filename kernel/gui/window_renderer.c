@@ -81,6 +81,14 @@ static syntra_status_t draw_app_surface(
         status = syntra_framebuffer_fill_rect(
             framebuffer, left, top, inner_width, inner_height, 0xFF0C1428U);
         if (status != SYNTRA_STATUS_OK) return status;
+        static const char *const descriptions[] = {
+            "SCREEN AND DISPLAY OPTIONS",
+            "KEYBOARD AND POINTER OPTIONS",
+            "DEVICE AND OS INFORMATION",
+            "SYNTRAOS GUI PREVIEW"
+        };
+        uint32_t selected = window->app_selection < 4U
+            ? window->app_selection : 0U;
         for (row = 0U; row < 4U; ++row)
         {
             row_y = top + 5U + row * 22U;
@@ -98,6 +106,26 @@ static syntra_status_t draw_app_surface(
                 COLOR_WINDOW_TEXT,
                 window->app_selection == row ? 0xFF25466FU : 0xFF1A2948U,
                 1U);
+            if (status != SYNTRA_STATUS_OK) return status;
+        }
+        if (inner_height >= 112U)
+        {
+            uint32_t panel_y = top + 98U;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, left + 5U, panel_y, inner_width - 10U,
+                inner_height - 103U, 0xFF1A2948U);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, left + 5U, panel_y, 3U,
+                inner_height - 103U, 0xFF54D6E8U);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_framebuffer_draw_text(
+                framebuffer, left + 13U, panel_y + 8U, names[selected],
+                COLOR_WINDOW_TEXT, 0xFF1A2948U, 1U);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_framebuffer_draw_text(
+                framebuffer, left + 13U, panel_y + 27U, descriptions[selected],
+                COLOR_WINDOW_TEXT, 0xFF1A2948U, 1U);
             if (status != SYNTRA_STATUS_OK) return status;
         }
         return SYNTRA_STATUS_OK;
