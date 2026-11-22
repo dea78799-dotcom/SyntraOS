@@ -19,6 +19,120 @@ static uint32_t gesture_target_at(const syntra_gui_runtime_t *runtime,
     return UINT32_MAX; /* Reserved ID: cannot collide with a managed window. */
 }
 
+static void update_hover(syntra_gui_runtime_t *runtime)
+{
+    runtime->hover_target_id = gesture_target_at(
+        runtime, runtime->input.pointer_x, runtime->input.pointer_y);
+}
+
+static uint32_t files_visible_rows(const syntra_gui_window_t *window)
+{
+    uint32_t inner_height = window->height > 28U
+        ? window->height - 28U : 0U;
+    uint32_t row;
+    uint32_t visible = 0U;
+    for (row = 0U; row < SYNTRA_GUI_FILES_ENTRY_COUNT; ++row)
+    {
+        uint32_t row_y = 8U + row * 22U;
+        if (row_y + 16U >= inner_height) break;
+        visible++;
+    }
+    return visible;
+}
+
+static void apply_wheel_scroll(syntra_gui_runtime_t *runtime,
+                               int64_t wheel_delta)
+{
+    uint32_t target = gesture_target_at(
+        runtime, runtime->input.pointer_x, runtime->input.pointer_y);
+    const syntra_gui_window_t *constant_window = NULL;
+    syntra_gui_window_t *window = NULL;
+    uint32_t visible_rows;
+    uint32_t max_offset;
+    uint64_t steps;
+
+    if (wheel_delta == 0 || target == UINT32_MAX ||
+        syntra_gui_window_get(&runtime->windows, target,
+                              &constant_window) != SYNTRA_STATUS_OK)
+        return;
+    if (constant_window->app_type != SYNTRA_GUI_APP_FILES ||
+        runtime->input.pointer_x < constant_window->x + 42U ||
+        runtime->input.pointer_y < constant_window->y + 24U ||
+        runtime->input.pointer_x >= constant_window->x +
+                                    constant_window->width - 4U ||
+        runtime->input.pointer_y >= constant_window->y +
+                                    constant_window->height - 4U)
+        return;
+
+    window = &runtime->windows.windows[0];
+    {
+        uint32_t index;
+        for (index = 0U; index < runtime->windows.count; ++index)
+        {
+            if (runtime->windows.windows[index].id == target)
+            {
+                window = &runtime->windows.windows[index];
+                break;
+            }
+        }
+    }
+
+    visible_rows = files_visible_rows(window);
+    if (visible_rows >= SYNTRA_GUI_FILES_ENTRY_COUNT) max_offset = 0U;
+    else max_offset = SYNTRA_GUI_FILES_ENTRY_COUNT - visible_rows;
+
+    if (wheel_delta > 0)
+    {
+        steps = (uint64_t)wheel_delta;
+        if (steps > window->app_scroll_offset)
+            steps = window->app_scroll_offset;
+        window->app_scroll_offset -= (uint32_t)steps;
+    }
+    else
+    {
+        steps = (uint64_t)(-wheel_delta);
+        if (steps > (uint64_t)(max_offset - window->app_scroll_offset))
+            steps = (uint64_t)(max_offset - window->app_scroll_offset);
+        window->app_scroll_offset += (uint32_t)steps;
+    }
+}
+
+static syntra_status_t render_hover_outline(
+    syntra_gui_runtime_t *runtime, syntra_framebuffer_t *framebuffer)
+{
+    const syntra_gui_window_t *window = NULL;
+    uint32_t x, y, width, height;
+    syntra_status_t status;
+
+    if (runtime->hover_target_id == 0U ||
+        runtime->hover_target_id == UINT32_MAX)
+        return SYNTRA_STATUS_OK;
+    status = syntra_gui_window_get(
+        &runtime->windows, runtime->hover_target_id, &window);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        runtime->hover_target_id = UINT32_MAX;
+        return SYNTRA_STATUS_OK;
+    }
+    x = window->x;
+    y = window->y;
+    width = window->width;
+    height = window->height;
+    if (width < 2U || height < 2U) return SYNTRA_STATUS_OK;
+
+    status = syntra_framebuffer_fill_rect(
+        framebuffer, x, y, width, 2U, 0xFF54D6E8U);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_framebuffer_fill_rect(
+        framebuffer, x, y + height - 2U, width, 2U, 0xFF54D6E8U);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_framebuffer_fill_rect(
+        framebuffer, x, y, 2U, height, 0xFF54D6E8U);
+    if (status != SYNTRA_STATUS_OK) return status;
+    return syntra_framebuffer_fill_rect(
+        framebuffer, x + width - 2U, y, 2U, height, 0xFF54D6E8U);
+}
+
 static syntra_status_t update_gesture(syntra_gui_runtime_t *runtime,
                                       uint64_t now_ms)
 {
@@ -73,6 +187,8 @@ syntra_status_t syntra_gui_runtime_init(
     runtime->context_menu_x = 0U;
     runtime->context_menu_y = 0U;
     runtime->context_menu_target = 0U;
+    runtime->hover_target_id = UINT32_MAX;
+    runtime->last_wheel_y = 0;
     runtime->context_menu_visible = 0U;
     runtime->last_gesture.action = SYNTRA_GESTURE_NONE;
 
@@ -197,13 +313,16 @@ static syntra_status_t handle_app_surface_click(
     if (window->app_type == SYNTRA_GUI_APP_FILES)
     {
         if (pointer_x < left + 38U) return SYNTRA_STATUS_OK;
-        for (row = 0U; row < 4U; ++row)
+        for (row = 0U; row < SYNTRA_GUI_FILES_ENTRY_COUNT; ++row)
         {
+            uint32_t entry = window->app_scroll_offset + row;
             uint32_t row_y = top + 8U + row * 22U;
-            if (row_y + 16U >= top + inner_height) break;
+            if (entry >= SYNTRA_GUI_FILES_ENTRY_COUNT ||
+                row_y + 16U >= top + inner_height)
+                break;
             if (pointer_y >= row_y && pointer_y < row_y + 16U)
             {
-                window->app_selection = row;
+                window->app_selection = entry;
                 break;
             }
         }
@@ -384,9 +503,14 @@ syntra_status_t syntra_gui_runtime_process_event_at(
     if (runtime == NULL || runtime->initialized != 1 || event == NULL)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
+    int64_t wheel_delta;
     old_buttons = runtime->input.buttons;
     status = syntra_input_process(&runtime->input, event);
     if (status != SYNTRA_STATUS_OK) return status;
+
+    wheel_delta = (int64_t)runtime->input.wheel_y -
+                  (int64_t)runtime->last_wheel_y;
+    runtime->last_wheel_y = runtime->input.wheel_y;
 
     /* A visible menu owns the next primary click, including outside dismissal. */
     if (runtime->context_menu_visible != 0U &&
@@ -399,6 +523,10 @@ syntra_status_t syntra_gui_runtime_process_event_at(
     status = syntra_gui_window_interaction_process(
         &runtime->interaction, &runtime->windows, &runtime->input);
     if (status != SYNTRA_STATUS_OK) return status;
+
+    update_hover(runtime);
+    if (runtime->context_menu_visible == 0U)
+        apply_wheel_scroll(runtime, wheel_delta);
 
     status = update_gesture(runtime, now_ms);
     if (status != SYNTRA_STATUS_OK) return status;
@@ -466,6 +594,9 @@ syntra_status_t syntra_gui_runtime_render(
         status = syntra_gui_render_windows(framebuffer, &runtime->windows);
         if (status != SYNTRA_STATUS_OK) return status;
     }
+
+    status = render_hover_outline(runtime, framebuffer);
+    if (status != SYNTRA_STATUS_OK) return status;
 
     if (runtime->context_menu_visible != 0U)
     {
