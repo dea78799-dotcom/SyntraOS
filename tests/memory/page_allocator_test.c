@@ -25,6 +25,7 @@ int main(void)
     assert(syntra_page_allocator_init() == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_total_count() == 2U);
     assert(syntra_page_allocator_free_count() == 2U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
 
     assert(syntra_page_alloc(NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(syntra_page_alloc(&first) == SYNTRA_STATUS_OK);
@@ -34,6 +35,7 @@ int main(void)
     assert(first % SYNTRA_PAGE_SIZE == 0U);
     assert(second % SYNTRA_PAGE_SIZE == 0U);
     assert(syntra_page_allocator_free_count() == 0U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
 
     assert(syntra_page_alloc(&third) == SYNTRA_STATUS_OUT_OF_MEMORY);
     assert(syntra_page_free(first + 1U) == SYNTRA_STATUS_INVALID_ARGUMENT);
@@ -41,12 +43,14 @@ int main(void)
     assert(syntra_page_free(first) == SYNTRA_STATUS_OK);
     assert(syntra_page_free(first) == SYNTRA_STATUS_ERROR);
     assert(syntra_page_allocator_free_count() == 1U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
 
     assert(syntra_page_alloc(&third) == SYNTRA_STATUS_OK);
     assert(third == first);
     assert(syntra_page_free(second) == SYNTRA_STATUS_OK);
     assert(syntra_page_free(third) == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_free_count() == 2U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
 
     /* Cursor moves backward when a lower page is freed. */
     assert(syntra_page_alloc(&first) == SYNTRA_STATUS_OK);
@@ -74,6 +78,7 @@ int main(void)
                         (uintptr_t)i * SYNTRA_PAGE_SIZE);
     }
     assert(syntra_page_allocator_free_count() == 0U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
     assert(syntra_page_alloc(&second) == SYNTRA_STATUS_OUT_OF_MEMORY);
     assert(syntra_page_free((uintptr_t)0x30000000U +
                             (uintptr_t)65U * SYNTRA_PAGE_SIZE) == SYNTRA_STATUS_OK);
@@ -91,7 +96,7 @@ int main(void)
     }
     assert(syntra_page_free(third) == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_free_count() == 4100U);
-
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
 
     /* Contiguous runs are allocated only from adjacent free physical pages. */
     assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
@@ -106,11 +111,13 @@ int main(void)
     assert(syntra_page_alloc_contiguous(2U, &first) == SYNTRA_STATUS_OK);
     assert(first == (uintptr_t)0x40000000U);
     assert(syntra_page_allocator_free_count() == 2U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
     assert(syntra_page_alloc_contiguous(3U, &second) ==
            SYNTRA_STATUS_OUT_OF_MEMORY);
     assert(syntra_page_free(first + SYNTRA_PAGE_SIZE) == SYNTRA_STATUS_OK);
     assert(syntra_page_free(first) == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_free_count() == 4U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
 
     /* Boundary policy: clip RAM crossing 4 GiB and ignore high-only RAM. */
     assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
@@ -120,6 +127,7 @@ int main(void)
     assert(syntra_page_allocator_init() == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_total_count() == 1U);
     assert(syntra_page_allocator_free_count() == 1U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
     assert(syntra_page_alloc(&first) == SYNTRA_STATUS_OK);
     assert(first == (uintptr_t)0xFFFFF000ULL);
     assert(syntra_page_free(first) == SYNTRA_STATUS_OK);
@@ -131,6 +139,7 @@ int main(void)
     assert(syntra_page_allocator_init() == SYNTRA_STATUS_OUT_OF_MEMORY);
     assert(syntra_page_allocator_total_count() == 0U);
     assert(syntra_page_allocator_free_count() == 0U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_INVALID_ARGUMENT);
 
     puts("Physical Page Allocator V1 tests passed.");
     return 0;

@@ -15,6 +15,8 @@
  * Only complete 4 KiB pages inside SYNTRA_MEMORY_REGION_RAM are eligible.
  */
 syntra_status_t syntra_page_allocator_init(void);
+/* Full bitmap/summary/accounting audit; intended for diagnostics and tests. */
+syntra_status_t syntra_page_allocator_validate(void);
 syntra_status_t syntra_page_alloc(uintptr_t *physical_address);
 /* Allocate an aligned physically contiguous run of complete 4 KiB pages. */
 syntra_status_t syntra_page_alloc_contiguous(

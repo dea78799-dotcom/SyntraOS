@@ -400,6 +400,56 @@ static size_t page_allocator_total_count_unlocked(void)
 }
 
 /*
+ * Full metadata audit for diagnostics and tests. This is deliberately not
+ * called on the allocation fast path: it scans the complete 4 GiB bitmap.
+ */
+static unsigned int count_set_bits(uint64_t value)
+{
+    unsigned int count = 0U;
+    while (value != 0U)
+    {
+        value &= value - 1U;
+        ++count;
+    }
+    return count;
+}
+
+static syntra_status_t page_allocator_validate_unlocked(void)
+{
+    size_t word_index;
+    size_t observed_free = 0U;
+    size_t observed_allocated = 0U;
+
+    if (!initialized)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    for (word_index = 0U; word_index < SYNTRA_BITMAP_WORD_COUNT; ++word_index)
+    {
+        uint64_t free_word = free_bitmap[word_index];
+        uint64_t allocated_word = allocated_bitmap[word_index];
+        size_t summary_word = word_index / SYNTRA_BITMAP_WORD_BITS;
+        size_t summary_bit = word_index % SYNTRA_BITMAP_WORD_BITS;
+        int summary_marks_free =
+            (free_summary[summary_word] &
+             (UINT64_C(1) << summary_bit)) != 0U;
+
+        if ((free_word & allocated_word) != 0U ||
+            summary_marks_free != (free_word != 0U))
+            return SYNTRA_STATUS_ERROR;
+
+        observed_free += (size_t)count_set_bits(free_word);
+        observed_allocated += (size_t)count_set_bits(allocated_word);
+    }
+
+    if (observed_free != free_pages ||
+        observed_free + observed_allocated != total_pages ||
+        total_pages > SYNTRA_PAGE_COUNT)
+        return SYNTRA_STATUS_ERROR;
+
+    return SYNTRA_STATUS_OK;
+}
+
+/*
  * These operations mutate or inspect shared allocator metadata. On the
  * current single-core ARM64 target, masking local IRQ exceptions prevents an
  * interrupt handler from re-entering the allocator halfway through an
@@ -448,4 +498,12 @@ size_t syntra_page_allocator_total_count(void)
     size_t count = page_allocator_total_count_unlocked();
     syntra_irq_restore(irq_state);
     return count;
+}
+
+syntra_status_t syntra_page_allocator_validate(void)
+{
+    syntra_irq_state_t irq_state = syntra_irq_save();
+    syntra_status_t status = page_allocator_validate_unlocked();
+    syntra_irq_restore(irq_state);
+    return status;
 }
