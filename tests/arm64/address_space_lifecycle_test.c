@@ -219,7 +219,7 @@ int main(void)
     assert(after.free_pages == 1U);
     assert(after.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] == 4U);
     assert(after.owner_pages[SYNTRA_PAGE_OWNER_PROCESS] == 1U);
-    assert(after.owner_pages[SYNTRA_PAGE_OWNER_DRIVER] == 9U);
+    assert(after.owner_pages[SYNTRA_PAGE_OWNER_DRIVER] == 10U);
 
     for (size_t i = 0U; i < 10U; ++i)
         assert(syntra_page_free_owned(
