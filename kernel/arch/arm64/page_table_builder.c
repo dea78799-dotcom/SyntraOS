@@ -30,11 +30,16 @@ static void rollback_transaction(
     {
         syntra_pt_txn_entry_t *entry =
             &transaction->entries[--transaction->count];
-        if (entry->parent[entry->index] == entry->descriptor)
+        /*
+         * Without a release hook, leave the empty hierarchy attached so a
+         * higher-level owner (for example address_space.c) can reclaim it.
+         * Detaching it here would hide the pages from that owner's cleanup.
+         */
+        if (builder->release != NULL &&
+            entry->parent[entry->index] == entry->descriptor)
         {
             entry->parent[entry->index] = 0ULL;
-            if (builder->release != NULL)
-                (void)builder->release(builder->context, entry->child_pa);
+            (void)builder->release(builder->context, entry->child_pa);
         }
     }
 }
