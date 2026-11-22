@@ -45,41 +45,37 @@ static void apply_wheel_scroll(syntra_gui_runtime_t *runtime,
 {
     uint32_t target = gesture_target_at(
         runtime, runtime->input.pointer_x, runtime->input.pointer_y);
-    const syntra_gui_window_t *constant_window = NULL;
     syntra_gui_window_t *window = NULL;
+    uint32_t index;
     uint32_t visible_rows;
     uint32_t max_offset;
     uint64_t steps;
 
-    if (wheel_delta == 0 || target == UINT32_MAX ||
-        syntra_gui_window_get(&runtime->windows, target,
-                              &constant_window) != SYNTRA_STATUS_OK)
+    if (wheel_delta == 0 || target == UINT32_MAX)
         return;
-    if (constant_window->app_type != SYNTRA_GUI_APP_FILES ||
-        runtime->input.pointer_x < constant_window->x + 42U ||
-        runtime->input.pointer_y < constant_window->y + 24U ||
-        runtime->input.pointer_x >= constant_window->x +
-                                    constant_window->width - 4U ||
-        runtime->input.pointer_y >= constant_window->y +
-                                    constant_window->height - 4U)
-        return;
-
-    window = &runtime->windows.windows[0];
+    for (index = 0U; index < runtime->windows.count; ++index)
     {
-        uint32_t index;
-        for (index = 0U; index < runtime->windows.count; ++index)
+        if (runtime->windows.windows[index].id == target)
         {
-            if (runtime->windows.windows[index].id == target)
-            {
-                window = &runtime->windows.windows[index];
-                break;
-            }
+            window = &runtime->windows.windows[index];
+            break;
         }
     }
+    if (window == NULL || window->app_type != SYNTRA_GUI_APP_FILES ||
+        window->width <= 4U || window->height <= 4U ||
+        runtime->input.pointer_x < window->x ||
+        runtime->input.pointer_y < window->y ||
+        runtime->input.pointer_x - window->x < 42U ||
+        runtime->input.pointer_y - window->y < 24U ||
+        runtime->input.pointer_x - window->x >= window->width - 4U ||
+        runtime->input.pointer_y - window->y >= window->height - 4U)
+        return;
 
     visible_rows = files_visible_rows(window);
     if (visible_rows >= SYNTRA_GUI_FILES_ENTRY_COUNT) max_offset = 0U;
     else max_offset = SYNTRA_GUI_FILES_ENTRY_COUNT - visible_rows;
+    if (window->app_scroll_offset > max_offset)
+        window->app_scroll_offset = max_offset;
 
     if (wheel_delta > 0)
     {
