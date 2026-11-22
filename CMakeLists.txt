@@ -226,6 +226,15 @@ add_executable(address_space_test
 target_link_libraries(address_space_test PRIVATE syntra_kernel)
 add_test(NAME ARM64AddressSpaceIsolationTest COMMAND address_space_test)
 
+# Physical Page Allocator Stress Test
+add_executable(page_allocator_stress_test
+    tests/memory/page_allocator_stress_test.c
+    kernel/memory/page_allocator.c
+    kernel/memory/memory_region.c
+)
+target_include_directories(page_allocator_stress_test PRIVATE kernel/memory kernel/core)
+add_test(NAME PhysicalPageAllocatorStressTest COMMAND page_allocator_stress_test)
+
 # Physical Page Allocator V1 Test
 add_executable(page_allocator_test
     tests/memory/page_allocator_test.c
