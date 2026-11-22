@@ -31,9 +31,11 @@ static void rollback_transaction(
         syntra_pt_txn_entry_t *entry =
             &transaction->entries[--transaction->count];
         if (entry->parent[entry->index] == entry->descriptor)
+        {
             entry->parent[entry->index] = 0ULL;
-        if (builder->release != NULL)
-            (void)builder->release(builder->context, entry->child_pa);
+            if (builder->release != NULL)
+                (void)builder->release(builder->context, entry->child_pa);
+        }
     }
 }
 
@@ -307,9 +309,17 @@ syntra_status_t syntra_arm64_page_table_map(
         uint64_t remaining = end - va;
 
         status = syntra_arm64_mmu_get_table_indices(va, indices);
-        if (status != SYNTRA_STATUS_OK) return status;
+        if (status != SYNTRA_STATUS_OK)
+        {
+            rollback_transaction(table, &transaction);
+            return status;
+        }
         l1 = get_table(table, table->root_physical_address);
-        if (l1 == NULL) return SYNTRA_STATUS_ERROR;
+        if (l1 == NULL)
+        {
+            rollback_transaction(table, &transaction);
+            return SYNTRA_STATUS_ERROR;
+        }
         status = ensure_child(table, l1, indices[0], &l2, &transaction);
         if (status != SYNTRA_STATUS_OK)
         {
@@ -397,9 +407,17 @@ syntra_status_t syntra_arm64_page_table_map_user(
         uint16_t indices[4];
         uint64_t *l1, *l2, *l3, descriptor;
         syntra_status_t status = syntra_arm64_mmu_get_table_indices(va, indices);
-        if (status != SYNTRA_STATUS_OK) return status;
+        if (status != SYNTRA_STATUS_OK)
+        {
+            rollback_transaction(table, &transaction);
+            return status;
+        }
         l1 = get_table(table, table->root_physical_address);
-        if (l1 == NULL) return SYNTRA_STATUS_ERROR;
+        if (l1 == NULL)
+        {
+            rollback_transaction(table, &transaction);
+            return SYNTRA_STATUS_ERROR;
+        }
         status = ensure_child(table, l1, indices[0], &l2, &transaction);
         if (status != SYNTRA_STATUS_OK)
         {
