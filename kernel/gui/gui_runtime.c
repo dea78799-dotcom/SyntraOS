@@ -369,9 +369,9 @@ static syntra_status_t handle_launcher_dock_click(
 
     if (runtime->input.width < 640U || runtime->input.height < 480U)
     {
-        if (pointer_x < 10U || pointer_x >= 20U ||
-            pointer_y < runtime->input.height - 20U ||
-            pointer_y >= runtime->input.height - 10U)
+        if (pointer_x < 8U || pointer_x >= 32U ||
+            pointer_y < runtime->input.height - 32U ||
+            pointer_y >= runtime->input.height - 8U)
             return SYNTRA_STATUS_OK;
     }
     else if (pointer_x < 14U || pointer_x >= 40U ||
