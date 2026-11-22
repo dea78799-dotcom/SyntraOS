@@ -277,6 +277,30 @@ add_executable(process_address_space_test
 target_link_libraries(process_address_space_test PRIVATE syntra_kernel)
 add_test(NAME ProcessAddressSpaceOwnershipTest COMMAND process_address_space_test)
 
+# End-to-end Process Manager, Scheduler, and ARM64 TTBR0 integration test
+add_executable(process_scheduler_address_space_integration_test
+    tests/arm64/process_scheduler_address_space_integration_test.c
+    kernel/scheduler/scheduler.c
+    kernel/process/process.c
+    kernel/arch/arm64/address_space.c
+    kernel/arch/arm64/mmu.c
+    kernel/arch/arm64/page_table_builder.c
+    kernel/memory/page_allocator.c
+    kernel/memory/memory_region.c
+)
+target_include_directories(process_scheduler_address_space_integration_test PRIVATE
+    kernel/arch/arm64
+    kernel/scheduler
+    kernel/process
+    kernel/memory
+    kernel/core
+)
+target_compile_definitions(process_scheduler_address_space_integration_test PRIVATE
+    SYNTRA_ARM64_ADDRESS_SPACE_TESTING=1
+)
+add_test(NAME ProcessSchedulerAddressSpaceIntegrationTest
+    COMMAND process_scheduler_address_space_integration_test)
+
 # IPC Test
 add_executable(ipc_test
     tests/ipc/ipc_test.c
