@@ -39,6 +39,9 @@ syntra_status_t process_attach_address_space(
     unsigned int process_id,
     syntra_arm64_address_space_t *address_space);
 
+/* Return the owning process ID for a thread, or zero when unowned. */
+unsigned int process_get_id_for_thread(unsigned int thread_id);
+
 /* Resolve the address space owned by the process containing this thread. */
 syntra_arm64_address_space_t *process_get_address_space_for_thread(
     unsigned int thread_id);
