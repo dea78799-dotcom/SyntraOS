@@ -359,6 +359,15 @@ syntra_status_t syntra_ramfb_init(uintptr_t fw_cfg_base, size_t fw_cfg_size)
     return status;
 }
 
+syntra_status_t syntra_ramfb_tick_gestures(void)
+{
+    if (!ramfb_gui_runtime_ready)
+        return SYNTRA_STATUS_ERROR;
+
+    return syntra_gui_runtime_tick(
+        &ramfb_gui_runtime, ramfb_uptime_milliseconds());
+}
+
 syntra_status_t syntra_ramfb_refresh(void)
 {
     syntra_framebuffer_t framebuffer;
