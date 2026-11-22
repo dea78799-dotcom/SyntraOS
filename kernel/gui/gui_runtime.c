@@ -308,7 +308,9 @@ static syntra_status_t handle_app_surface_click(
 
     if (window->app_type == SYNTRA_GUI_APP_FILES)
     {
-        if (pointer_x < left + 38U) return SYNTRA_STATUS_OK;
+        if (pointer_x < left + 38U ||
+            window->app_scroll_offset >= SYNTRA_GUI_FILES_ENTRY_COUNT)
+            return SYNTRA_STATUS_OK;
         for (row = 0U; row < SYNTRA_GUI_FILES_ENTRY_COUNT; ++row)
         {
             uint32_t entry = window->app_scroll_offset + row;
