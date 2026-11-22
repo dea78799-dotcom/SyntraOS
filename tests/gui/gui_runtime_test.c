@@ -107,6 +107,24 @@ int main(void)
            SYNTRA_GUI_APP_LAUNCHER);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
 
+    /* Compact framebuffer: dock opens launcher and tile opens a fit-sized app. */
+    assert(syntra_gui_runtime_init(&runtime, 320U, 240U) ==
+           SYNTRA_STATUS_OK);
+    move_pointer(&runtime, -145, 105); /* compact dock */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(runtime.windows.count == 1U);
+    assert(syntra_gui_window_active(&runtime.windows)->app_type ==
+           SYNTRA_GUI_APP_LAUNCHER);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+    move_pointer(&runtime, 65, -145); /* compact launcher Files tile */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(runtime.windows.count == 2U);
+    assert(syntra_gui_window_active(&runtime.windows)->app_type ==
+           SYNTRA_GUI_APP_FILES);
+    assert(syntra_gui_window_active(&runtime.windows)->width == 240U);
+    assert(syntra_gui_window_active(&runtime.windows)->height == 170U);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+
     /* Invalid dimensions must be rejected rather than creating partial state. */
     assert(syntra_gui_runtime_init(&runtime, 200U, 100U) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
