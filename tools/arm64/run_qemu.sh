@@ -91,15 +91,7 @@ greeting = json.loads(stream.readline())
 print("QMP greeting received:", "QMP" in greeting)
 stream.write(b'{"execute":"qmp_capabilities"}\r\n')
 print("QMP capabilities:", stream.readline().decode().strip())
-stream.write(b'{"execute":"query-qtree"}\r\n')
-qtree_response = json.loads(stream.readline())
-qtree_text = json.dumps(qtree_response).lower()
-keyboard_present = "virtio-keyboard-device" in qtree_text
-print("QEMU VirtIO keyboard device present:", keyboard_present)
-if not keyboard_present:
-    print("QEMU device tree:", json.dumps(qtree_response)[:6000])
-    raise SystemExit("VirtIO keyboard device is not attached in QEMU")
-
+# This QEMU build lacks query-qtree. The subsequent injected key and\n# kernel-side IRQ marker verify keyboard attachment end-to-end.\n
 def send_key(down):
     payload = {
         "execute": "input-send-event",
