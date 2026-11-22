@@ -33,11 +33,11 @@ static syntra_status_t draw_app_surface(
             "MUSIC", "VIDEOS", "PROJECTS", "SYSTEM"
         };
         uint32_t row;
+        uint32_t visible_rows = 0U;
         uint32_t scroll_offset = window->app_scroll_offset;
         status = syntra_framebuffer_fill_rect(
             framebuffer, left, top, inner_width, inner_height, 0xFF0C1428U);
         if (status != SYNTRA_STATUS_OK) return status;
-        /* Avoid narrow Files surfaces overflowing list geometry. */
         if (inner_width < 64U ||
             scroll_offset >= SYNTRA_GUI_FILES_ENTRY_COUNT)
             return SYNTRA_STATUS_OK;
@@ -48,13 +48,19 @@ static syntra_status_t draw_app_surface(
             framebuffer, left + 5U, top + 6U, "FILES",
             COLOR_WINDOW_TEXT, 0xFF1A2948U, 1U);
         if (status != SYNTRA_STATUS_OK) return status;
+
         for (row = 0U; row < SYNTRA_GUI_FILES_ENTRY_COUNT; ++row)
+        {
+            row_y = top + 8U + row * 22U;
+            if (row_y + 16U >= top + inner_height) break;
+            visible_rows++;
+        }
+
+        for (row = 0U; row < visible_rows; ++row)
         {
             uint32_t entry = scroll_offset + row;
             row_y = top + 8U + row * 22U;
-            if (entry >= SYNTRA_GUI_FILES_ENTRY_COUNT ||
-                row_y + 16U >= top + inner_height)
-                break;
+            if (entry >= SYNTRA_GUI_FILES_ENTRY_COUNT) break;
             if (window->app_selection == entry)
             {
                 status = syntra_framebuffer_fill_rect(
@@ -73,6 +79,32 @@ static syntra_status_t draw_app_surface(
                 COLOR_WINDOW_TEXT,
                 window->app_selection == entry ? 0xFF25466FU : 0xFF0C1428U,
                 1U);
+            if (status != SYNTRA_STATUS_OK) return status;
+        }
+
+        if (visible_rows < SYNTRA_GUI_FILES_ENTRY_COUNT)
+        {
+            uint32_t track_x = left + inner_width - 5U;
+            uint32_t track_y = top + 6U;
+            uint32_t track_height = inner_height - 12U;
+            uint32_t thumb_height =
+                (track_height * visible_rows) / SYNTRA_GUI_FILES_ENTRY_COUNT;
+            uint32_t max_offset =
+                SYNTRA_GUI_FILES_ENTRY_COUNT - visible_rows;
+            uint32_t thumb_y;
+            if (thumb_height < 8U) thumb_height = 8U;
+            if (thumb_height > track_height) thumb_height = track_height;
+            thumb_y = track_y;
+            if (max_offset != 0U)
+                thumb_y += ((track_height - thumb_height) *
+                            scroll_offset) / max_offset;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, track_x, track_y, 3U, track_height,
+                0xFF263D66U);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, track_x, thumb_y, 3U, thumb_height,
+                0xFF54D6E8U);
             if (status != SYNTRA_STATUS_OK) return status;
         }
         return SYNTRA_STATUS_OK;
