@@ -1466,13 +1466,6 @@ fail_pages:
 static _Alignas(4096) uint8_t process_el0_test_b_kernel_stack[4096];
 static syntra_arm64_address_space_t process_el0_test_b_space;
 
-#define SYNTRA_PROCESS_EL0_TEST_B_ID 46U
-#define SYNTRA_PROCESS_EL0_TEST_B_THREAD_ID 8U
-
-static _Alignas(4096) uint8_t process_el0_test_b_kernel_stack[4096];
-static syntra_arm64_address_space_t process_el0_test_b_space;
-static uintptr_t process_el0_test_a_data_physical;
-
 static syntra_status_t syntra_arm64_process_el0_isolation_b_test(void)
 {
     const uint64_t code_va = SYNTRA_ARM64_USER_VA_BASE;
