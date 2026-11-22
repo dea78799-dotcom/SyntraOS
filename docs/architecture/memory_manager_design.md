@@ -40,12 +40,21 @@ Returns memory usage information.
 
 ## 4. Current Limitations
 
-- Uses a static memory pool.
-- Does not manage physical RAM.
-- Does not support virtual memory.
-- Does not support memory protection.
-- Does not support multiple allocation owners.
-- Not thread-safe.
+The original `memory_init()` / `memory_allocate()` pool remains a small
+legacy allocator. It is not the allocator used for ARM64 process page tables.
+
+The ARM64 memory path now includes a physical page allocator, per-process
+address spaces, user page mappings, permission checks and TTBR0 switching.
+These components are still prototype-quality and have important limits:
+
+- Physical page allocation and address-space operations are single-core.
+- Allocator and page-table operations are not yet SMP-safe or generally
+  interrupt-safe.
+- Kernel mappings are inherited from the boot address space; a complete
+  user/kernel virtual address layout is still under development.
+- Process isolation is validated by boot-time EL0 tests, not by a general
+  application loader or a production process runtime.
+- Kernel heap integration and demand paging are not implemented.
 - Not ready for production use.
 
 ## 5. Future Development
@@ -78,3 +87,26 @@ lower page moves the cursor backward. This improves common reuse paths but
 does not bound worst-case scan time. It is currently a single-core,
 non-thread-safe allocator; locking or interrupt-safe serialization is required
 before concurrent runtime use.
+
+
+## ARM64 Process Virtual Memory and Isolation Validation
+
+The current ARM64 process path uses independent address-space roots. Each
+process owns its user mappings while inheriting the required kernel mappings.
+User pages are mapped with explicit read/write and execute permissions.
+
+The QEMU boot validation now runs two real EL0 processes sequentially while
+both process address spaces remain allocated:
+
+- Both processes use the same user virtual address for their private data page.
+- Each virtual address resolves to a different physical page.
+- Each EL0 program increments only its own data page and exits through SVC.
+- EL1 verifies that both physical pages contain their expected independent
+  values before either process address space is destroyed.
+- The existing EL0 write-to-code-page fault test continues to verify that a
+  user write to a read-only executable mapping is trapped and the faulting
+  thread is terminated.
+
+This is a focused runtime isolation test. It does not yet prove concurrent
+multi-core isolation, complete kernel/user separation, or a general-purpose
+process execution environment.
