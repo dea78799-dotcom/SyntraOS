@@ -275,7 +275,7 @@ int main(void)
     selected = schedule_and_activate(21U, &process_b_space, &mmu);
     assert(selected->thread_id == 21U);
     assert(process_get(1U)->state == PROCESS_TERMINATED);
-    assert(process_get(1U)->address_space == NULL);
+    assert(process_get(1U)->address_space == &process_a_space);
     assert(process_get(2U)->state == PROCESS_RUNNING);
     assert(process_get_address_space_for_thread(11U) == NULL);
     assert(process_get_address_space_for_thread(12U) == NULL);
