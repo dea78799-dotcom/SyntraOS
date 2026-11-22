@@ -144,6 +144,43 @@ static void test_user_page_mappings(void)
         SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 1) == SYNTRA_STATUS_ERROR);
 }
 
+static void test_invalid_attributes_do_not_allocate_tables(void)
+{
+    syntra_arm64_page_table_t pt;
+    reset();
+    assert(syntra_arm64_page_table_init(
+        &pt, alloc_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+    assert(used == 1U);
+
+    assert(syntra_arm64_page_table_map(
+        &pt, 0x40000000ULL, 0x80000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_UNKNOWN,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_page_table_map(
+        &pt, 0x40000000ULL, 0x80000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        (syntra_arm64_mmu_access_t)99, 0) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_page_table_map(
+        &pt, 0x40000000ULL, 0x80000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 2) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_page_table_map(
+        &pt, 0x40000000ULL, 0x80000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_DEVICE,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 1) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    /* Root remains the only allocation: invalid input has no side effects. */
+    assert(used == 1U);
+    assert(syntra_arm64_page_table_verify(
+        &pt, 0x40000000ULL, 0x80000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_ERROR);
+}
+
 static void test_device_mapping_and_invalid_inputs(void)
 {
     syntra_arm64_page_table_t pt;
@@ -231,6 +268,7 @@ int main(void)
     test_block_mapping();
     test_block_page_conflict();
     test_partial_overlap_preflight();
+    test_invalid_attributes_do_not_allocate_tables();
     test_device_mapping_and_invalid_inputs();
     puts("ARM64 page-table builder tests passed");
     return 0;
