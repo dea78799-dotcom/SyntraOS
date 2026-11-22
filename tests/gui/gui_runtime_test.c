@@ -254,20 +254,20 @@ int main(void)
     framebuffer.stride_pixels = 640U;
     assert(syntra_gui_runtime_render(&runtime, &framebuffer) ==
            SYNTRA_STATUS_OK);
-    /* Select the second menu row: CLOSE. */
-    move_pointer(&runtime, 20, 44);
+    /* Select the third menu row: CLOSE (after minimize and maximize). */
+    move_pointer(&runtime, 20, 59);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(runtime.context_menu_visible == 0U);
     assert(runtime.windows.count == 2U);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
 
     /* Right-click the desktop and use OPEN SETTINGS to recreate the app. */
-    move_pointer(&runtime, 100, 108); /* empty desktop area */
+    move_pointer(&runtime, 80, -259); /* empty desktop area at (500,100) */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_RIGHT, 1);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_RIGHT, 0);
     assert(runtime.context_menu_visible == 1U);
     assert(runtime.context_menu_target == UINT32_MAX);
-    /* Pointer remains on the clamped desktop menu's second row. */
+    move_pointer(&runtime, 20, 44); /* second desktop menu row */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(runtime.context_menu_visible == 0U);
     assert(runtime.windows.count == 3U);
