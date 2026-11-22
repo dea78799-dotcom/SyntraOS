@@ -516,8 +516,7 @@ static syntra_status_t render_context_menu(
         0xFFF4F7FFU, 0xFF263D66U, 1U);
     if (status != SYNTRA_STATUS_OK) return status;
 
-    for (row = 0U; row <
-         (runtime->context_menu_target == UINT32_MAX ? 3U : 4U); ++row)
+    for (row = 0U; row < 4U; ++row)
     {
         uint32_t row_y = y + 22U + row * 15U;
         status = syntra_framebuffer_draw_text(
