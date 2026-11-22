@@ -15,6 +15,8 @@ typedef struct
 {
     uint64_t virtual_address;
     uint64_t physical_address;
+    syntra_arm64_mmu_access_t access;
+    uint8_t executable;
 } syntra_arm64_address_space_mapping_t;
 
 /*
@@ -33,7 +35,10 @@ typedef struct
         SYNTRA_ARM64_ADDRESS_SPACE_MAX_MAPPINGS];
 } syntra_arm64_address_space_t;
 
-/* Creates an independent L1 root; all page-table pages are tagged PAGE_TABLE. */
+/*
+ * Creates an independent L1 root; all page-table pages are tagged PAGE_TABLE.
+ * The caller must pass a zero-initialized space object on first creation.
+ */
 syntra_status_t syntra_arm64_address_space_create(
     syntra_arm64_address_space_t *space,
     uint32_t address_space_id,

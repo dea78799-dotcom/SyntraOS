@@ -140,6 +140,8 @@ syntra_status_t syntra_arm64_address_space_map_user_page(
 
     space->mappings[space->mapping_count].virtual_address = virtual_address;
     space->mappings[space->mapping_count].physical_address = physical_address;
+    space->mappings[space->mapping_count].access = access;
+    space->mappings[space->mapping_count].executable = (uint8_t)executable;
     space->mapping_count++;
     return SYNTRA_STATUS_OK;
 }
@@ -193,28 +195,20 @@ syntra_status_t syntra_arm64_address_space_validate(
             mapping->virtual_address,
             mapping->physical_address,
             SYNTRA_ARM64_MMU_PAGE_SIZE,
-            SYNTRA_ARM64_MMU_ACCESS_READ_WRITE,
-            0);
+            mapping->access,
+            (int)mapping->executable);
         if (status != SYNTRA_STATUS_OK)
-        {
-            /* Read-only or executable mappings are checked by the walker below. */
-            status = syntra_arm64_address_space_translate(
-                space, mapping->virtual_address, &translation);
-            if (status != SYNTRA_STATUS_OK ||
-                translation.physical_address != mapping->physical_address ||
-                !translation.user_read)
-                return SYNTRA_STATUS_ERROR;
-        }
-        else
-        {
-            status = syntra_arm64_address_space_translate(
-                space, mapping->virtual_address, &translation);
-            if (status != SYNTRA_STATUS_OK ||
-                translation.physical_address != mapping->physical_address ||
-                !translation.user_read || !translation.user_write ||
-                translation.user_execute)
-                return SYNTRA_STATUS_ERROR;
-        }
+            return status;
+
+        status = syntra_arm64_address_space_translate(
+            space, mapping->virtual_address, &translation);
+        if (status != SYNTRA_STATUS_OK ||
+            translation.physical_address != mapping->physical_address ||
+            !translation.user_read ||
+            translation.user_write != (uint8_t)(
+                mapping->access == SYNTRA_ARM64_MMU_ACCESS_READ_WRITE) ||
+            translation.user_execute != mapping->executable)
+            return SYNTRA_STATUS_ERROR;
 
         for (size_t j = i + 1U; j < space->mapping_count; ++j)
         {
