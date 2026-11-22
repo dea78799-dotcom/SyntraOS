@@ -28,10 +28,12 @@ not launch applications because an application manager is not implemented.
 The ARM64 boot diagnostic now performs a limited keyboard transport test:
 
 1. Discover a VirtIO-MMIO device through the QEMU-generated FDT.
-2. Negotiate the `EV_SYN` and `EV_KEY` event-type feature bits.
+2. Perform the VirtIO Input status handshake with no transport feature bits
+   selected (the VirtIO Input specification defines no feature bits).
 3. Configure event queue 0 with writable event buffers.
 4. Register and enable the device interrupt.
-5. Start the queue and inject `KEY_A` from QMP in CI.
+5. Bind the virtual keyboard to the QEMU ramfb console and inject `KEY_A`
+   through QMP in CI.
 6. Confirm the key press was received through the VirtIO event queue and IRQ
    path.
 
