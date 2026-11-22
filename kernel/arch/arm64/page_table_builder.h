@@ -35,7 +35,13 @@ syntra_status_t syntra_arm64_page_table_init(
     syntra_arm64_pt_resolve_fn resolve,
     void *context);
 
-/* Maps aligned 2-MiB L2 blocks where possible, otherwise 4-KiB pages. */
+/*
+ * Maps aligned 2-MiB L2 blocks where possible, otherwise 4-KiB pages.
+ * New intermediate tables are tracked in a bounded 64-entry rollback journal.
+ * A release callback is required whenever the mapping needs new table pages.
+ * This currently reclaims newly-created hierarchy on setup failure; it is not
+ * yet a fully atomic multi-range leaf update when pre-existing tables are used.
+ */
 syntra_status_t syntra_arm64_page_table_map(
     syntra_arm64_page_table_t *table,
     uint64_t virtual_address,
@@ -45,7 +51,10 @@ syntra_status_t syntra_arm64_page_table_map(
     syntra_arm64_mmu_access_t access,
     int executable);
 
-/* Map normal-memory EL0-accessible 4-KiB pages (no block descriptors). */
+/*
+ * Map normal-memory EL0-accessible 4-KiB pages (no block descriptors).
+ * Uses the same bounded intermediate-table rollback rules as map().
+ */
 syntra_status_t syntra_arm64_page_table_map_user(
     syntra_arm64_page_table_t *table,
     uint64_t virtual_address,
