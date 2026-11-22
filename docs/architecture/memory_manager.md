@@ -71,7 +71,9 @@ a general-purpose kernel heap or per-process allocation accounting.
   page-table pages with PAGE_TABLE ownership, maps exclusively owned PROCESS
   pages into EL0, translates addresses through its own root, audits permissions,
   supports single-page unmapping with empty L2/L3 table reclamation, and releases
-  remaining page-table and mapped-process pages on destruction.
+  remaining page-table and mapped-process pages on destruction. A bounded
+  64-object registry rejects attempts to alias one PROCESS page into multiple
+  address spaces.
 - Host integration tests create two independent roots, map the same virtual
   address to different physical pages, verify distinct translations and
   read-only/read-write permissions, then validate complete page reclamation.
@@ -91,7 +93,8 @@ it is not evidence of physical-device support.
 - Address-space objects exist, but they are not yet attached to process objects
   or activated by a context switch through TTBR0_EL1.
 - Shared-page reference counting, copy-on-write, demand paging, swapping, and
-  memory-mapped file support are not implemented.
+  memory-mapped file support are not implemented. The V1 registry and its
+  single-core ownership checks are not SMP-safe.
 - Address-space destruction requires the caller to ensure the root is inactive;
   V1 has no SMP coordination or TLB shootdown mechanism.
 - Full SMP-safe allocator synchronization and per-page reference tracking are
@@ -105,8 +108,8 @@ it is not evidence of physical-device support.
    allocation/free accounting, and failure rollback.
 2. Define physical-page ownership and lifecycle APIs before sharing pages between
    page tables, processes, or drivers.
-3. Add shared-page reference counting and enforce exclusive/shared mapping
-   ownership across address spaces.
+3. Add reference-counted shared-page support if shared mappings are required;
+   until then, retain the V1 exclusive mapping rule.
 4. Attach one address-space object to each process and switch TTBR0_EL1 only after
    context-switch and inactive-root lifetime rules are implemented.
 5. Add SMP-safe synchronization and TLB shootdown before multi-core execution.
