@@ -78,17 +78,21 @@ a general-purpose kernel heap or per-process allocation accounting.
   user address-space destructor. EL0 mappings are restricted to the upper half
   of the 39-bit TTBR0 range (256–512 GiB), keeping them separate from the
   current low identity-mapped kernel and device region.
-- Address-space isolation tests currently use the software page-table walker.
-  Each process root can inherit the kernel's low-half L1 descriptors as borrowed
+- Each process root inherits the kernel's low-half L1 descriptors as borrowed
   entries; borrowed subtrees are preserved when the process root is destroyed.
-  The QEMU boot path switches TTBR0_EL1 to an inherited root, verifies the
-  register, rejects destruction while active, and switches back to the kernel
-  root. V1 performs a local full EL1/EL0 TLB invalidation on each switch.
-  The exception/scheduler return bridge now selects the next thread's process
-  root (or the kernel root for kernel threads). SMP shootdown remains unimplemented.
-- Host integration tests create two independent roots, map the same virtual
-  address to different physical pages, verify distinct translations and
-  read-only/read-write permissions, then validate complete page reclamation.
+  TTBR0_EL1 activation performs a local full EL1/EL0 TLB invalidation. The
+  exception/scheduler return bridge selects the next thread's process root and
+  restores the kernel root for kernel threads.
+- QEMU boot validation switches between two process-owned thread roots and
+  confirms each thread observes its own TTBR0_EL1 root before returning to the
+  kernel root. A separate EL0 process smoke test copies user code into a
+  PROCESS-owned page, maps code Read-Only+Executable and stack Read-Write+XN,
+  executes both SVC calls from EL0, exits through the scheduler-safe trampoline,
+  restores the kernel root, and tears down the process.
+- Host integration tests also create independent roots, map the same virtual
+  address to different physical pages, verify distinct software translations
+  and permissions, and validate page reclamation. QEMU results apply to the
+  emulated ARM64 target; they are not physical-device validation.
 
 A successful host descriptor test or ELF build alone is not proof of hardware
 translation. The QEMU boot test is the evidence for the configured emulated target;
@@ -102,16 +106,14 @@ it is not evidence of physical-device support.
   no general page-table reclamation or mapping teardown API.
 - The current boot mapping is primarily identity mapping; a complete kernel
   higher-half layout and dynamic virtual address allocator are not implemented.
-- Process Manager accepts ownership of a validated address-space object.
-  Process termination releases that address space only after all attached
-  threads are terminated. The ARM64 exception/scheduler return bridge selects
-  the process root for an associated thread and restores the kernel root for
-  unassociated kernel threads. User threads are rejected unless attached to a
-  process with an address space. The activation path validates the root, writes
-  TTBR0_EL1, and performs local TLB invalidation. Active-root tracking and TLB
-  coordination remain single-core only; SMP shootdown and a complete user
-  process launch path are not implemented. The reserved upper-half user VA
-  range is a V1 convention, not yet a process ABI.
+- Process Manager owns validated address-space objects and releases them only
+  after all attached threads terminate. Scheduler-driven TTBR0_EL1 selection and
+  single-core active-root checks are implemented and exercised on QEMU. SMP
+  coordination and remote TLB shootdown are not implemented. The reserved
+  upper-half user VA range is a V1 convention, not yet a process ABI.
+- The EL0 process test is a fixed boot-time smoke test, not a general executable
+  loader. Dynamic ELF loading, per-process heap management, robust user-fault
+  recovery, and application launch services are not implemented.
 - Shared-page reference counting, copy-on-write, demand paging, swapping, and
   memory-mapped file support are not implemented. The V1 registry and its
   single-core ownership checks are not SMP-safe.
@@ -131,11 +133,10 @@ it is not evidence of physical-device support.
    page tables, processes, or drivers.
 3. Add reference-counted shared-page support if shared mappings are required;
    until then, retain the V1 exclusive mapping rule.
-4. Integrate per-thread Process Manager address-space selection with the ARM64
-   scheduler context-switch path, then validate EL0 execution under separate roots.
+4. Build a validated user-image loader and expand EL0 permission-fault and
+   cross-process isolation tests.
 5. Add SMP-safe synchronization and TLB shootdown before multi-core execution.
-6. Expand QEMU tests to execute in separate EL0 address spaces and verify
-   permission faults, not only software-walker isolation.
+6. Add robust EL0 fault isolation and multi-process executable-loading tests.
 
 ## 5. Verification requirements
 

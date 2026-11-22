@@ -1,14 +1,15 @@
 # SyntraOS Process Manager
 
 Version: 0.1.0
-Status: Process/thread ownership and address-space ownership prototype.
+Status: Process/thread ownership, address-space ownership, and QEMU EL0 execution prototype.
 
 ## 1. Overview
 
 The Process Manager maintains a fixed-capacity process table, associates scheduler
 threads with processes, derives aggregate process state, and owns an optional
-ARM64 address-space object. This is kernel-side lifecycle infrastructure; it is
-not yet a complete isolated user-process implementation.
+ARM64 address-space object. The current implementation demonstrates hardware
+translation-root switching and one fixed EL0 process smoke test on QEMU. It is
+not yet a general-purpose process loader or complete process environment.
 
 ## 2. Implemented
 
@@ -22,72 +23,82 @@ not yet a complete isolated user-process implementation.
 - A process may take ownership of one validated ARM64 address-space object.
   The address space must already have inherited the kernel mappings.
 - An address-space object cannot be attached to two process records.
-- `process_get_address_space_for_thread()` resolves the address space owned by
+- process_get_address_space_for_thread() resolves the address space owned by
   the process containing a given scheduler thread.
+- The ARM64 exception/scheduler return bridge activates the selected thread's
+  process root before restoring its context, and restores the kernel root for
+  unassociated kernel threads.
 - Process termination refuses to proceed while any attached thread is not
-  terminated. After all threads have stopped, it destroys the owned address
-  space and clears the process pointer.
+  terminated. After all threads have stopped and the root is inactive, it
+  destroys the owned address space and clears the process pointer.
 - Process validation checks address-space validity, uniqueness, thread
   ownership, and scheduler invariants.
 
-## 3. Address-space ownership contract
+## 3. QEMU verification
 
-`process_attach_address_space()` transfers lifecycle ownership of the supplied
+The ARM64 QEMU boot tests cover two levels of address-space execution:
+
+1. Two kernel-mode threads attached to different processes are scheduled under
+   different TTBR0_EL1 roots. Each thread verifies its own root, then the
+   scheduler returns to the kernel root.
+2. A fixed EL0 user program is copied into a PROCESS-owned code page. Its code
+   mapping is Read-Only+Executable, while its separate user stack is
+   Read-Write+Execute-Never. The scheduler activates the process root, the
+   program executes two SVC calls from EL0, and the user-thread exit trampoline
+   terminates the thread. The scheduler then restores the kernel root and the
+   Process Manager releases the process address space.
+
+These tests demonstrate the configured QEMU ARM64 path only. They do not prove
+physical-device support, SMP safety, or a general executable-loading facility.
+
+## 4. Address-space ownership contract
+
+process_attach_address_space() transfers lifecycle ownership of the supplied
 address-space object to the Process Manager. The object itself must remain at a
 stable address for the duration of ownership. A process cannot attach a second
 address space, and a single address-space object cannot be shared between
 process records.
 
-`process_terminate()` is the teardown path. It requires every associated
+process_terminate() is the teardown path. It requires every associated
 scheduler thread to be TERMINATED before it destroys the address space. The
 address-space destructor releases process-owned pages and private page-table
-pages while preserving borrowed kernel page-table subtrees.
+pages while preserving borrowed kernel page-table subtrees. Destruction rejects
+the locally active root.
 
-Address-space activation is now available at the ARM64 architecture layer.
-It switches TTBR0_EL1, performs a local full EL1/EL0 TLB invalidation, tracks the
-active root, and rejects destruction of that root. QEMU boot tests exercise a
-switch to an inherited process root and back to the kernel root. The ARM64 exception/scheduler return bridge selects the next thread's
-address space, or restores the kernel root for kernel threads. User threads
-cannot be attached to a process without an address space. The active-root
-tracker is single-core only; SMP coordination and remote TLB shootdown remain absent.
+TTBR0 activation performs a local full EL1/EL0 TLB invalidation. Active-root
+tracking and TLB invalidation are single-core V1 mechanisms; SMP coordination
+and remote TLB shootdown remain absent.
 
-## 4. Not yet implemented
+## 5. Not yet implemented
 
-- SMP-safe active-root tracking, remote TLB shootdown, and lifecycle synchronization.
-- Creation of user processes with mapped code, data, and user stacks.
+- General ELF loading, executable validation, relocation, and multi-segment
+  user-image construction.
+- Per-process heap and stack allocation services beyond the fixed smoke test.
+- Robust user-mode fault handling, process exit status, parent/child
+  relationships, wait semantics, and restart policies.
 - Per-process resource handles, automatic IPC cleanup, and capability policy.
-- Exit status, parent/child relationships, wait semantics, and transactional
-  process/thread creation.
+- Transactional process/thread creation and rollback.
 - Thread stack ownership transfer and stack reclamation.
+- SMP-safe active-root tracking, remote TLB shootdown, and lifecycle synchronization.
 
-Thread association remains metadata ownership: it does not create or schedule
-threads or reclaim scheduler stacks. On ARM64, the exception-return scheduler
-bridge selects the associated process address space before restoring a
-scheduled thread's context.
+Thread association remains metadata ownership: it does not allocate scheduler
+stacks or provide a general application lifecycle. Architecture-specific
+context switching remains in the ARM64 exception/scheduler layer, not the
+generic Process Manager.
 
-## 5. Required integration sequence
+## 6. Required integration sequence
 
-1. Add user-process construction with code/data/stack mappings and connect
-   those mappings to scheduler-created EL0 threads.
-2. Add QEMU tests that execute separate EL0 address spaces and verify permission
-   faults and cross-process isolation.
-3. Add SMP-safe active-root tracking and remote TLB shootdown before SMP use.
-4. Add process resource ownership, IPC capabilities, and failure rollback.
-
-## 6. Correctness requirements
-
-- Reject invalid and duplicate process identifiers.
-- Reject duplicate thread attachment and duplicate address-space ownership.
-- Do not terminate a process while any attached thread can still run.
-- Do not reclaim an address space while its root can be active on a CPU.
-- Keep architecture-specific context switching outside the generic Process
-  Manager.
-- Treat process-table pointers as kernel-internal; unrelated subsystems must not
-  mutate process records directly.
+1. Build a validated user-image loader with explicit code, data, and stack
+   segments and a defined user-process ABI.
+2. Add process-scoped syscalls, resource handles, and capability checks.
+3. Add fault-isolation tests for unmapped access, write-to-code, and execute-from
+   NX stack pages; terminate only the offending process.
+4. Add process resource cleanup and transactional creation rollback.
+5. Add SMP-safe active-root tracking and remote TLB shootdown before SMP use.
 
 ## 7. Version status
 
-SyntraOS remains v0.1.0 (Early Development). The current implementation provides
-process/thread metadata and tested ownership of inactive ARM64 address spaces.
-It does not yet provide hardware-enforced per-process isolation or full user
-process execution semantics.
+SyntraOS remains v0.1.0 (Early Development). It now has a tested QEMU prototype
+for per-process TTBR0 switching and one EL0 user thread with separate code and
+stack mappings. It does not yet provide a general-purpose executable loader,
+complete process ABI, robust fault isolation, or physical-device support.
