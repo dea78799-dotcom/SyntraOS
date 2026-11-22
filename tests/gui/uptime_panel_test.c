@@ -18,7 +18,7 @@ int main(void)
     assert(syntra_framebuffer_clear(&fb, 0xFF101A35U) == SYNTRA_STATUS_OK);
     assert(syntra_gui_render_uptime_panel(&fb, 0U) == SYNTRA_STATUS_OK);
     assert(pixels[(480U - 34U) * 640U + 8U] == 0xFF54D6E8U);
-    assert(pixels[(480U - 34U) * 640U + 9U] == 0xF0202D49U);
+    assert(pixels[(480U - 34U) * 640U + 10U] == 0xF0202D49U);
     memcpy(first_frame, pixels, sizeof(pixels));
 
     assert(syntra_gui_render_uptime_panel(&fb, 1U) == SYNTRA_STATUS_OK);
