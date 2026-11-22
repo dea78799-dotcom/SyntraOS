@@ -56,6 +56,10 @@ _start:
     /* Enter the ARM64 C boot stage. */
     bl syntra_arm64_boot_main
 
+    /* Enter the kernel's IRQ-driven GUI idle pump after a successful boot. */
+    cbnz x0, .Lhalt
+    bl syntra_arm64_boot_idle_loop
+
     /* GDB-visible return point for the QEMU boot smoke test. */
     .global syntra_arm64_boot_returned
 syntra_arm64_boot_returned:
