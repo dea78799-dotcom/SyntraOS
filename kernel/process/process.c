@@ -248,6 +248,9 @@ syntra_status_t process_refresh_all_states(void)
      */
     for (unsigned int i = 0U; i < process_slot_count; ++i)
     {
+        if (processes[i].process_id == 0U)
+            continue;
+
         syntra_status_t status =
             process_refresh_state(processes[i].process_id);
         if (status != SYNTRA_STATUS_OK)
