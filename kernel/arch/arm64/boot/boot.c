@@ -1669,16 +1669,37 @@ static syntra_status_t syntra_arm64_process_el0_isolation_b_test(void)
     }
 
     status = process_terminate(SYNTRA_PROCESS_EL0_TEST_ID);
-    if (status != SYNTRA_STATUS_OK) goto fail_process;
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("EL0 isolation: terminate A failed status=");
+        syntra_uart_put_hex((uint64_t)status);
+        syntra_uart_puts("\\n");
+        goto fail_process;
+    }
     status = process_terminate(SYNTRA_PROCESS_EL0_TEST_B_ID);
-    if (status != SYNTRA_STATUS_OK) return status;
-    if (process_validate() != SYNTRA_STATUS_OK)
-        return SYNTRA_STATUS_ERROR;
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("EL0 isolation: terminate B failed status=");
+        syntra_uart_put_hex((uint64_t)status);
+        syntra_uart_puts("\\n");
+        return status;
+    }
+    status = process_validate();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("EL0 isolation: process validation failed status=");
+        syntra_uart_put_hex((uint64_t)status);
+        syntra_uart_puts("\\n");
+        return status;
+    }
 
     syntra_uart_puts("Process EL0 isolation: PASS (same VA, distinct physical pages, independent data)\\n");
     return SYNTRA_STATUS_OK;
 
 fail_process:
+    syntra_uart_puts("EL0 B test failure status=");
+    syntra_uart_put_hex((uint64_t)status);
+    syntra_uart_puts("\\n");
     thread = scheduler_get_thread(SYNTRA_PROCESS_EL0_TEST_B_THREAD_ID);
     if (thread != NULL && thread->state != THREAD_TERMINATED)
         (void)scheduler_set_thread_state(
