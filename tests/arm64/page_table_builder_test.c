@@ -9,11 +9,12 @@ static uint64_t storage[TABLES][512];
 static unsigned int used;
 static unsigned int released;
 static unsigned int release_attempts;
+static unsigned int allocation_limit = TABLES;
 
 static syntra_status_t alloc_cb(void *ctx, uint64_t *pa)
 {
     (void)ctx;
-    if (used >= TABLES || pa == NULL) return SYNTRA_STATUS_OUT_OF_MEMORY;
+    if (used >= allocation_limit || pa == NULL) return SYNTRA_STATUS_OUT_OF_MEMORY;
     *pa = BASE_PA + (uint64_t)used * 4096ULL;
     ++used;
     return SYNTRA_STATUS_OK;
@@ -31,6 +32,7 @@ static uint64_t *resolve_cb(uint64_t pa, void *ctx)
 static void reset(void)
 {
     used = 0U;
+    allocation_limit = TABLES;
     for (unsigned int i = 0U; i < TABLES; ++i)
         for (unsigned int j = 0U; j < 512U; ++j)
             storage[i][j] = 0ULL;
@@ -94,8 +96,8 @@ static void test_build_and_walk_verify(void)
 {
     syntra_arm64_page_table_t pt;
     reset();
-    assert(syntra_arm64_page_table_init(
-        &pt, alloc_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_init_ex(
+        &pt, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
     assert(used == 1U);
 
     assert(syntra_arm64_page_table_map(
@@ -121,6 +123,39 @@ static void test_build_and_walk_verify(void)
         SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 1) == SYNTRA_STATUS_ERROR);
 }
 
+
+static void test_map_rolls_back_on_allocation_failure(void)
+{
+    syntra_arm64_page_table_t pt;
+    syntra_arm64_mmu_translation_t translation;
+    reset();
+    released = 0U;
+    release_attempts = 0U;
+    assert(syntra_arm64_page_table_init_ex(
+        &pt, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+
+    /* Root succeeds; the next allocation creates L2; L3 allocation fails. */
+    allocation_limit = 2U;
+    assert(syntra_arm64_page_table_map(
+        &pt, 0x51000000ULL, 0x81000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
+        SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(used == 2U);
+    assert(released == 1U);
+    assert(release_attempts == 1U);
+    assert(storage[0][(0x51000000ULL >> 30U) & 0x1ffU] == 0ULL);
+    assert(syntra_arm64_mmu_walk(pt.root_physical_address, 0x51000000ULL,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_ERROR);
+
+    /* The same VA can be mapped after the failed transaction was rolled back. */
+    allocation_limit = TABLES;
+    assert(syntra_arm64_page_table_map(
+        &pt, 0x51000000ULL, 0x81000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+}
 
 static void test_user_page_mappings(void)
 {
@@ -254,7 +289,7 @@ static void test_device_mapping_and_invalid_inputs(void)
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 1) ==
         SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(syntra_arm64_page_table_init(
-        NULL, alloc_cb, resolve_cb, NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
+        NULL, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
 }
 
 
@@ -311,6 +346,7 @@ int main(void)
     test_init_releases_invalid_allocator_result();
     test_init_reclaims_unresolvable_root();
     test_build_and_walk_verify();
+    test_map_rolls_back_on_allocation_failure();
     test_user_page_mappings();
     test_block_mapping();
     test_block_page_conflict();
