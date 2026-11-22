@@ -20,6 +20,18 @@ static uint32_t gesture_target_at(const syntra_gui_runtime_t *runtime,
     return UINT32_MAX; /* Reserved ID: cannot collide with a managed window. */
 }
 
+static syntra_gui_window_t *active_window_mutable(
+    syntra_gui_window_manager_t *manager)
+{
+    uint32_t index;
+    for (index = manager->count; index > 0U; --index)
+    {
+        if (manager->windows[index - 1U].minimized == 0U)
+            return &manager->windows[index - 1U];
+    }
+    return NULL;
+}
+
 static void update_hover(syntra_gui_runtime_t *runtime)
 {
     runtime->hover_target_id = gesture_target_at(
@@ -298,7 +310,7 @@ static syntra_status_t handle_app_surface_click(
     syntra_gui_window_t *window;
     uint32_t left, top, inner_width, inner_height, row;
     if (runtime->windows.count == 0U) return SYNTRA_STATUS_OK;
-    window = (syntra_gui_window_t *)syntra_gui_window_active(&runtime->windows);
+    window = active_window_mutable(&runtime->windows);
     if (window == NULL) return SYNTRA_STATUS_OK;
     left = window->x + 4U;
     top = window->y + 24U;
