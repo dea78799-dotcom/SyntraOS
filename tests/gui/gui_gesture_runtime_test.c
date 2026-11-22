@@ -19,6 +19,8 @@ int main(void)
     assert(syntra_gui_runtime_init(&runtime, 640U, 480U) ==
            SYNTRA_STATUS_OK);
 
+    event_at(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_X, -170, 990U);
+    event_at(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_Y, 10, 995U);
     event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1, 1000U);
     assert(runtime.last_gesture.action == SYNTRA_GESTURE_PRESS);
     assert(syntra_gui_runtime_tick(&runtime, 1100U) == SYNTRA_STATUS_OK);
@@ -51,12 +53,17 @@ int main(void)
         event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0, 2070U);
     }
 
-    /* The open context menu consumes and dismisses an outside primary click. */
-    event_at(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_X, 180, 2100U);
-    event_at(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_Y, 160, 2101U);
-    event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1, 2102U);
+    /* Desktop context menu can be dismissed by an outside primary click. */
+    event_at(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_X, 340, 2100U);
+    event_at(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_Y, -179, 2101U);
+    event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_RIGHT, 1, 2102U);
+    event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_RIGHT, 0, 2103U);
+    assert(runtime.context_menu_visible == 1U);
+    event_at(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_X, 100, 2110U);
+    event_at(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_Y, 350, 2111U);
+    event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1, 2112U);
     assert(runtime.context_menu_visible == 0U);
-    event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0, 2110U);
+    event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0, 2120U);
 
     event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1, 3000U);
     event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0, 3050U);
