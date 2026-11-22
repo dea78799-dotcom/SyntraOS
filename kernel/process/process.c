@@ -1,6 +1,7 @@
 #include "process.h"
 
 #include "../scheduler/scheduler.h"
+#include "../arch/arm64/address_space.h"
 
 static syntra_process_t processes[SYNTRA_MAX_PROCESSES];
 static unsigned int process_count;
@@ -162,6 +163,20 @@ syntra_status_t process_attach_thread(
 
     process->thread_ids[process->thread_count++] = thread_id;
     return process_refresh_state(process_id);
+}
+
+syntra_arm64_address_space_t *process_get_address_space_for_thread(
+    unsigned int thread_id)
+{
+    if (!process_initialized || thread_id == 0U)
+        return NULL;
+
+    for (unsigned int p = 0U; p < process_count; ++p)
+        for (unsigned int i = 0U; i < processes[p].thread_count; ++i)
+            if (processes[p].thread_ids[i] == thread_id)
+                return processes[p].address_space;
+
+    return NULL;
 }
 
 unsigned int process_get_thread_count(unsigned int process_id)

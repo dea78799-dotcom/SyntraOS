@@ -2,7 +2,7 @@
 #define SYNTRA_PROCESS_H
 
 #include "../core/status.h"
-#include "../arch/arm64/address_space.h"
+typedef struct syntra_arm64_address_space syntra_arm64_address_space_t;
 
 #define SYNTRA_MAX_PROCESSES 64U
 #define SYNTRA_MAX_PROCESS_THREADS 32U
@@ -38,6 +38,10 @@ syntra_status_t process_create(
 syntra_status_t process_attach_address_space(
     unsigned int process_id,
     syntra_arm64_address_space_t *address_space);
+
+/* Resolve the address space owned by the process containing this thread. */
+syntra_arm64_address_space_t *process_get_address_space_for_thread(
+    unsigned int thread_id);
 
 /* Find a process. */
 syntra_process_t *process_get(unsigned int process_id);

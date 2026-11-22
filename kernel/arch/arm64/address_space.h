@@ -27,7 +27,7 @@ typedef struct
  * V1 owns its page-table pages and mapped PROCESS pages.
  * The resolver must provide a writable kernel mapping for allocated table pages.
  */
-typedef struct
+typedef struct syntra_arm64_address_space
 {
     uint32_t address_space_id;
     uint8_t initialized;

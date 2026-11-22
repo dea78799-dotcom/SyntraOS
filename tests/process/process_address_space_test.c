@@ -12,6 +12,12 @@
 #define TEST_RAM_PAGES 32U
 
 static uint64_t table_storage[TEST_RAM_PAGES][SYNTRA_ARM64_MMU_TABLE_ENTRIES];
+static _Alignas(16) uint8_t process_thread_stack[2048];
+
+static void dummy_thread(void *argument)
+{
+    (void)argument;
+}
 
 static syntra_status_t allocate_table_page(void *context, uint64_t *physical_address)
 {
@@ -82,19 +88,28 @@ int main(void)
 
     assert(process_create(1U, 5U) == SYNTRA_STATUS_OK);
     assert(process_create(2U, 4U) == SYNTRA_STATUS_OK);
+    assert(scheduler_create_thread(101U, 5U, dummy_thread, NULL,
+        process_thread_stack, sizeof(process_thread_stack)) == SYNTRA_STATUS_OK);
     assert(process_attach_address_space(1U, &process_space) ==
         SYNTRA_STATUS_OK);
     process = process_get(1U);
     assert(process != NULL && process->address_space == &process_space);
     assert(process_attach_address_space(2U, &process_space) ==
         SYNTRA_STATUS_PERMISSION_DENIED);
+    assert(process_attach_thread(1U, 101U) == SYNTRA_STATUS_OK);
+    assert(process_get_address_space_for_thread(101U) == &process_space);
+    assert(process_get_address_space_for_thread(999U) == NULL);
     assert(process_set_state(1U, PROCESS_TERMINATED) ==
         SYNTRA_STATUS_PERMISSION_DENIED);
     assert(process_validate() == SYNTRA_STATUS_OK);
 
+    assert(scheduler_set_thread_state(101U, THREAD_TERMINATED) ==
+        SYNTRA_STATUS_OK);
+    assert(process_refresh_state(1U) == SYNTRA_STATUS_OK);
     assert(process_terminate(1U) == SYNTRA_STATUS_OK);
     assert(process->state == PROCESS_TERMINATED);
     assert(process->address_space == NULL);
+    assert(process_get_address_space_for_thread(101U) == NULL);
     assert(process_attach_address_space(2U, &process_space) ==
         SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(process_validate() == SYNTRA_STATUS_OK);
