@@ -201,6 +201,14 @@ int main(void)
     create_user_thread(21U, 2U, stack_b1, user_stack_b1, context_b1);
     create_user_thread(22U, 2U, stack_b2, user_stack_b2, context_b2);
 
+    /* Thread ownership lookup is the bridge required by EL0 process exit. */
+    assert(process_get_id_for_thread(11U) == 1U);
+    assert(process_get_id_for_thread(12U) == 1U);
+    assert(process_get_id_for_thread(21U) == 2U);
+    assert(process_get_id_for_thread(22U) == 2U);
+    assert(process_get_id_for_thread(999U) == 0U);
+    assert(process_get_id_for_thread(0U) == 0U);
+
     mmu.ttbr0 = kernel_root;
     syntra_arm64_address_space_test_set_mmu_hooks(
         mock_read_ttbr0, mock_write_ttbr0, &mmu);
