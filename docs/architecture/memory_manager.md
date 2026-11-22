@@ -74,6 +74,10 @@ a general-purpose kernel heap or per-process allocation accounting.
   remaining page-table and mapped-process pages on destruction. A bounded
   64-object registry rejects attempts to alias one PROCESS page into multiple
   address spaces.
+- Address-space isolation tests currently use the software page-table walker.
+  These roots are not safe to load into TTBR0_EL1 yet: they do not inherit the
+  kernel's required identity mappings, and no TLB shootdown or active-root
+  lifecycle protocol exists.
 - Host integration tests create two independent roots, map the same virtual
   address to different physical pages, verify distinct translations and
   read-only/read-write permissions, then validate complete page reclamation.
@@ -91,7 +95,8 @@ it is not evidence of physical-device support.
 - The current boot mapping is primarily identity mapping; a complete kernel
   higher-half layout and dynamic virtual address allocator are not implemented.
 - Address-space objects exist, but they are not yet attached to process objects
-  or activated by a context switch through TTBR0_EL1.
+  or activated by a context switch through TTBR0_EL1. Their roots currently
+  contain user mappings only and must not replace the active kernel root.
 - Shared-page reference counting, copy-on-write, demand paging, swapping, and
   memory-mapped file support are not implemented. The V1 registry and its
   single-core ownership checks are not SMP-safe.
