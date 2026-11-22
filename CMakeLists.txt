@@ -165,6 +165,11 @@ target_link_libraries(gui_window_interaction_test PRIVATE syntra_gui)
 add_test(NAME GUIWindowInteractionTest COMMAND gui_window_interaction_test)
 
 
+# SyntraOS persistent GUI runtime integration test
+add_executable(gui_runtime_test tests/gui/gui_runtime_test.c)
+target_link_libraries(gui_runtime_test PRIVATE syntra_gui)
+add_test(NAME GUIRuntimeIntegrationTest COMMAND gui_runtime_test)
+
 # QEMU ramfb firmware-directory and wire-format tests
 add_executable(gui_ramfb_test
     tests/gui/ramfb_test.c
