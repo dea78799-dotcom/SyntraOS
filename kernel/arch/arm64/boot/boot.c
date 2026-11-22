@@ -1263,7 +1263,7 @@ static void syntra_virtio_input_qemu_diagnostic_wait(void)
     used_index = (uint16_t)((uint16_t)queue_memory[
         syntra_virtio_input_queue.used_ring_offset + 2U] |
         ((uint16_t)queue_memory[
-        syntra_virtio_input_queue.used_ring_offset + 3U] << 8U);
+        syntra_virtio_input_queue.used_ring_offset + 3U] << 8U));
 
     syntra_uart_puts("VirtIO Input diagnostic: irq_status=");
     syntra_uart_put_hex(interrupt_status);
