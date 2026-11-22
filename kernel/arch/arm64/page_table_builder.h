@@ -38,9 +38,10 @@ syntra_status_t syntra_arm64_page_table_init(
 /*
  * Maps aligned 2-MiB L2 blocks where possible, otherwise 4-KiB pages.
  * New intermediate tables are tracked in a bounded 64-entry rollback journal.
- * A release callback is required whenever the mapping needs new table pages.
- * This currently reclaims newly-created hierarchy on setup failure; it is not
- * yet a fully atomic multi-range leaf update when pre-existing tables are used.
+ * A release callback enables reclamation of newly-created hierarchy on setup
+ * failure. Without it, the legacy initializer remains usable but allocated
+ * pages cannot be returned on rollback. This is not yet a fully atomic
+ * multi-range leaf update when pre-existing tables are used.
  */
 syntra_status_t syntra_arm64_page_table_map(
     syntra_arm64_page_table_t *table,
@@ -53,7 +54,8 @@ syntra_status_t syntra_arm64_page_table_map(
 
 /*
  * Map normal-memory EL0-accessible 4-KiB pages (no block descriptors).
- * Uses the same bounded intermediate-table rollback rules as map().
+ * Uses the same bounded intermediate-table rollback rules as map(). A release
+ * callback is needed for physical-page reclamation if setup later fails.
  */
 syntra_status_t syntra_arm64_page_table_map_user(
     syntra_arm64_page_table_t *table,
