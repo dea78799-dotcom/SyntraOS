@@ -84,11 +84,11 @@ int main(void)
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
 
     /* Closing Files then choosing it from the launcher creates it again. */
-    move_pointer(&runtime, -87, 94); /* Files close button */
+    move_pointer(&runtime, -82, 105); /* Files close button, below launcher */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(runtime.windows.count == 2U);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
-    move_pointer(&runtime, -13, -94); /* launcher Files tile */
+    move_pointer(&runtime, -18, -105); /* launcher Files tile */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(runtime.windows.count == 3U);
     assert(syntra_gui_window_active(&runtime.windows)->app_type ==
