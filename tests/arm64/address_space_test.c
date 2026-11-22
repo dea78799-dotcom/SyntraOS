@@ -96,7 +96,7 @@ int main(void)
     assert(syntra_page_alloc_owned(
         &first_process_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_address_space_map_user_page(
-        &first, 0x4000000000ULL, first_process_page,
+        &first, 0x40000000ULL, first_process_page,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
         SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(syntra_page_free_owned(
