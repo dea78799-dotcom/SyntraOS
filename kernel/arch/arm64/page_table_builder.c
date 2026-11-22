@@ -201,6 +201,20 @@ syntra_status_t syntra_arm64_page_table_map(
 {
     uint64_t end;
 
+    /*
+     * Validate every descriptor attribute before allocating intermediate
+     * tables. Descriptor constructors repeat these checks at the leaf level,
+     * but doing them here prevents invalid requests from leaving empty tables
+     * behind in an otherwise unchanged address space.
+     */
+    if ((type != SYNTRA_ARM64_MMU_MEMORY_NORMAL &&
+         type != SYNTRA_ARM64_MMU_MEMORY_DEVICE) ||
+        (access != SYNTRA_ARM64_MMU_ACCESS_READ_WRITE &&
+         access != SYNTRA_ARM64_MMU_ACCESS_READ_ONLY) ||
+        (executable != 0 && executable != 1) ||
+        (type == SYNTRA_ARM64_MMU_MEMORY_DEVICE && executable != 0))
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
     if (table == NULL || table->root_physical_address == 0ULL ||
         table->allocate == NULL || table->resolve == NULL ||
         syntra_arm64_mmu_validate_mapping_range(va, pa, size) !=
