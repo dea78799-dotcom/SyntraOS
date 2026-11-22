@@ -203,6 +203,28 @@ static void test_invalid_attributes_do_not_allocate_tables(void)
         &pt, 0x40000000ULL, 0x80000000ULL, 0x1000ULL,
         SYNTRA_ARM64_MMU_MEMORY_NORMAL,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_ERROR);
+
+    /* Verification APIs reject invalid attributes instead of interpreting them. */
+    assert(syntra_arm64_page_table_verify(
+        &pt, 0x40000000ULL, 0x80000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_UNKNOWN,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_page_table_verify(
+        &pt, 0x40000000ULL, 0x80000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        (syntra_arm64_mmu_access_t)99, 0) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_page_table_verify(
+        &pt, 0x40000000ULL, 0x80000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 2) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_page_table_verify(
+        &pt, 0x40000000ULL, 0x80000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_DEVICE,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 1) ==
+        SYNTRA_STATUS_INVALID_ARGUMENT);
 }
 
 static void test_device_mapping_and_invalid_inputs(void)
