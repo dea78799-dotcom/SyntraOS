@@ -1,6 +1,7 @@
 #include "context.h"
 
 #include "../../scheduler/scheduler.h"
+#include "../../process/process.h"
 
 static uint64_t syntra_arm64_entry_address(void (*function)(void *))
 {
@@ -141,9 +142,29 @@ syntra_status_t syntra_arm64_user_context_initialize(
 
 void syntra_arm64_thread_exit(void)
 {
-    (void)scheduler_terminate_current();
+    syntra_thread_t *current = scheduler_get_current();
+    unsigned int process_id = current != NULL &&
+        current->is_user_thread != 0U
+        ? process_get_id_for_thread(current->thread_id) : 0U;
+
+    if (process_id != 0U)
+    {
+        /*
+         * EL0 exit and EL0 fault paths share this trampoline. Terminate the
+         * complete owning process so sibling user threads cannot continue
+         * after the process has exited or faulted.
+         */
+        if (process_terminate_threads(process_id) != SYNTRA_STATUS_OK)
+            (void)scheduler_terminate_current();
+    }
+    else
+    {
+        /* Kernel threads and unowned tasks retain thread-only exit semantics. */
+        (void)scheduler_terminate_current();
+    }
 
 #if defined(__aarch64__)
+    /* The next timer IRQ schedules another context; never resume this frame. */
     for (;;)
     {
         __asm__ volatile("wfe" ::: "memory");

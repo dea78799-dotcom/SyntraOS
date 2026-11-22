@@ -287,6 +287,7 @@ add_executable(process_scheduler_address_space_integration_test
     kernel/memory/memory_region.c
     kernel/scheduler/scheduler.c
     kernel/process/process.c
+    kernel/arch/arm64/context.c
 )
 target_include_directories(process_scheduler_address_space_integration_test PRIVATE
     kernel/arch/arm64

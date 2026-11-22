@@ -7,6 +7,7 @@
 #include <stdio.h>
 
 #include "../../kernel/arch/arm64/address_space.h"
+#include "../../kernel/arch/arm64/context.h"
 #include "../../kernel/memory/memory_region.h"
 #include "../../kernel/memory/page_allocator.h"
 #include "../../kernel/process/process.h"
@@ -261,8 +262,8 @@ int main(void)
     assert(selected->thread_id == 12U);
     assert(process_get(1U)->state == PROCESS_RUNNING);
 
-    /* Process-wide exit terminates every owned thread, not only the caller. */
-    assert(process_terminate_threads(1U) == SYNTRA_STATUS_OK);
+    /* The architecture exit trampoline terminates the complete owning process. */
+    syntra_arm64_thread_exit();
     assert(scheduler_get_current() == NULL);
     assert(scheduler_get_thread(11U)->state == THREAD_TERMINATED);
     assert(scheduler_get_thread(12U)->state == THREAD_TERMINATED);
