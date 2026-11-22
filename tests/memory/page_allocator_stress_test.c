@@ -24,7 +24,9 @@ int main(void)
     assert(syntra_page_allocator_free_count() == STRESS_PAGE_COUNT);
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_get_stats(&stats) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_get_stats(NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(stats.valid == 1);
+    assert(stats.owner_pages[SYNTRA_PAGE_OWNER_NONE] == 0U);
     assert(stats.total_pages == STRESS_PAGE_COUNT);
     assert(stats.free_pages == STRESS_PAGE_COUNT);
     assert(stats.allocated_pages == 0U);
@@ -91,14 +93,21 @@ int main(void)
         }
         assert(syntra_page_free_owned(run, SYNTRA_PAGE_OWNER_PROCESS)
                == SYNTRA_STATUS_PERMISSION_DENIED);
+        assert(syntra_page_get_owner(run, &owner) == SYNTRA_STATUS_OK);
+        assert(owner == SYNTRA_PAGE_OWNER_DRIVER);
         assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
         assert(syntra_page_allocator_get_stats(&stats) == SYNTRA_STATUS_OK);
         assert(stats.owner_pages[SYNTRA_PAGE_OWNER_DRIVER] == 8U);
         assert(stats.allocated_pages == 8U);
         for (unsigned int i = 0U; i < 8U; ++i)
+        {
+            uintptr_t address = run + (uintptr_t)i * SYNTRA_PAGE_SIZE;
             assert(syntra_page_free_owned(
-                run + (uintptr_t)i * SYNTRA_PAGE_SIZE,
-                SYNTRA_PAGE_OWNER_DRIVER) == SYNTRA_STATUS_OK);
+                address, SYNTRA_PAGE_OWNER_DRIVER) == SYNTRA_STATUS_OK);
+            assert(syntra_page_get_owner(address, &owner) == SYNTRA_STATUS_ERROR);
+            assert(syntra_page_free_owned(
+                address, SYNTRA_PAGE_OWNER_DRIVER) == SYNTRA_STATUS_ERROR);
+        }
     }
 
     assert(syntra_page_allocator_free_count() == STRESS_PAGE_COUNT);
