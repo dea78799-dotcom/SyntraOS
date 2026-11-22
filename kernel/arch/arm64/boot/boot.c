@@ -1431,8 +1431,9 @@ static syntra_arm64_address_space_t process_el0_fault_space;
 
 static syntra_status_t syntra_arm64_process_el0_write_fault_test(void)
 {
-    const uint64_t code_va = SYNTRA_ARM64_USER_VA_BASE;
-    const uint64_t stack_va = SYNTRA_ARM64_USER_VA_BASE + 0x2000ULL;
+    /* Use a distinct VA range: terminated scheduler slots retain stack metadata. */
+    const uint64_t code_va = SYNTRA_ARM64_USER_VA_BASE + 0x100000ULL;
+    const uint64_t stack_va = code_va + 0x2000ULL;
     uintptr_t code_page = 0U, stack_page = 0U;
     uintptr_t text_start = (uintptr_t)__user_text_start;
     uintptr_t text_size = (uintptr_t)__user_text_end - text_start;
