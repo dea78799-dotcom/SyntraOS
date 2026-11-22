@@ -15,6 +15,18 @@
 typedef uint64_t *(*syntra_arm64_address_space_resolve_fn)(
     uint64_t physical_address, void *context);
 
+#if defined(SYNTRA_ARM64_ADDRESS_SPACE_TESTING)
+typedef uint64_t (*syntra_arm64_test_read_ttbr0_fn)(void *context);
+typedef syntra_status_t (*syntra_arm64_test_write_ttbr0_fn)(
+    uint64_t root_physical_address, void *context);
+
+/* Test-only MMU backend; absent from production builds. */
+void syntra_arm64_address_space_test_set_mmu_hooks(
+    syntra_arm64_test_read_ttbr0_fn read_ttbr0,
+    syntra_arm64_test_write_ttbr0_fn write_ttbr0,
+    void *context);
+#endif
+
 typedef struct
 {
     uint64_t virtual_address;
