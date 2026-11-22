@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#include "../arch/irq.h"
+
 typedef struct
 {
     uintptr_t base;
@@ -49,21 +51,25 @@ syntra_status_t syntra_stack_alloc(
     if (slot == SYNTRA_STACK_ALLOCATOR_MAX_STACKS)
         return SYNTRA_STATUS_OUT_OF_MEMORY;
 
-    status = syntra_page_alloc_contiguous_owned(
-        pages, &base, SYNTRA_PAGE_OWNER_KERNEL);
-    if (status != SYNTRA_STATUS_OK)
-        return status;
+    {
+        syntra_irq_state_t irq_state = syntra_irq_save();
+        status = syntra_page_alloc_contiguous_owned(
+            pages, &base, SYNTRA_PAGE_OWNER_KERNEL);
+        if (status == SYNTRA_STATUS_OK)
+        {
+            stack_records[slot].base = base;
+            stack_records[slot].size = actual_size;
+            stack_records[slot].pages = pages;
+            stack_records[slot].live = 1U;
+            ++live_count;
 
-    stack_records[slot].base = base;
-    stack_records[slot].size = actual_size;
-    stack_records[slot].pages = pages;
-    stack_records[slot].live = 1U;
-    ++live_count;
-
-    allocation->physical_base = base;
-    allocation->size = actual_size;
-    allocation->page_count = pages;
-    return SYNTRA_STATUS_OK;
+            allocation->physical_base = base;
+            allocation->size = actual_size;
+            allocation->page_count = pages;
+        }
+        syntra_irq_restore(irq_state);
+    }
+    return status;
 }
 
 syntra_status_t syntra_stack_free(
@@ -80,35 +86,48 @@ syntra_status_t syntra_stack_free(
         allocation->physical_base > UINTPTR_MAX - allocation->size)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
-    record_index = stack_find_record(allocation->physical_base,
-        allocation->size, allocation->page_count);
-    if (record_index < 0)
-        return SYNTRA_STATUS_INVALID_ARGUMENT;
-
-    /* Preflight every page before mutating allocator state. */
-    for (size_t i = 0U; i < allocation->page_count; ++i)
     {
-        uintptr_t address = allocation->physical_base +
-            i * SYNTRA_PAGE_SIZE;
-        if (syntra_page_get_owner(address, &owner) != SYNTRA_STATUS_OK ||
-            owner != SYNTRA_PAGE_OWNER_KERNEL)
-            return SYNTRA_STATUS_ERROR;
-    }
+        syntra_irq_state_t irq_state = syntra_irq_save();
+        record_index = stack_find_record(allocation->physical_base,
+            allocation->size, allocation->page_count);
+        if (record_index < 0)
+        {
+            syntra_irq_restore(irq_state);
+            return SYNTRA_STATUS_INVALID_ARGUMENT;
+        }
 
-    for (size_t i = 0U; i < allocation->page_count; ++i)
-    {
-        syntra_status_t status = syntra_page_free_owned(
-            allocation->physical_base + i * SYNTRA_PAGE_SIZE,
-            SYNTRA_PAGE_OWNER_KERNEL);
-        if (status != SYNTRA_STATUS_OK)
-            return status;
-    }
+        /* Preflight every page before mutating allocator state. */
+        for (size_t i = 0U; i < allocation->page_count; ++i)
+        {
+            uintptr_t address = allocation->physical_base +
+                i * SYNTRA_PAGE_SIZE;
+            if (syntra_page_get_owner(address, &owner) != SYNTRA_STATUS_OK ||
+                owner != SYNTRA_PAGE_OWNER_KERNEL)
+            {
+                syntra_irq_restore(irq_state);
+                return SYNTRA_STATUS_ERROR;
+            }
+        }
 
-    stack_records[(size_t)record_index].base = 0U;
-    stack_records[(size_t)record_index].size = 0U;
-    stack_records[(size_t)record_index].pages = 0U;
-    stack_records[(size_t)record_index].live = 0U;
-    --live_count;
+        for (size_t i = 0U; i < allocation->page_count; ++i)
+        {
+            syntra_status_t status = syntra_page_free_owned(
+                allocation->physical_base + i * SYNTRA_PAGE_SIZE,
+                SYNTRA_PAGE_OWNER_KERNEL);
+            if (status != SYNTRA_STATUS_OK)
+            {
+                syntra_irq_restore(irq_state);
+                return status;
+            }
+        }
+
+        stack_records[(size_t)record_index].base = 0U;
+        stack_records[(size_t)record_index].size = 0U;
+        stack_records[(size_t)record_index].pages = 0U;
+        stack_records[(size_t)record_index].live = 0U;
+        --live_count;
+        syntra_irq_restore(irq_state);
+    }
     return SYNTRA_STATUS_OK;
 }
 
