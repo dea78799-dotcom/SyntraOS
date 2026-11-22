@@ -305,12 +305,17 @@ syntra_status_t scheduler_rollback_context_switch(
 
     if (!scheduler_initialized)
         return SYNTRA_STATUS_ERROR;
-    if (previous_thread_id == 0U)
-        return SYNTRA_STATUS_INVALID_ARGUMENT;
-
-    previous_slot = scheduler_find_slot(previous_thread_id);
-    if (previous_slot < 0)
-        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    /*
+     * A zero previous ID means the interrupted thread had already exited
+     * and the scheduler has no current slot (the exception frame is an idle
+     * continuation, not a live scheduler thread).
+     */
+    if (previous_thread_id != 0U)
+    {
+        previous_slot = scheduler_find_slot(previous_thread_id);
+        if (previous_slot < 0)
+            return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
 
     if (selected_thread_id != 0U)
     {
@@ -324,14 +329,22 @@ syntra_status_t scheduler_rollback_context_switch(
         return SYNTRA_STATUS_PERMISSION_DENIED;
     }
 
-    if (threads[(unsigned int)previous_slot].state == THREAD_TERMINATED)
+    if (previous_slot >= 0 &&
+        threads[(unsigned int)previous_slot].state == THREAD_TERMINATED)
         return SYNTRA_STATUS_PERMISSION_DENIED;
 
     if (selected_slot >= 0)
         threads[(unsigned int)selected_slot].state = THREAD_READY;
 
-    threads[(unsigned int)previous_slot].state = THREAD_RUNNING;
-    current_slot = previous_slot;
+    if (previous_slot >= 0)
+    {
+        threads[(unsigned int)previous_slot].state = THREAD_RUNNING;
+        current_slot = previous_slot;
+    }
+    else
+    {
+        current_slot = -1;
+    }
 
     /*
      * Retry the failed selection first on the next scheduling attempt.
@@ -339,7 +352,7 @@ syntra_status_t scheduler_rollback_context_switch(
      */
     if (selected_slot >= 0)
         next_slot = (unsigned int)selected_slot;
-    else
+    else if (previous_slot >= 0)
         next_slot = ((unsigned int)previous_slot + 1U) % thread_count;
 
     return scheduler_validate();
