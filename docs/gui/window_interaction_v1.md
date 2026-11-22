@@ -32,3 +32,10 @@ Call `syntra_gui_window_interaction_process()` once after updating the normalize
 ## Source and licensing
 
 The interaction logic is original SyntraOS C code using the project's own window manager and normalized input API. It does not import a third-party GUI framework or vendor desktop source.
+
+
+## GUI v5 persistent runtime and IRQ event FIFO
+
+The VirtIO input IRQ handler copies accepted normalized events into a bounded 64-event single-producer/single-consumer FIFO. The consumer uses `syntra_virtio_mmio_pop_input_event()` in normal context; `available` distinguishes an empty queue from errors. Queue overflow drops newest events and increments `software_event_dropped`. The IRQ still updates the shared input snapshot for diagnostics, but the ordered FIFO preserves transient press/release events when main-context polling is delayed.
+
+`gui_runtime` owns input state, the persistent v5 window manager, and pointer-interaction state. It processes one normalized event at a time outside IRQ context and renders desktop plus persistent windows. A host integration test exercises drag, close, and rendering. This runtime is not yet called by the ARM64 boot/main loop; live IRQ-to-runtime-to-framebuffer wiring and QEMU validation remain pending.
