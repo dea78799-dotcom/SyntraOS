@@ -13,6 +13,14 @@
 
 static uint64_t table_storage[TEST_RAM_PAGES][SYNTRA_ARM64_MMU_TABLE_ENTRIES];
 
+static uint64_t *resolve_unmapped_page(
+    uint64_t physical_address, void *context)
+{
+    (void)physical_address;
+    (void)context;
+    return NULL;
+}
+
 static uint64_t *resolve_page(uint64_t physical_address, void *context)
 {
     (void)context;
@@ -59,10 +67,12 @@ static void assert_owner_count(
 int main(void)
 {
     syntra_arm64_address_space_t space = {0};
+    syntra_arm64_address_space_t failed_space = {0};
     syntra_arm64_page_table_t kernel_table = {0};
     syntra_arm64_mmu_translation_t translation;
     syntra_page_allocator_stats_t before, after_unmap, after;
     uintptr_t process_page_a, process_page_b, kernel_data_page;
+    uintptr_t failure_process_page, filler_pages[10];
     uint64_t kernel_root, kernel_l2, kernel_l3;
     uint64_t *kernel_root_entries, *kernel_l2_entries;
     size_t initial_free;
@@ -76,6 +86,16 @@ int main(void)
     assert(syntra_page_allocator_get_stats(&before) == SYNTRA_STATUS_OK);
     initial_free = before.free_pages;
     assert(initial_free == TEST_RAM_PAGES);
+
+    /* A resolver failure during root creation must return its page to the pool. */
+    assert(syntra_arm64_address_space_create(
+        &failed_space, 99U, resolve_unmapped_page, NULL) ==
+        SYNTRA_STATUS_ERROR);
+    assert(failed_space.initialized == 0U);
+    assert(syntra_page_allocator_get_stats(&after) == SYNTRA_STATUS_OK);
+    assert(after.free_pages == initial_free);
+    assert(after.allocated_pages == 0U);
+    assert(after.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] == 0U);
 
     /*
      * Create a real kernel subtree. The address space must borrow this root
@@ -175,6 +195,40 @@ int main(void)
     assert(after_unmap.owner_pages[SYNTRA_PAGE_OWNER_PROCESS] == 0U);
     /* Kernel root+L2+L3 and private address-space root remain allocated. */
     assert(after_unmap.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] == 4U);
+
+    /*
+     * Leave exactly one free page: the map operation can allocate its L2
+     * table, but cannot allocate the following L3 table. It must roll back L2.
+     */
+    assert(syntra_page_alloc_owned(
+        &failure_process_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+    for (size_t i = 0U; i < 10U; ++i)
+        assert(syntra_page_alloc_owned(
+            &filler_pages[i], SYNTRA_PAGE_OWNER_DRIVER) == SYNTRA_STATUS_OK);
+
+    assert(syntra_page_allocator_get_stats(&after) == SYNTRA_STATUS_OK);
+    assert(after.free_pages == 1U);
+    assert(syntra_arm64_address_space_map_user_page(
+        &space, TEST_USER_VA + 0x2000ULL,
+        (uint64_t)failure_process_page,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
+        SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(space.mapping_count == 0U);
+    assert(syntra_arm64_address_space_validate(&space) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_get_stats(&after) == SYNTRA_STATUS_OK);
+    assert(after.free_pages == 1U);
+    assert(after.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] == 4U);
+    assert(after.owner_pages[SYNTRA_PAGE_OWNER_PROCESS] == 1U);
+    assert(after.owner_pages[SYNTRA_PAGE_OWNER_DRIVER] == 10U);
+
+    for (size_t i = 0U; i < 10U; ++i)
+        assert(syntra_page_free_owned(
+            filler_pages[i], SYNTRA_PAGE_OWNER_DRIVER) == SYNTRA_STATUS_OK);
+    assert(syntra_page_free_owned(
+        failure_process_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_get_stats(&after) == SYNTRA_STATUS_OK);
+    assert(after.free_pages == after_unmap.free_pages);
+    assert(after.allocated_pages == after_unmap.allocated_pages);
 
     /* Destroy releases the private root, but preserves the borrowed subtree. */
     assert(syntra_arm64_address_space_destroy(&space) == SYNTRA_STATUS_OK);
