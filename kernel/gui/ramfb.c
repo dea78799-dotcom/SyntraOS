@@ -343,6 +343,26 @@ syntra_status_t syntra_ramfb_init(uintptr_t fw_cfg_base, size_t fw_cfg_size)
     return status;
 }
 
+syntra_status_t syntra_ramfb_refresh(void)
+{
+    syntra_framebuffer_t framebuffer;
+    syntra_status_t status;
+
+    if (!ramfb_gui_runtime_ready)
+        return SYNTRA_STATUS_ERROR;
+
+    framebuffer.pixels = ramfb_pixels;
+    framebuffer.width = SYNTRA_RAMFB_WIDTH;
+    framebuffer.height = SYNTRA_RAMFB_HEIGHT;
+    framebuffer.stride_pixels = SYNTRA_RAMFB_WIDTH;
+
+    status = syntra_gui_runtime_render(&ramfb_gui_runtime, &framebuffer);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_gui_render_uptime_panel(&framebuffer, ramfb_uptime_seconds());
+    if (status == SYNTRA_STATUS_OK) syntra_dma_barrier();
+    return status;
+}
+
 /*
  * Drain IRQ-produced VirtIO events in normal context. Rendering is performed
  * once after the batch, never from the interrupt handler. The boot idle loop
@@ -375,14 +395,6 @@ syntra_status_t syntra_ramfb_process_input_events(
 
     if (!processed) return SYNTRA_STATUS_OK;
 
-    framebuffer.pixels = ramfb_pixels;
-    framebuffer.width = SYNTRA_RAMFB_WIDTH;
-    framebuffer.height = SYNTRA_RAMFB_HEIGHT;
-    framebuffer.stride_pixels = SYNTRA_RAMFB_WIDTH;
-
-    status = syntra_gui_runtime_render(&ramfb_gui_runtime, &framebuffer);
-    if (status == SYNTRA_STATUS_OK)
-        status = syntra_gui_render_uptime_panel(&framebuffer, ramfb_uptime_seconds());
-    if (status == SYNTRA_STATUS_OK) syntra_dma_barrier();
-    return status;
+    (void)framebuffer;
+    return syntra_ramfb_refresh();
 }
