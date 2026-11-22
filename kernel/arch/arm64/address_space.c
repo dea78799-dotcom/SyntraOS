@@ -7,6 +7,28 @@
 static syntra_arm64_address_space_t *registered_spaces[
     SYNTRA_ARM64_ADDRESS_SPACE_MAX_INSTANCES];
 
+/* Single-core V1 active-root tracking; no SMP coordination is provided. */
+static uint64_t registered_kernel_root_physical_address;
+static uint64_t active_root_physical_address;
+static syntra_arm64_address_space_t *active_address_space;
+
+static syntra_status_t write_ttbr0_and_flush(uint64_t root_physical_address)
+{
+#if defined(__aarch64__)
+    __asm__ volatile("dsb ishst" ::: "memory");
+    __asm__ volatile("msr ttbr0_el1, %0" ::
+        "r"(root_physical_address) : "memory");
+    __asm__ volatile("isb" ::: "memory");
+    __asm__ volatile("tlbi vmalle1" ::: "memory");
+    __asm__ volatile("dsb ish" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+    return SYNTRA_STATUS_OK;
+#else
+    (void)root_physical_address;
+    return SYNTRA_STATUS_NOT_IMPLEMENTED;
+#endif
+}
+
 static int address_space_registry_slot(
     const syntra_arm64_address_space_t *space, size_t *free_slot)
 {
@@ -131,6 +153,7 @@ syntra_status_t syntra_arm64_address_space_create(
     space->resolve = resolve;
     space->resolve_context = resolve_context;
     space->mapping_count = 0U;
+    space->kernel_root_physical_address = 0ULL;
     space->page_table.root_physical_address = 0ULL;
     space->page_table.allocate = allocate_page_table_page;
     space->page_table.resolve = resolve_page_table_page;
@@ -231,6 +254,7 @@ syntra_status_t syntra_arm64_address_space_inherit_kernel_mappings(
         }
     }
 
+    space->kernel_root_physical_address = kernel_root_physical_address;
     space->kernel_mappings_inherited = 1U;
     return SYNTRA_STATUS_OK;
 }
@@ -547,6 +571,91 @@ static syntra_status_t release_table_tree(
         SYNTRA_PAGE_OWNER_PAGE_TABLE);
 }
 
+syntra_status_t syntra_arm64_address_space_register_kernel_root(
+    uint64_t kernel_root_physical_address)
+{
+    if (kernel_root_physical_address == 0ULL ||
+        (kernel_root_physical_address &
+            (SYNTRA_ARM64_MMU_PAGE_SIZE - 1ULL)) != 0ULL ||
+        page_owner_is(kernel_root_physical_address,
+            SYNTRA_PAGE_OWNER_PAGE_TABLE) != SYNTRA_STATUS_OK)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+#if defined(__aarch64__)
+    {
+        uint64_t current_ttbr0;
+        __asm__ volatile("mrs %0, ttbr0_el1" : "=r"(current_ttbr0));
+        if ((current_ttbr0 & SYNTRA_ARM64_MMU_PA_MASK) !=
+            kernel_root_physical_address)
+            return SYNTRA_STATUS_ERROR;
+    }
+#else
+    return SYNTRA_STATUS_NOT_IMPLEMENTED;
+#endif
+
+    if (registered_kernel_root_physical_address != 0ULL &&
+        registered_kernel_root_physical_address != kernel_root_physical_address)
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+
+    registered_kernel_root_physical_address = kernel_root_physical_address;
+    active_root_physical_address = kernel_root_physical_address;
+    active_address_space = NULL;
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t syntra_arm64_address_space_activate(
+    syntra_arm64_address_space_t *space)
+{
+    syntra_status_t status;
+
+    if (space == NULL || !space->initialized ||
+        !address_space_is_registered(space) ||
+        space->kernel_mappings_inherited == 0U ||
+        registered_kernel_root_physical_address == 0ULL ||
+        space->kernel_root_physical_address !=
+            registered_kernel_root_physical_address)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    status = syntra_arm64_address_space_validate(space);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    if (active_address_space == space &&
+        active_root_physical_address == space->page_table.root_physical_address)
+        return SYNTRA_STATUS_OK;
+
+    status = write_ttbr0_and_flush(space->page_table.root_physical_address);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    active_root_physical_address = space->page_table.root_physical_address;
+    active_address_space = space;
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t syntra_arm64_address_space_activate_kernel_root(void)
+{
+    syntra_status_t status;
+
+    if (registered_kernel_root_physical_address == 0ULL)
+        return SYNTRA_STATUS_ERROR;
+
+    if (active_address_space == NULL &&
+        active_root_physical_address ==
+            registered_kernel_root_physical_address)
+        return SYNTRA_STATUS_OK;
+
+    status = write_ttbr0_and_flush(
+        registered_kernel_root_physical_address);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    active_root_physical_address =
+        registered_kernel_root_physical_address;
+    active_address_space = NULL;
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_arm64_address_space_destroy(
     syntra_arm64_address_space_t *space)
 {
@@ -555,6 +664,9 @@ syntra_status_t syntra_arm64_address_space_destroy(
 
     if (space == NULL || !space->initialized)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
+    if (active_address_space == space ||
+        active_root_physical_address == space->page_table.root_physical_address)
+        return SYNTRA_STATUS_PERMISSION_DENIED;
 
     root = space->page_table.root_physical_address;
     status = validate_table_tree(space, root, 1U);
@@ -588,6 +700,7 @@ syntra_status_t syntra_arm64_address_space_destroy(
     space->page_table.root_physical_address = 0ULL;
     space->mapping_count = 0U;
     space->kernel_mappings_inherited = 0U;
+    space->kernel_root_physical_address = 0ULL;
     for (size_t i = 0U; i < SYNTRA_ARM64_ADDRESS_SPACE_ROOT_BITMAP_WORDS; ++i)
         space->borrowed_root_entries[i] = 0ULL;
     address_space_unregister(space);

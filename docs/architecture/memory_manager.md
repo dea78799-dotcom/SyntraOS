@@ -81,9 +81,10 @@ a general-purpose kernel heap or per-process allocation accounting.
 - Address-space isolation tests currently use the software page-table walker.
   Each process root can inherit the kernel's low-half L1 descriptors as borrowed
   entries; borrowed subtrees are preserved when the process root is destroyed.
-  The QEMU boot path audits inheritance and destruction on an inactive root.
-  These roots are still not safe to load into TTBR0_EL1: no scheduler-driven
-  activation, TLB invalidation, or active-root lifecycle protocol exists.
+  The QEMU boot path switches TTBR0_EL1 to an inherited root, verifies the
+  register, rejects destruction while active, and switches back to the kernel
+  root. V1 performs a local full EL1/EL0 TLB invalidation on each switch.
+  Scheduler-driven per-thread activation and SMP shootdown remain unimplemented.
 - Host integration tests create two independent roots, map the same virtual
   address to different physical pages, verify distinct translations and
   read-only/read-write permissions, then validate complete page reclamation.
@@ -110,8 +111,9 @@ it is not evidence of physical-device support.
 - Shared-page reference counting, copy-on-write, demand paging, swapping, and
   memory-mapped file support are not implemented. The V1 registry and its
   single-core ownership checks are not SMP-safe.
-- Address-space destruction requires the caller to ensure the root is inactive;
-  V1 has no SMP coordination or TLB shootdown mechanism.
+- Address-space destruction rejects the locally tracked active root. Active-root
+  tracking and TLB invalidation are single-core V1 mechanisms; they do not
+  coordinate other CPUs or provide SMP TLB shootdown.
 - Full SMP-safe allocator synchronization and per-page reference tracking are
   not implemented.
 - x86_64 and RISC-V memory backends are not implemented.
@@ -125,9 +127,8 @@ it is not evidence of physical-device support.
    page tables, processes, or drivers.
 3. Add reference-counted shared-page support if shared mappings are required;
    until then, retain the V1 exclusive mapping rule.
-4. Integrate the Process Manager's owned address-space pointer with the ARM64
-   scheduler context-switch path; switch TTBR0_EL1 only after active-root
-   lifetime rules and TLB invalidation are implemented.
+4. Integrate per-thread Process Manager address-space selection with the ARM64
+   scheduler context-switch path, then validate EL0 execution under separate roots.
 5. Add SMP-safe synchronization and TLB shootdown before multi-core execution.
 6. Expand QEMU tests to execute in separate EL0 address spaces and verify
    permission faults, not only software-walker isolation.

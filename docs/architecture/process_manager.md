@@ -41,12 +41,12 @@ scheduler thread to be TERMINATED before it destroys the address space. The
 address-space destructor releases process-owned pages and private page-table
 pages while preserving borrowed kernel page-table subtrees.
 
-Important limitation: address-space destruction requires an inactive root.
-The current kernel does not switch TTBR0_EL1 to process roots, so the current
-integration tests exercise only inactive roots. Before TTBR0 switching is
-implemented, the scheduler/architecture layer must guarantee that a process
-root is no longer active on any CPU before teardown, and must perform the
-required TLB invalidation.
+Address-space activation is now available at the ARM64 architecture layer.
+It switches TTBR0_EL1, performs a local full EL1/EL0 TLB invalidation, tracks the
+active root, and rejects destruction of that root. QEMU boot tests exercise a
+switch to an inherited process root and back to the kernel root. The Process
+Manager is not yet wired into scheduler selection, and the active-root tracker
+is single-core only; SMP coordination and remote TLB shootdown remain absent.
 
 ## 4. Not yet implemented
 
@@ -63,13 +63,13 @@ schedule a thread, switch address spaces, or reclaim scheduler stacks.
 
 ## 5. Required integration sequence
 
-1. Add active-address-space tracking to the architecture/scheduler boundary.
-2. Switch TTBR0_EL1 only when the next root contains the required kernel map.
-3. Perform architecture-correct TLB invalidation and define inactive-root rules.
-4. Add user-process construction with code/data/stack mappings.
-5. Add QEMU tests that execute separate EL0 address spaces and verify permission
+1. Wire per-thread Process Manager address-space selection into the exception /
+   scheduler context-switch return path.
+2. Add user-process construction with code/data/stack mappings.
+3. Add QEMU tests that execute separate EL0 address spaces and verify permission
    faults and cross-process isolation.
-6. Add process resource ownership, IPC capabilities, and failure rollback.
+4. Add SMP-safe active-root tracking and remote TLB shootdown before SMP use.
+5. Add process resource ownership, IPC capabilities, and failure rollback.
 
 ## 6. Correctness requirements
 

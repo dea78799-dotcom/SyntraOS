@@ -36,6 +36,7 @@ typedef struct syntra_arm64_address_space
     void *resolve_context;
     size_t mapping_count;
     uint8_t kernel_mappings_inherited;
+    uint64_t kernel_root_physical_address;
     uint64_t borrowed_root_entries[
         SYNTRA_ARM64_ADDRESS_SPACE_ROOT_BITMAP_WORDS];
     syntra_arm64_address_space_mapping_t mappings[
@@ -58,6 +59,18 @@ syntra_status_t syntra_arm64_address_space_create(
 syntra_status_t syntra_arm64_address_space_inherit_kernel_mappings(
     syntra_arm64_address_space_t *space,
     uint64_t kernel_root_physical_address);
+
+/*
+ * Register the already-active kernel root after MMU enable. V1 supports one
+ * CPU and verifies TTBR0_EL1 on ARM64 hardware.
+ */
+syntra_status_t syntra_arm64_address_space_register_kernel_root(
+    uint64_t kernel_root_physical_address);
+
+/* Activate an inherited process root or return to the registered kernel root. */
+syntra_status_t syntra_arm64_address_space_activate(
+    syntra_arm64_address_space_t *space);
+syntra_status_t syntra_arm64_address_space_activate_kernel_root(void);
 
 /* Maps one owned PROCESS page into the reserved upper TTBR0 user range. */
 syntra_status_t syntra_arm64_address_space_map_user_page(
@@ -83,9 +96,9 @@ syntra_status_t syntra_arm64_address_space_validate(
     syntra_arm64_address_space_t *space);
 
 /*
- * Destroys this software address space and releases its mapped PROCESS pages
- * and PAGE_TABLE pages. Caller must first ensure this root is not active on
- * any CPU. V1 does not provide SMP coordination or hardware TLB shootdown.
+ * Destroys this address space and releases mapped PROCESS pages and private
+ * PAGE_TABLE pages. Destruction rejects the locally active root. V1 supports
+ * one CPU and does not provide remote TLB shootdown.
  */
 syntra_status_t syntra_arm64_address_space_destroy(
     syntra_arm64_address_space_t *space);

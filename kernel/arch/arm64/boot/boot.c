@@ -1088,6 +1088,14 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
 
     syntra_active_page_table = page_table;
 
+    status = syntra_arm64_address_space_register_kernel_root(
+        page_table.root_physical_address);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("Active kernel root registration: FAIL\\n");
+        return status;
+    }
+
     /* Re-walk every planned range after enabling translation. */
     for (index = 0U; index < plan.count; ++index)
     {
@@ -1111,12 +1119,15 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
     syntra_uart_puts("MMU post-activation mapping verification: PASS\n");
 
     /*
-     * Validate that an inactive user root can inherit the active kernel map.
-     * This audits shared descriptors without loading the new root into TTBR0.
+     * Verify inherited kernel mappings, activate a process root, prove that
+     * an active root cannot be destroyed, then switch safely back to kernel.
      */
     {
         static syntra_arm64_address_space_t audit_space;
         syntra_arm64_mmu_translation_t inherited_translation;
+        syntra_arm64_mmu_registers_t switched_registers;
+        const uint64_t kernel_root =
+            syntra_active_page_table.root_physical_address;
         const syntra_arm64_mmu_mapping_t *kernel_mapping = &plan.mappings[0];
 
         status = syntra_arm64_address_space_create(
@@ -1126,7 +1137,7 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
             return status;
 
         status = syntra_arm64_address_space_inherit_kernel_mappings(
-            &audit_space, syntra_active_page_table.root_physical_address);
+            &audit_space, kernel_root);
         if (status == SYNTRA_STATUS_OK)
             status = syntra_arm64_address_space_validate(&audit_space);
         if (status == SYNTRA_STATUS_OK)
@@ -1139,10 +1150,34 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
              inherited_translation.user_read != 0U))
             status = SYNTRA_STATUS_ERROR;
 
+        if (status == SYNTRA_STATUS_OK)
+            status = syntra_arm64_address_space_activate(&audit_space);
+        if (status == SYNTRA_STATUS_OK)
+            status = syntra_arm64_mmu_read_registers(&switched_registers);
+        if (status == SYNTRA_STATUS_OK &&
+            (switched_registers.ttbr0_el1 & SYNTRA_ARM64_MMU_PA_MASK) !=
+                audit_space.page_table.root_physical_address)
+            status = SYNTRA_STATUS_ERROR;
+        if (status == SYNTRA_STATUS_OK &&
+            syntra_arm64_address_space_destroy(&audit_space) !=
+                SYNTRA_STATUS_PERMISSION_DENIED)
+            status = SYNTRA_STATUS_ERROR;
+
+        if (status == SYNTRA_STATUS_OK)
+            status = syntra_arm64_address_space_activate_kernel_root();
+        if (status == SYNTRA_STATUS_OK)
+            status = syntra_arm64_mmu_read_registers(&switched_registers);
+        if (status == SYNTRA_STATUS_OK &&
+            (switched_registers.ttbr0_el1 & SYNTRA_ARM64_MMU_PA_MASK) !=
+                kernel_root)
+            status = SYNTRA_STATUS_ERROR;
+
         if (status != SYNTRA_STATUS_OK)
         {
-            (void)syntra_arm64_address_space_destroy(&audit_space);
-            syntra_uart_puts("Kernel mapping inheritance audit: FAIL\n");
+            (void)syntra_arm64_address_space_activate_kernel_root();
+            if (audit_space.initialized)
+                (void)syntra_arm64_address_space_destroy(&audit_space);
+            syntra_uart_puts("Kernel address-space switch audit: FAIL\\n");
             return status;
         }
 
@@ -1150,7 +1185,7 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
         if (status != SYNTRA_STATUS_OK)
             return status;
         syntra_uart_puts(
-            "Kernel mapping inheritance audit: PASS (inactive root)\n");
+            "Kernel address-space TTBR0 switch audit: PASS (inactive root)\\n");
     }
 
     /* Exercise the synchronous exception vector with translation enabled. */
