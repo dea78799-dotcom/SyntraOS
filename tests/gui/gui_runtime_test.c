@@ -223,7 +223,8 @@ int main(void)
     /* Eight 30px slots with 4px gaps: x=40 through x=307. */
     assert(pixels[210U * 320U + 40U] == 0xFF1A2948U);
     assert(pixels[210U * 320U + 278U] == 0xFF54D6E8U);
-    assert(pixels[210U * 320U + 279U] == 0xFF25466FU);
+    assert(pixels[210U * 320U + 279U] == 0xFF54D6E8U);
+    assert(pixels[210U * 320U + 280U] == 0xFF25466FU);
     assert(pixels[210U * 320U + 307U] == 0xFF25466FU);
     assert(pixels[210U * 320U + 308U] != 0xFF25466FU);
 
