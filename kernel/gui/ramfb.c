@@ -64,6 +64,19 @@ static uint64_t ramfb_read_counter_frequency(void)
 #endif
 }
 
+static uint64_t ramfb_uptime_milliseconds(void)
+{
+    uint64_t now;
+    uint64_t elapsed;
+    if (ramfb_counter_frequency == 0U) return 0U;
+    now = ramfb_read_counter();
+    if (now < ramfb_boot_counter) return 0U;
+    elapsed = now - ramfb_boot_counter;
+    return (elapsed / ramfb_counter_frequency) * 1000ULL +
+           ((elapsed % ramfb_counter_frequency) * 1000ULL) /
+               ramfb_counter_frequency;
+}
+
 static uint64_t ramfb_uptime_seconds(void)
 {
     uint64_t now;
@@ -324,6 +337,9 @@ syntra_status_t syntra_ramfb_init(uintptr_t fw_cfg_base, size_t fw_cfg_size)
     status = syntra_gui_runtime_init(
         &ramfb_gui_runtime, SYNTRA_RAMFB_WIDTH, SYNTRA_RAMFB_HEIGHT);
     if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_gui_runtime_tick(
+        &ramfb_gui_runtime, ramfb_uptime_milliseconds());
+    if (status != SYNTRA_STATUS_OK) return status;
     status = syntra_gui_runtime_render(&ramfb_gui_runtime, &framebuffer);
     if (status != SYNTRA_STATUS_OK) return status;
     status = syntra_gui_render_uptime_panel(&framebuffer, ramfb_uptime_seconds());
@@ -387,7 +403,8 @@ syntra_status_t syntra_ramfb_process_input_events(
         if (status != SYNTRA_STATUS_OK) return status;
         if (!available) break;
 
-        status = syntra_gui_runtime_process_event(&ramfb_gui_runtime, &event);
+        status = syntra_gui_runtime_process_event_at(
+            &ramfb_gui_runtime, &event, ramfb_uptime_milliseconds());
         if (status != SYNTRA_STATUS_OK) return status;
         processed = 1;
     }
