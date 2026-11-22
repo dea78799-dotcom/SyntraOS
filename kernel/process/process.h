@@ -71,6 +71,8 @@ unsigned int process_get_thread_id(
 syntra_status_t process_refresh_state(unsigned int process_id);
 /* Recompute every process state after a scheduler context switch. */
 syntra_status_t process_refresh_all_states(void);
+/* Destroy address spaces belonging to processes whose threads all exited. */
+syntra_status_t process_reap_terminated(void);
 
 /*
  * With attached threads, state changes are accepted only when they match
