@@ -44,14 +44,14 @@ pages while preserving borrowed kernel page-table subtrees.
 Address-space activation is now available at the ARM64 architecture layer.
 It switches TTBR0_EL1, performs a local full EL1/EL0 TLB invalidation, tracks the
 active root, and rejects destruction of that root. QEMU boot tests exercise a
-switch to an inherited process root and back to the kernel root. The ARM64 exception/scheduler return bridge now selects the next thread's
-address space, or restores the kernel root for kernel threads. The active-root
+switch to an inherited process root and back to the kernel root. The ARM64 exception/scheduler return bridge selects the next thread's
+address space, or restores the kernel root for kernel threads. User threads
+cannot be attached to a process without an address space. The active-root
 tracker is single-core only; SMP coordination and remote TLB shootdown remain absent.
 
 ## 4. Not yet implemented
 
-- Scheduler-driven TTBR0_EL1 switching and active address-space tracking.
-- TLB invalidation/shootdown and SMP-safe lifecycle synchronization.
+- SMP-safe active-root tracking, remote TLB shootdown, and lifecycle synchronization.
 - Creation of user processes with mapped code, data, and user stacks.
 - Per-process resource handles, automatic IPC cleanup, and capability policy.
 - Exit status, parent/child relationships, wait semantics, and transactional

@@ -298,8 +298,16 @@ static int scheduler_context_switching_active;
 
 static syntra_status_t activate_thread_address_space(unsigned int thread_id)
 {
+    syntra_thread_t *thread = scheduler_get_thread(thread_id);
     syntra_arm64_address_space_t *space =
         process_get_address_space_for_thread(thread_id);
+
+    if (thread == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    /* Never enter EL0 without a process-owned translation root. */
+    if (thread->is_user_thread != 0U && space == NULL)
+        return SYNTRA_STATUS_PERMISSION_DENIED;
 
     if (space != NULL)
         return syntra_arm64_address_space_activate(space);

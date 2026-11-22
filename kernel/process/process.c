@@ -151,6 +151,9 @@ syntra_status_t process_attach_thread(
     thread = scheduler_get_thread(thread_id);
     if (thread == NULL)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
+    /* EL0 threads must never be attached to a process without an address space. */
+    if (thread->is_user_thread != 0U && process->address_space == NULL)
+        return SYNTRA_STATUS_PERMISSION_DENIED;
 
     for (unsigned int p = 0U; p < process_count; ++p)
     {
@@ -302,8 +305,12 @@ syntra_status_t process_validate(void)
 
         for (unsigned int i = 0U; i < process->thread_count; ++i)
         {
-            if (process->thread_ids[i] == 0U ||
-                scheduler_get_thread(process->thread_ids[i]) == NULL)
+            syntra_thread_t *thread =
+                scheduler_get_thread(process->thread_ids[i]);
+            if (process->thread_ids[i] == 0U || thread == NULL)
+                return SYNTRA_STATUS_ERROR;
+            if (thread->is_user_thread != 0U &&
+                process->address_space == NULL)
                 return SYNTRA_STATUS_ERROR;
 
             for (unsigned int j = i + 1U; j < process->thread_count; ++j)

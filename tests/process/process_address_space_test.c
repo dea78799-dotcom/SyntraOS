@@ -13,6 +13,9 @@
 
 static uint64_t table_storage[TEST_RAM_PAGES][SYNTRA_ARM64_MMU_TABLE_ENTRIES];
 static _Alignas(16) uint8_t process_thread_stack[2048];
+static _Alignas(16) uint8_t user_thread_kernel_stack[2048];
+static _Alignas(16) uint8_t user_thread_user_stack[2048];
+static _Alignas(16) uint8_t user_thread_context[16];
 
 static void dummy_thread(void *argument)
 {
@@ -90,6 +93,14 @@ int main(void)
     assert(process_create(2U, 4U) == SYNTRA_STATUS_OK);
     assert(scheduler_create_thread(101U, 5U, dummy_thread, NULL,
         process_thread_stack, sizeof(process_thread_stack)) == SYNTRA_STATUS_OK);
+    assert(scheduler_create_user_thread(
+        102U, 5U, dummy_thread, NULL,
+        user_thread_kernel_stack, sizeof(user_thread_kernel_stack),
+        user_thread_user_stack, sizeof(user_thread_user_stack),
+        user_thread_context) == SYNTRA_STATUS_OK);
+    /* A user thread cannot be associated with a process lacking an address space. */
+    assert(process_attach_thread(2U, 102U) ==
+        SYNTRA_STATUS_PERMISSION_DENIED);
     assert(process_attach_address_space(1U, &process_space) ==
         SYNTRA_STATUS_OK);
     process = process_get(1U);
@@ -97,7 +108,9 @@ int main(void)
     assert(process_attach_address_space(2U, &process_space) ==
         SYNTRA_STATUS_PERMISSION_DENIED);
     assert(process_attach_thread(1U, 101U) == SYNTRA_STATUS_OK);
+    assert(process_attach_thread(1U, 102U) == SYNTRA_STATUS_OK);
     assert(process_get_address_space_for_thread(101U) == &process_space);
+    assert(process_get_address_space_for_thread(102U) == &process_space);
     assert(process_get_address_space_for_thread(999U) == NULL);
     assert(process_set_state(1U, PROCESS_TERMINATED) ==
         SYNTRA_STATUS_PERMISSION_DENIED);
@@ -110,6 +123,8 @@ int main(void)
     assert(process_validate() == SYNTRA_STATUS_OK);
 
     assert(scheduler_set_thread_state(101U, THREAD_TERMINATED) ==
+        SYNTRA_STATUS_OK);
+    assert(scheduler_set_thread_state(102U, THREAD_TERMINATED) ==
         SYNTRA_STATUS_OK);
     assert(process_refresh_state(1U) == SYNTRA_STATUS_OK);
     assert(process_terminate(1U) == SYNTRA_STATUS_OK);
