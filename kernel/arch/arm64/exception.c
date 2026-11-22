@@ -373,12 +373,14 @@ int syntra_arm64_exception_has_last_context(void)
 #define SYNTRA_ARM64_BOOT_THREAD_ID 1U
 static int scheduler_context_switching_active;
 
-static syntra_status_t refresh_process_lifecycle(void)
+static syntra_status_t refresh_process_states_after_switch(void)
 {
-    syntra_status_t status = process_refresh_all_states();
-    if (status != SYNTRA_STATUS_OK)
-        return status;
-    return process_reap_terminated();
+    /*
+     * Do not free a terminated process here: diagnostic callers may still
+     * inspect its completed output. Reaping is an explicit process-manager
+     * operation and is permitted only after the caller has switched roots.
+     */
+    return process_refresh_all_states();
 }
 
 static syntra_status_t activate_thread_address_space(unsigned int thread_id)
@@ -463,7 +465,7 @@ syntra_arm64_exception_handle_and_select(
              */
             if (activate_thread_address_space(SYNTRA_ARM64_BOOT_THREAD_ID) ==
                 SYNTRA_STATUS_OK)
-                (void)refresh_process_lifecycle();
+                (void)refresh_process_states_after_switch();
             return context;
         }
         status = activate_thread_address_space(next->thread_id);
@@ -475,7 +477,7 @@ syntra_arm64_exception_handle_and_select(
             (void)process_refresh_all_states();
             return context;
         }
-        status = refresh_process_lifecycle();
+        status = refresh_process_states_after_switch();
         if (status != SYNTRA_STATUS_OK)
         {
             /* Keep the successfully activated context; report lifecycle fault. */
@@ -502,12 +504,13 @@ syntra_arm64_exception_handle_and_select(
         if (next == NULL)
         {
             /*
-             * No runnable context remains. Return to the shared kernel root
-             * before reclaiming any address space whose threads have exited.
+             * No runnable context remains. Return to the shared kernel root;
+             * process cleanup remains an explicit operation after state
+             * observers have consumed any final process output.
              */
             status = syntra_arm64_address_space_activate_kernel_root();
             if (status == SYNTRA_STATUS_OK)
-                (void)refresh_process_lifecycle();
+                (void)refresh_process_states_after_switch();
             return context;
         }
 
@@ -528,13 +531,13 @@ syntra_arm64_exception_handle_and_select(
             if (previous_id == 0U &&
                 syntra_arm64_address_space_activate_kernel_root() ==
                     SYNTRA_STATUS_OK)
-                (void)refresh_process_lifecycle();
+                (void)refresh_process_states_after_switch();
             else
                 (void)process_refresh_all_states();
             return context;
         }
 
-        status = refresh_process_lifecycle();
+        status = refresh_process_states_after_switch();
         if (status != SYNTRA_STATUS_OK)
         {
             /* Activation succeeded; do not return a stale exception frame. */
