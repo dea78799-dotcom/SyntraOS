@@ -446,7 +446,21 @@ static syntra_status_t handle_context_menu_click(
         row = (y - menu_y - 22U) / 15U;
         if (target == UINT32_MAX)
         {
-            if (row < 2U) status = activate_launcher_tile(runtime, row);
+            if (row < 2U)
+                status = activate_launcher_tile(runtime, row);
+            else if (row == 2U)
+            {
+                uint32_t index;
+                for (index = 0U; index < runtime->windows.count; ++index)
+                {
+                    if (runtime->windows.windows[index].minimized != 0U)
+                    {
+                        status = syntra_gui_window_restore(
+                            &runtime->windows, runtime->windows.windows[index].id);
+                        break;
+                    }
+                }
+            }
         }
         else if (row == 0U)
             status = syntra_gui_window_minimize(&runtime->windows, target);
@@ -475,7 +489,7 @@ static syntra_status_t render_context_menu(
         "MINIMIZE", "MAXIMIZE / RESTORE", "CLOSE", "DISMISS"
     };
     static const char *const desktop_items[] = {
-        "OPEN FILES", "OPEN SETTINGS", "DISMISS"
+        "OPEN FILES", "OPEN SETTINGS", "RESTORE WINDOW", "DISMISS"
     };
     const char *const *items = runtime->context_menu_target == UINT32_MAX
         ? desktop_items : window_items;
