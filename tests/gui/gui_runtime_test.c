@@ -215,6 +215,43 @@ int main(void)
     assert(runtime.windows.count == 1U);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
 
+    /* Right-click a window, render its menu, and close the target. */
+    assert(syntra_gui_runtime_init(&runtime, 640U, 480U) ==
+           SYNTRA_STATUS_OK);
+    move_pointer(&runtime, 80, 60); /* inside Settings */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_RIGHT, 1);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_RIGHT, 0);
+    assert(runtime.last_gesture.action == SYNTRA_GESTURE_CONTEXT_REQUEST);
+    assert(runtime.context_menu_visible == 1U);
+    assert(runtime.context_menu_target ==
+           runtime.windows.windows[1].id);
+    framebuffer.pixels = pixels;
+    framebuffer.width = 640U;
+    framebuffer.height = 480U;
+    framebuffer.stride_pixels = 640U;
+    assert(syntra_gui_runtime_render(&runtime, &framebuffer) ==
+           SYNTRA_STATUS_OK);
+    /* Select the second menu row: CLOSE. */
+    move_pointer(&runtime, 20, 44);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(runtime.context_menu_visible == 0U);
+    assert(runtime.windows.count == 2U);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+
+    /* Right-click the desktop and use OPEN SETTINGS to recreate the app. */
+    move_pointer(&runtime, 100, 108); /* empty desktop area */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_RIGHT, 1);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_RIGHT, 0);
+    assert(runtime.context_menu_visible == 1U);
+    assert(runtime.context_menu_target == UINT32_MAX);
+    move_pointer(&runtime, -110, -8); /* desktop menu second row */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(runtime.context_menu_visible == 0U);
+    assert(runtime.windows.count == 3U);
+    assert(syntra_gui_window_active(&runtime.windows)->app_type ==
+           SYNTRA_GUI_APP_SETTINGS);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+
     /* Invalid dimensions must be rejected rather than creating partial state. */
     assert(syntra_gui_runtime_init(&runtime, 200U, 100U) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
