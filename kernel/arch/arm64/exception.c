@@ -66,6 +66,8 @@ static syntra_arm64_exception_info_t last_exception_info;
 static int last_exception_valid;
 static unsigned int user_thread_exit_count;
 static unsigned int user_thread_fault_count;
+static syntra_arm64_exception_info_t last_user_thread_fault_info;
+static int last_user_thread_fault_valid;
 
 syntra_status_t syntra_arm64_exception_decode(
     uint64_t esr,
@@ -268,6 +270,8 @@ syntra_status_t syntra_arm64_exception_handle(
                 /* Keep timer IRQ enabled so the scheduler can isolate the fault. */
                 mutable_context->spsr_el1 = 0x345ULL;
                 mutable_context->reserved = SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC;
+                last_user_thread_fault_info = last_exception_info;
+                last_user_thread_fault_valid = 1;
                 user_thread_fault_count++;
             }
             else
@@ -350,6 +354,12 @@ unsigned int syntra_arm64_exception_user_thread_exit_count(void)
 unsigned int syntra_arm64_exception_user_thread_fault_count(void)
 {
     return user_thread_fault_count;
+}
+
+const syntra_arm64_exception_info_t *
+syntra_arm64_exception_get_last_user_thread_fault(void)
+{
+    return last_user_thread_fault_valid ? &last_user_thread_fault_info : NULL;
 }
 
 int syntra_arm64_exception_has_last_context(void)
