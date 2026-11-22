@@ -168,6 +168,19 @@ syntra_status_t process_attach_thread(
     return process_refresh_state(process_id);
 }
 
+unsigned int process_get_id_for_thread(unsigned int thread_id)
+{
+    if (!process_initialized || thread_id == 0U)
+        return 0U;
+
+    for (unsigned int p = 0U; p < process_count; ++p)
+        for (unsigned int i = 0U; i < processes[p].thread_count; ++i)
+            if (processes[p].thread_ids[i] == thread_id)
+                return processes[p].process_id;
+
+    return 0U;
+}
+
 syntra_arm64_address_space_t *process_get_address_space_for_thread(
     unsigned int thread_id)
 {
