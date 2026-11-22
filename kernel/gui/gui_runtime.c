@@ -78,6 +78,38 @@ static syntra_status_t activate_launcher_tile(
     return status;
 }
 
+/* The desktop dock's cyan home button restores the launcher. */
+static syntra_status_t handle_launcher_dock_click(
+    syntra_gui_runtime_t *runtime,
+    uint32_t pointer_x,
+    uint32_t pointer_y)
+{
+    uint32_t index;
+    uint32_t launcher_id = 0U;
+
+    if (pointer_x < 14U || pointer_x >= 40U ||
+        pointer_y < runtime->input.height - 34U ||
+        pointer_y >= runtime->input.height - 8U)
+        return SYNTRA_STATUS_OK;
+
+    for (index = 0U; index < runtime->windows.count; ++index)
+    {
+        if (runtime->windows.windows[index].app_type ==
+            SYNTRA_GUI_APP_LAUNCHER)
+        {
+            launcher_id = runtime->windows.windows[index].id;
+            break;
+        }
+    }
+
+    if (launcher_id != 0U)
+        return syntra_gui_window_focus(&runtime->windows, launcher_id);
+
+    return syntra_gui_window_open_app(
+        &runtime->windows, 230U, 60U, 180U, 140U,
+        SYNTRA_GUI_APP_LAUNCHER, &launcher_id);
+}
+
 static syntra_status_t handle_launcher_click(
     syntra_gui_runtime_t *runtime,
     uint32_t pointer_x,
@@ -143,6 +175,9 @@ syntra_status_t syntra_gui_runtime_process_event(
         event->code == SYNTRA_INPUT_BTN_LEFT && event->value == 1 &&
         (old_buttons & SYNTRA_INPUT_BUTTON_LEFT) == 0U)
     {
+        status = handle_launcher_dock_click(
+            runtime, runtime->input.pointer_x, runtime->input.pointer_y);
+        if (status != SYNTRA_STATUS_OK) return status;
         status = handle_launcher_click(
             runtime, runtime->input.pointer_x, runtime->input.pointer_y);
         if (status != SYNTRA_STATUS_OK) return status;
