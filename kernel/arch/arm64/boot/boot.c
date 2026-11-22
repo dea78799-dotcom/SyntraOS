@@ -1470,7 +1470,7 @@ static syntra_status_t syntra_arm64_process_el0_isolation_b_test(void)
 {
     const uint64_t code_va = SYNTRA_ARM64_USER_VA_BASE;
     const uint64_t data_va = SYNTRA_ARM64_USER_VA_BASE + 0x1000ULL;
-    const uint64_t stack_va = SYNTRA_ARM64_USER_VA_BASE + 0x2000ULL;
+    const uint64_t stack_va = SYNTRA_ARM64_USER_VA_BASE + 0x3000ULL;
     const uint64_t data_sentinel = 0x53594E5452410001ULL;
     uintptr_t code_page = 0U, data_page = 0U, stack_page = 0U;
     uintptr_t data_page_physical = 0U;
