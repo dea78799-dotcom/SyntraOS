@@ -112,7 +112,7 @@ generic Process Manager.
    already covered by the QEMU smoke test.
 4. Add process resource cleanup and transactional creation rollback.
 5. Add SMP-safe active-root tracking and remote TLB shootdown before SMP use.
-6. Define stack allocation ownership and add explicit stack-buffer reclamation.\n6. Define stack allocation ownership and add explicit stack-buffer reclamation.
+6. Integrate the physical stack allocator with architecture virtual mapping and scheduler creation, then reclaim stack pages only after successful TCB reaping.\n6. Define stack allocation ownership and add explicit stack-buffer reclamation.
 
 ## 7. Version status
 
