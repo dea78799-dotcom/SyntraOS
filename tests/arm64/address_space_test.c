@@ -189,6 +189,23 @@ int main(void)
         &first, 0x4000000000ULL, &translation) == SYNTRA_STATUS_ERROR);
     assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
 
+    /*
+     * Reclaiming Process A's mapping must not invalidate Process B's mapping
+     * at the identical VA or release B's independently owned backing page.
+     */
+    assert(syntra_arm64_address_space_translate(
+        &second, 0x4000000000ULL, &translation) == SYNTRA_STATUS_OK);
+    assert(translation.physical_address == second_process_page);
+    assert(translation.user_read && !translation.user_write);
+    assert(!translation.user_execute);
+    {
+        uint64_t *second_backing = resolve_page(
+            (uint64_t)second_process_page, NULL);
+        assert(second_backing != NULL);
+        assert(second_backing[0] == 0xB0B02002ULL);
+    }
+    assert(syntra_arm64_address_space_validate(&second) == SYNTRA_STATUS_OK);
+
     /* The same virtual range can be populated again after reclamation. */
     assert(syntra_page_alloc_owned(
         &first_process_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
