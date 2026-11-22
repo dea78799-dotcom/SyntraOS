@@ -213,6 +213,8 @@ static syntra_status_t handle_launcher_click(
      * the app that actually received the pointer hit-test.
      */
     if (launcher == NULL ||
+        launcher->width <= 20U ||
+        launcher->height <= 28U ||
         syntra_gui_window_active(&runtime->windows) == NULL ||
         syntra_gui_window_active(&runtime->windows)->app_type !=
             SYNTRA_GUI_APP_LAUNCHER ||
