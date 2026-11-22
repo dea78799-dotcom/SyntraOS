@@ -28,8 +28,9 @@ static syntra_status_t draw_app_surface(
 
     if (window->app_type == SYNTRA_GUI_APP_FILES)
     {
-        static const char *const names[] = {
-            "HOME", "DOCUMENTS", "DOWNLOADS", "PICTURES"
+        static const char *const names[SYNTRA_GUI_FILES_ENTRY_COUNT] = {
+            "HOME", "DOCUMENTS", "DOWNLOADS", "PICTURES",
+            "MUSIC", "VIDEOS", "PROJECTS", "SYSTEM"
         };
         uint32_t row;
         status = syntra_framebuffer_fill_rect(
@@ -45,11 +46,14 @@ static syntra_status_t draw_app_surface(
             framebuffer, left + 5U, top + 6U, "FILES",
             COLOR_WINDOW_TEXT, 0xFF1A2948U, 1U);
         if (status != SYNTRA_STATUS_OK) return status;
-        for (row = 0U; row < 4U; ++row)
+        for (row = 0U; row < SYNTRA_GUI_FILES_ENTRY_COUNT; ++row)
         {
+            uint32_t entry = window->app_scroll_offset + row;
             row_y = top + 8U + row * 22U;
-            if (row_y + 16U >= top + inner_height) break;
-            if (window->app_selection == row)
+            if (entry >= SYNTRA_GUI_FILES_ENTRY_COUNT ||
+                row_y + 16U >= top + inner_height)
+                break;
+            if (window->app_selection == entry)
             {
                 status = syntra_framebuffer_fill_rect(
                     framebuffer, left + 38U, row_y - 2U,
@@ -63,9 +67,9 @@ static syntra_status_t draw_app_surface(
                 framebuffer, left + 42U, row_y + 3U, 12U, 9U, 0xFF3B9FB5U);
             if (status != SYNTRA_STATUS_OK) return status;
             status = syntra_framebuffer_draw_text(
-                framebuffer, left + 62U, row_y + 2U, names[row],
+                framebuffer, left + 62U, row_y + 2U, names[entry],
                 COLOR_WINDOW_TEXT,
-                window->app_selection == row ? 0xFF25466FU : 0xFF0C1428U,
+                window->app_selection == entry ? 0xFF25466FU : 0xFF0C1428U,
                 1U);
             if (status != SYNTRA_STATUS_OK) return status;
         }
