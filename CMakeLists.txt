@@ -165,6 +165,11 @@ target_link_libraries(gui_window_interaction_test PRIVATE syntra_gui)
 add_test(NAME GUIWindowInteractionTest COMMAND gui_window_interaction_test)
 
 
+# SyntraOS GUI v5 composed-window interaction integration test
+add_executable(gui_v5_interaction_test tests/gui/gui_v5_interaction_test.c)
+target_link_libraries(gui_v5_interaction_test PRIVATE syntra_gui)
+add_test(NAME GUIv5ComposedWindowInteractionTest COMMAND gui_v5_interaction_test)
+
 # SyntraOS persistent GUI runtime integration test
 add_executable(gui_runtime_test tests/gui/gui_runtime_test.c)
 target_link_libraries(gui_runtime_test PRIVATE syntra_gui)
