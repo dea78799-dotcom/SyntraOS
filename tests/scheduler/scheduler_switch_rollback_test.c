@@ -81,8 +81,25 @@ int main(void)
     assert(selected != NULL && selected->thread_id == 3U);
     assert(scheduler_validate() == SYNTRA_STATUS_OK);
 
+    /*
+     * A thread may terminate before the IRQ selects its successor. Roll back
+     * a failed activation to an idle/no-current state, not to the dead thread.
+     */
+    assert(scheduler_set_thread_state(3U, THREAD_TERMINATED) ==
+        SYNTRA_STATUS_OK);
+    selected = scheduler_schedule_next_with_context();
+    assert(selected != NULL && selected->thread_id == 2U);
+    assert(scheduler_rollback_context_switch(0U, 2U) == SYNTRA_STATUS_OK);
+    assert(scheduler_get_current() == NULL);
+    assert(scheduler_get_thread(2U)->state == THREAD_READY);
+    assert(scheduler_validate() == SYNTRA_STATUS_OK);
+
+    selected = scheduler_schedule_next_with_context();
+    assert(selected != NULL && selected->thread_id == 2U);
+    assert(scheduler_validate() == SYNTRA_STATUS_OK);
+
     /* Reject stale or forged rollback requests without mutating state. */
-    assert(scheduler_rollback_context_switch(999U, 3U) ==
+    assert(scheduler_rollback_context_switch(999U, 2U) ==
         SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(scheduler_get_current() == selected);
     assert(scheduler_validate() == SYNTRA_STATUS_OK);
