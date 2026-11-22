@@ -45,7 +45,13 @@ static syntra_status_t allocate_table(
     if (!pa_valid(*physical)) return SYNTRA_STATUS_ERROR;
 
     memory = get_table(builder, *physical);
-    if (memory == NULL) return SYNTRA_STATUS_ERROR;
+    if (memory == NULL)
+    {
+        if (builder->release != NULL &&
+            builder->release(builder->context, *physical) != SYNTRA_STATUS_OK)
+            return SYNTRA_STATUS_ERROR;
+        return SYNTRA_STATUS_ERROR;
+    }
 
     for (size_t i = 0U; i < SYNTRA_ARM64_MMU_TABLE_ENTRIES; ++i)
         memory[i] = 0ULL;
@@ -54,9 +60,10 @@ static syntra_status_t allocate_table(
     return SYNTRA_STATUS_OK;
 }
 
-syntra_status_t syntra_arm64_page_table_init(
+syntra_status_t syntra_arm64_page_table_init_ex(
     syntra_arm64_page_table_t *table,
     syntra_arm64_pt_alloc_fn allocate,
+    syntra_arm64_pt_release_fn release,
     syntra_arm64_pt_resolve_fn resolve,
     void *context)
 {
@@ -69,6 +76,7 @@ syntra_status_t syntra_arm64_page_table_init(
 
     table->allocate = allocate;
     table->resolve = resolve;
+    table->release = release;
     table->context = context;
     table->root_physical_address = 0ULL;
 
@@ -77,6 +85,16 @@ syntra_status_t syntra_arm64_page_table_init(
 
     table->root_physical_address = root_pa;
     return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t syntra_arm64_page_table_init(
+    syntra_arm64_page_table_t *table,
+    syntra_arm64_pt_alloc_fn allocate,
+    syntra_arm64_pt_resolve_fn resolve,
+    void *context)
+{
+    return syntra_arm64_page_table_init_ex(
+        table, allocate, NULL, resolve, context);
 }
 
 static syntra_status_t ensure_child(
@@ -104,7 +122,14 @@ static syntra_status_t ensure_child(
     if (status != SYNTRA_STATUS_OK) return status;
 
     status = syntra_arm64_mmu_make_table_descriptor(child_pa, &descriptor);
-    if (status != SYNTRA_STATUS_OK) return status;
+    if (status != SYNTRA_STATUS_OK)
+    {
+        if (builder->release != NULL &&
+            builder->release(builder->context, child_pa) != SYNTRA_STATUS_OK)
+            return SYNTRA_STATUS_ERROR;
+        *child = NULL;
+        return status;
+    }
 
     parent[index] = descriptor;
     return SYNTRA_STATUS_OK;
