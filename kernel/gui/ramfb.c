@@ -7,7 +7,6 @@
 #include "framebuffer.h"
 #include "gui_runtime.h"
 #include "uptime_panel.h"
-#include "../arch/arm64/timer.h"
 #include "../virtio/virtio_mmio.h"
 
 #define FW_CFG_FILE_DIR 0x0019U
@@ -43,11 +42,33 @@ static int ramfb_gui_runtime_ready;
 static uint64_t ramfb_boot_counter;
 static uint64_t ramfb_counter_frequency;
 
+static uint64_t ramfb_read_counter(void)
+{
+#if defined(__aarch64__)
+    uint64_t value;
+    __asm__ volatile("mrs %0, cntpct_el0" : "=r"(value));
+    return value;
+#else
+    return 0U;
+#endif
+}
+
+static uint64_t ramfb_read_counter_frequency(void)
+{
+#if defined(__aarch64__)
+    uint64_t value;
+    __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(value));
+    return value;
+#else
+    return 0U;
+#endif
+}
+
 static uint64_t ramfb_uptime_seconds(void)
 {
     uint64_t now;
     if (ramfb_counter_frequency == 0U) return 0U;
-    now = syntra_arm64_timer_read_counter();
+    now = ramfb_read_counter();
     if (now < ramfb_boot_counter) return 0U;
     return (now - ramfb_boot_counter) / ramfb_counter_frequency;
 }
@@ -297,8 +318,8 @@ syntra_status_t syntra_ramfb_init(uintptr_t fw_cfg_base, size_t fw_cfg_size)
     framebuffer.height = SYNTRA_RAMFB_HEIGHT;
     framebuffer.stride_pixels = SYNTRA_RAMFB_WIDTH;
 
-    ramfb_counter_frequency = syntra_arm64_timer_read_frequency();
-    ramfb_boot_counter = syntra_arm64_timer_read_counter();
+    ramfb_counter_frequency = ramfb_read_counter_frequency();
+    ramfb_boot_counter = ramfb_read_counter();
 
     status = syntra_gui_runtime_init(
         &ramfb_gui_runtime, SYNTRA_RAMFB_WIDTH, SYNTRA_RAMFB_HEIGHT);
