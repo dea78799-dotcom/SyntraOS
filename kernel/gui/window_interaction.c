@@ -7,6 +7,8 @@
 #define CLOSE_SIZE 12U
 #define CLOSE_RIGHT_MARGIN 5U
 #define CLOSE_TOP_OFFSET 4U
+#define CONTROL_GAP 5U
+#define CONTROLS_MIN_WIDTH 78U
 
 static int point_inside(
     uint32_t x, uint32_t y,
@@ -34,6 +36,29 @@ static int point_on_close_control(
         CLOSE_SIZE, CLOSE_SIZE);
 }
 
+static int point_on_maximize_control(
+    const syntra_gui_window_t *window, uint32_t x, uint32_t y)
+{
+    uint32_t control_x;
+    if (window->width < CONTROLS_MIN_WIDTH || window->height < 20U)
+        return 0;
+    control_x = window->x + window->width - CLOSE_SIZE -
+                CLOSE_RIGHT_MARGIN - CONTROL_GAP - CLOSE_SIZE;
+    return point_inside(x, y, control_x, window->y + CLOSE_TOP_OFFSET,
+                        CLOSE_SIZE, CLOSE_SIZE);
+}
+
+static int point_on_minimize_control(
+    const syntra_gui_window_t *window, uint32_t x, uint32_t y)
+{
+    uint32_t control_x;
+    if (window->width < CONTROLS_MIN_WIDTH || window->height < 20U)
+        return 0;
+    control_x = window->x + window->width - CLOSE_SIZE -
+                CLOSE_RIGHT_MARGIN - 2U * (CONTROL_GAP + CLOSE_SIZE);
+    return point_inside(x, y, control_x, window->y + CLOSE_TOP_OFFSET,
+                        CLOSE_SIZE, CLOSE_SIZE);
+}
 static int point_on_title_bar(
     const syntra_gui_window_t *window,
     uint32_t x,
@@ -118,16 +143,25 @@ syntra_status_t syntra_gui_window_interaction_process(
             status = syntra_gui_window_get(manager, hit_id, &window);
             if (status != SYNTRA_STATUS_OK) return status;
 
-            if (point_on_close_control(window,
-                                       input->pointer_x,
-                                       input->pointer_y))
+            if (point_on_close_control(window, input->pointer_x, input->pointer_y))
             {
                 status = syntra_gui_window_close(manager, hit_id);
                 if (status != SYNTRA_STATUS_OK) return status;
             }
-            else if (point_on_title_bar(window,
-                                        input->pointer_x,
-                                        input->pointer_y))
+            else if (point_on_maximize_control(window, input->pointer_x, input->pointer_y))
+            {
+                status = window->maximized != 0U
+                    ? syntra_gui_window_restore(manager, hit_id)
+                    : syntra_gui_window_maximize(manager, hit_id);
+                if (status != SYNTRA_STATUS_OK) return status;
+            }
+            else if (point_on_minimize_control(window, input->pointer_x, input->pointer_y))
+            {
+                status = syntra_gui_window_minimize(manager, hit_id);
+                if (status != SYNTRA_STATUS_OK) return status;
+            }
+            else if (point_on_title_bar(window, input->pointer_x, input->pointer_y) &&
+                     window->maximized == 0U)
             {
                 interaction->drag_window_id = hit_id;
                 interaction->drag_offset_x = input->pointer_x - window->x;
