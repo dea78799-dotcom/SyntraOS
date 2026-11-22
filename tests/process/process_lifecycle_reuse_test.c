@@ -23,6 +23,7 @@ int main(void)
         assert(process_release_terminated(process_id) == SYNTRA_STATUS_OK);
         assert(process_get(process_id) == NULL);
         assert(process_get_count() == 0U);
+        assert(process_refresh_all_states() == SYNTRA_STATUS_OK);
         assert(process_validate() == SYNTRA_STATUS_OK);
     }
 
