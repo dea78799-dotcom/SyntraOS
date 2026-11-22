@@ -692,3 +692,23 @@ target_include_directories(arm64_address_space_lifecycle_test PRIVATE
 )
 add_test(NAME ARM64AddressSpaceLifecycleTest
     COMMAND arm64_address_space_lifecycle_test)
+
+# ARM64 TTBR0 address-space switching and active-root safety test
+add_executable(arm64_address_space_switching_test
+    tests/arm64/address_space_switching_test.c
+    kernel/arch/arm64/address_space.c
+    kernel/arch/arm64/mmu.c
+    kernel/arch/arm64/page_table_builder.c
+    kernel/memory/page_allocator.c
+    kernel/memory/memory_region.c
+)
+target_include_directories(arm64_address_space_switching_test PRIVATE
+    kernel/arch/arm64
+    kernel/memory
+    kernel/core
+)
+target_compile_definitions(arm64_address_space_switching_test PRIVATE
+    SYNTRA_ARM64_ADDRESS_SPACE_TESTING=1
+)
+add_test(NAME ARM64AddressSpaceSwitchingTest
+    COMMAND arm64_address_space_switching_test)
