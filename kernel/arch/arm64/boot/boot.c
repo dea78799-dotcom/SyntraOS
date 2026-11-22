@@ -567,7 +567,14 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
         return status;
     }
 
-    syntra_uart_puts("Physical page allocator: PASS free=");
+    status = syntra_page_allocator_validate();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("Physical page allocator initial audit failed\n");
+        return status;
+    }
+
+    syntra_uart_puts("Physical page allocator: PASS audit=PASS free=");
     syntra_uart_put_hex((uint64_t)syntra_page_allocator_free_count());
     syntra_uart_puts(" total=");
     syntra_uart_put_hex((uint64_t)syntra_page_allocator_total_count());
@@ -939,7 +946,8 @@ static syntra_status_t syntra_boot_page_table_allocate(
     syntra_status_t status;
     (void)context;
     if (physical_address == NULL) return SYNTRA_STATUS_INVALID_ARGUMENT;
-    status = syntra_page_alloc(&page);
+    status = syntra_page_alloc_owned(
+        &page, SYNTRA_PAGE_OWNER_PAGE_TABLE);
     if (status == SYNTRA_STATUS_OK) *physical_address = (uint64_t)page;
     return status;
 }
@@ -1407,8 +1415,9 @@ syntra_status_t syntra_arm64_boot_main(
                             {
                                 uintptr_t queue_physical_base = 0U;
                                 syntra_uart_puts("VirtIO Input GIC trigger: CONFIGURED\n");
-                                status = syntra_page_alloc_contiguous(
-                                    2U, &queue_physical_base);
+                                status = syntra_page_alloc_contiguous_owned(
+                                    2U, &queue_physical_base,
+                                    SYNTRA_PAGE_OWNER_DRIVER);
                                 if (status == SYNTRA_STATUS_OK)
                                 {
                                     status = syntra_virtio_mmio_setup_input_event_queue_mapped(
@@ -1468,8 +1477,12 @@ syntra_status_t syntra_arm64_boot_main(
                                     }
                                     else
                                     {
-                                        (void)syntra_page_free(queue_physical_base);
-                                        (void)syntra_page_free(queue_physical_base + SYNTRA_PAGE_SIZE);
+                                        (void)syntra_page_free_owned(
+                                            queue_physical_base,
+                                            SYNTRA_PAGE_OWNER_DRIVER);
+                                        (void)syntra_page_free_owned(
+                                            queue_physical_base + SYNTRA_PAGE_SIZE,
+                                            SYNTRA_PAGE_OWNER_DRIVER);
                                         syntra_uart_puts("VirtIO Input event queue: UNAVAILABLE\n");
                                     }
                                 }
