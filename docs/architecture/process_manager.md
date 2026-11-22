@@ -78,7 +78,7 @@ then calls scheduler_reap_terminated() for each thread ID. Scheduler reaping
 clears TCB metadata but does not free caller-owned kernel or user stack buffers;
 the stack owner may reuse those buffers only after successful reclamation. This
 operation must run from a kernel-management path, never from IRQ/exception
-context. The single-core design is not yet safe against concurrent SMP mutation.
+context. The caller must serialize the operation against scheduler mutation,\nincluding IRQ-driven context switches. The single-core design is not yet safe\nagainst concurrent SMP mutation.
 
 TTBR0 activation performs a local full EL1/EL0 TLB invalidation. Active-root
 tracking and TLB invalidation are single-core V1 mechanisms; SMP coordination
