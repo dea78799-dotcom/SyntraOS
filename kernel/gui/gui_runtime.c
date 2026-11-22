@@ -55,8 +55,6 @@ syntra_status_t syntra_gui_runtime_process_event(
         &runtime->interaction, &runtime->windows, &runtime->input);
     if (status != SYNTRA_STATUS_OK) return status;
 
-    if (runtime->redraw_count < UINT32_MAX)
-        runtime->redraw_count++;
     return SYNTRA_STATUS_OK;
 }
 
@@ -75,8 +73,13 @@ syntra_status_t syntra_gui_runtime_render(
     status = syntra_desktop_render(framebuffer);
     if (status != SYNTRA_STATUS_OK) return status;
 
-    if (runtime->windows.count == 0U)
-        return SYNTRA_STATUS_OK;
+    if (runtime->windows.count != 0U)
+    {
+        status = syntra_gui_render_windows(framebuffer, &runtime->windows);
+        if (status != SYNTRA_STATUS_OK) return status;
+    }
 
-    return syntra_gui_render_windows(framebuffer, &runtime->windows);
+    if (runtime->redraw_count < UINT32_MAX)
+        runtime->redraw_count++;
+    return SYNTRA_STATUS_OK;
 }
