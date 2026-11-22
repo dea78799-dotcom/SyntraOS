@@ -48,6 +48,19 @@ int main(void)
     event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0, 3250U);
     assert(runtime.last_gesture.action == SYNTRA_GESTURE_DOUBLE_TAP);
 
+    /* Absolute touch coordinates plus BTN_TOUCH activate a launcher tile. */
+    assert(syntra_gui_runtime_init(&runtime, 640U, 480U) ==
+           SYNTRA_STATUS_OK);
+    assert(syntra_input_set_abs_range(
+        &runtime.input, 0, 639, 0, 479) == SYNTRA_STATUS_OK);
+    event_at(&runtime, SYNTRA_INPUT_EV_ABS, SYNTRA_INPUT_ABS_X, 278, 4000U);
+    event_at(&runtime, SYNTRA_INPUT_EV_ABS, SYNTRA_INPUT_ABS_Y, 100, 4001U);
+    event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_TOUCH, 1, 4002U);
+    assert(syntra_gui_window_active(&runtime.windows)->app_type ==
+           SYNTRA_GUI_APP_FILES);
+    event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_TOUCH, 0, 4050U);
+    assert(runtime.last_gesture.action == SYNTRA_GESTURE_TAP);
+
     puts("GUI gesture runtime integration: PASS");
     return 0;
 }
