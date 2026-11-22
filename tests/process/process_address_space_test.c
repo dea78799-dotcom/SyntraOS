@@ -101,6 +101,12 @@ int main(void)
     assert(process_get_address_space_for_thread(999U) == NULL);
     assert(process_set_state(1U, PROCESS_TERMINATED) ==
         SYNTRA_STATUS_PERMISSION_DENIED);
+    /* A live thread keeps the process address space owned and intact. */
+    assert(process_terminate(1U) == SYNTRA_STATUS_PERMISSION_DENIED);
+    assert(process->address_space == &process_space);
+    /* Ownership cannot be attached twice to the same process. */
+    assert(process_attach_address_space(1U, &process_space) ==
+        SYNTRA_STATUS_PERMISSION_DENIED);
     assert(process_validate() == SYNTRA_STATUS_OK);
 
     assert(scheduler_set_thread_state(101U, THREAD_TERMINATED) ==
