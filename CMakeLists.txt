@@ -18,6 +18,7 @@ add_library(syntra_gui STATIC
     kernel/gui/framebuffer.c
     kernel/gui/desktop.c
     kernel/gui/ramfb.c
+    kernel/virtio/input_event_queue.c
     kernel/gui/desktop_session.c
     kernel/gui/window_manager.c
     kernel/gui/window_renderer.c
@@ -83,6 +84,7 @@ add_library(syntra_kernel STATIC
     kernel/input/input.c
     kernel/arch/arm64/boot/fdt.c
     kernel/virtio/virtio_mmio.c
+    kernel/virtio/input_event_queue.c
 )
 
 target_include_directories(syntra_kernel PUBLIC
