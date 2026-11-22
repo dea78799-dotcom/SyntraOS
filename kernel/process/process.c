@@ -310,6 +310,7 @@ syntra_status_t process_validate(void)
             if (process->thread_ids[i] == 0U || thread == NULL)
                 return SYNTRA_STATUS_ERROR;
             if (thread->is_user_thread != 0U &&
+                process->state != PROCESS_TERMINATED &&
                 process->address_space == NULL)
                 return SYNTRA_STATUS_ERROR;
 
