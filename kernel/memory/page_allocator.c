@@ -454,6 +454,7 @@ static syntra_status_t page_allocator_validate_unlocked(void)
     size_t word_index;
     size_t observed_free = 0U;
     size_t observed_allocated = 0U;
+    size_t observed_owner_pages[SYNTRA_PAGE_OWNER_MAX] = {0U};
 
     if (!initialized)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
@@ -484,15 +485,17 @@ static syntra_status_t page_allocator_validate_unlocked(void)
                            owner >= (uint8_t)SYNTRA_PAGE_OWNER_MAX)) ||
             (!allocated && owner != (uint8_t)SYNTRA_PAGE_OWNER_NONE))
             return SYNTRA_STATUS_ERROR;
+        if (allocated)
+            observed_owner_pages[owner]++;
     }
 
     {
-        size_t owner_total = 0U;
         size_t owner_index;
-        for (owner_index = 1U; owner_index < SYNTRA_PAGE_OWNER_MAX; ++owner_index)
-            owner_total += owner_page_counts[owner_index];
-        if (owner_total != observed_allocated)
-            return SYNTRA_STATUS_ERROR;
+        for (owner_index = 0U; owner_index < SYNTRA_PAGE_OWNER_MAX; ++owner_index)
+        {
+            if (observed_owner_pages[owner_index] != owner_page_counts[owner_index])
+                return SYNTRA_STATUS_ERROR;
+        }
     }
 
     if (observed_free != free_pages ||
