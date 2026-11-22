@@ -158,7 +158,16 @@ static syntra_status_t handle_launcher_click(
             break;
         }
     }
-    if (launcher == NULL || pointer_x < launcher->x + 4U ||
+    /*
+     * Only dispatch launcher tiles when Launcher is the frontmost window.
+     * Otherwise a window dragged over another app could steal clicks from
+     * the app that actually received the pointer hit-test.
+     */
+    if (launcher == NULL ||
+        syntra_gui_window_active(&runtime->windows) == NULL ||
+        syntra_gui_window_active(&runtime->windows)->app_type !=
+            SYNTRA_GUI_APP_LAUNCHER ||
+        pointer_x < launcher->x + 4U ||
         pointer_y < launcher->y + 24U)
         return SYNTRA_STATUS_OK;
 
