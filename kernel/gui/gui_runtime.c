@@ -4,6 +4,39 @@
 #include "desktop.h"
 #include "window_renderer.h"
 
+static uint32_t gesture_target_at(const syntra_gui_runtime_t *runtime,
+                                  uint32_t x, uint32_t y)
+{
+    uint32_t index = runtime->windows.count;
+    while (index > 0U)
+    {
+        const syntra_gui_window_t *window = &runtime->windows.windows[--index];
+        if (x >= window->x && y >= window->y &&
+            x - window->x < window->width &&
+            y - window->y < window->height)
+            return window->id;
+    }
+    return 1U; /* Desktop surface has a stable nonzero target ID. */
+}
+
+static syntra_status_t update_gesture(syntra_gui_runtime_t *runtime,
+                                      uint64_t now_ms)
+{
+    uint32_t buttons = 0U;
+    uint32_t target;
+    if ((runtime->input.buttons & SYNTRA_INPUT_BUTTON_LEFT) != 0U)
+        buttons |= SYNTRA_GESTURE_BUTTON_LEFT;
+    if ((runtime->input.buttons & SYNTRA_INPUT_BUTTON_RIGHT) != 0U)
+        buttons |= SYNTRA_GESTURE_BUTTON_RIGHT;
+    target = gesture_target_at(runtime, runtime->input.pointer_x,
+                               runtime->input.pointer_y);
+    runtime->gesture_time_ms = now_ms;
+    return syntra_gesture_update(&runtime->gesture, buttons, target,
+        runtime->input.pointer_x, runtime->input.pointer_y, now_ms,
+        &runtime->last_gesture);
+}
+
+
 syntra_status_t syntra_gui_runtime_init(
     syntra_gui_runtime_t *runtime,
     uint32_t width,
@@ -34,6 +67,10 @@ syntra_status_t syntra_gui_runtime_init(
 
     status = syntra_gui_window_interaction_init(&runtime->interaction);
     if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_gesture_init(&runtime->gesture);
+    if (status != SYNTRA_STATUS_OK) return status;
+    runtime->gesture_time_ms = 0ULL;
+    runtime->last_gesture.action = SYNTRA_GESTURE_NONE;
 
     runtime->initialized = 1;
     return SYNTRA_STATUS_OK;
@@ -245,9 +282,10 @@ static syntra_status_t handle_launcher_click(
     return activate_launcher_tile(runtime, tile);
 }
 
-syntra_status_t syntra_gui_runtime_process_event(
+syntra_status_t syntra_gui_runtime_process_event_at(
     syntra_gui_runtime_t *runtime,
-    const syntra_input_event_t *event)
+    const syntra_input_event_t *event,
+    uint64_t now_ms)
 {
     syntra_status_t status;
     uint32_t old_buttons;
@@ -261,6 +299,9 @@ syntra_status_t syntra_gui_runtime_process_event(
 
     status = syntra_gui_window_interaction_process(
         &runtime->interaction, &runtime->windows, &runtime->input);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = update_gesture(runtime, now_ms);
     if (status != SYNTRA_STATUS_OK) return status;
 
     if (event->type == SYNTRA_INPUT_EV_KEY &&
@@ -279,6 +320,26 @@ syntra_status_t syntra_gui_runtime_process_event(
     }
 
     return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t syntra_gui_runtime_process_event(
+    syntra_gui_runtime_t *runtime,
+    const syntra_input_event_t *event)
+{
+    uint64_t now_ms;
+    if (runtime == NULL || runtime->initialized != 1)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    now_ms = (uint64_t)runtime->input.event_count * 10ULL;
+    return syntra_gui_runtime_process_event_at(runtime, event, now_ms);
+}
+
+syntra_status_t syntra_gui_runtime_tick(
+    syntra_gui_runtime_t *runtime,
+    uint64_t now_ms)
+{
+    if (runtime == NULL || runtime->initialized != 1)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    return update_gesture(runtime, now_ms);
 }
 
 syntra_status_t syntra_gui_runtime_render(
