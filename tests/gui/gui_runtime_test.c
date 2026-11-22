@@ -150,6 +150,38 @@ int main(void)
     assert(syntra_gui_window_active(&runtime.windows)->height == 170U);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
 
+    /* Compact task switcher renders slots and restores minimized windows. */
+    assert(syntra_gui_runtime_init(&runtime, 320U, 240U) ==
+           SYNTRA_STATUS_OK);
+    {
+        uint32_t files_id, settings_id;
+        framebuffer.pixels = pixels;
+        framebuffer.width = 320U;
+        framebuffer.height = 240U;
+        framebuffer.stride_pixels = 320U;
+        assert(syntra_gui_window_open_app(
+            &runtime.windows, 10U, 40U, 240U, 170U,
+            SYNTRA_GUI_APP_FILES, &files_id) == SYNTRA_STATUS_OK);
+        assert(syntra_gui_window_open_app(
+            &runtime.windows, 70U, 40U, 240U, 170U,
+            SYNTRA_GUI_APP_SETTINGS, &settings_id) == SYNTRA_STATUS_OK);
+        assert(syntra_gui_window_minimize(
+            &runtime.windows, settings_id) == SYNTRA_STATUS_OK);
+        assert(syntra_gui_runtime_render(&runtime, &framebuffer) ==
+               SYNTRA_STATUS_OK);
+        /* First slot is minimized; second slot is the active Files window. */
+        assert(pixels[210U * 320U + 40U] == 0xFF263D66U);
+        assert(pixels[210U * 320U + 108U] == 0xFF54D6E8U);
+
+        /* Tap the first 64x22 slot to restore Settings. */
+        move_pointer(&runtime, -88, 101);
+        send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+        assert(syntra_gui_window_active(&runtime.windows)->id == settings_id);
+        assert(syntra_gui_window_active(&runtime.windows)->minimized == 0U);
+        send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+        assert(runtime.windows.count == 2U);
+    }
+
     /* Hover tracks the window under the pointer without focusing it. */
     {
         uint32_t files_id = syntra_gui_window_active(&runtime.windows)->id;
