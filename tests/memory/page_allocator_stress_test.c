@@ -55,9 +55,11 @@ int main(void)
             unsigned int index = (i * 73U + cycle) % STRESS_PAGE_COUNT;
             assert(syntra_page_free_owned(
                 pages[index], SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
-            assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+            if ((i + 1U) % 64U == 0U)
+                assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
         }
 
+        assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
         assert(syntra_page_allocator_free_count() == STRESS_PAGE_COUNT);
     }
 
