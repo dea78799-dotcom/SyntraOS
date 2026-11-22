@@ -46,10 +46,13 @@ allocated by the current discovery path.
   boundary is clipped and RAM entirely above it is ignored.
 - Local IRQ masking protects allocator metadata against same-core interrupt
   re-entry on the current single-core target.
+- One-byte owner tags distinguish KERNEL, PAGE_TABLE, PROCESS, and DRIVER pages.
+- Owned free operations reject mismatched owners; the full allocator audit checks
+  bitmap, summary, accounting, and owner-tag consistency.
 
-Limitations: this is not an SMP lock, there is no page ownership/refcount model,
-and the allocator does not yet provide a general-purpose kernel heap or per-process
-allocation accounting.
+Limitations: owner tags are not reference counts and do not permit shared-page
+lifetime management. This is not an SMP lock, and the allocator does not yet provide
+a general-purpose kernel heap or per-process allocation accounting.
 
 ### 2.4 ARM64 MMU and page tables
 
@@ -64,6 +67,13 @@ allocation accounting.
 - The ARM64 QEMU boot path builds and verifies identity mappings, prepares the
   translation registers, enables the MMU, checks register state, and re-walks
   planned mappings after activation.
+- The V1 address-space object owns an independent L1 root, creates subordinate
+  page-table pages with PAGE_TABLE ownership, maps exclusively owned PROCESS
+  pages into EL0, translates addresses through its own root, audits permissions,
+  and releases its page-table and mapped-process pages on destruction.
+- Host integration tests create two independent roots, map the same virtual
+  address to different physical pages, verify distinct translations and
+  read-only/read-write permissions, then validate complete page reclamation.
 
 A successful host descriptor test or ELF build alone is not proof of hardware
 translation. The QEMU boot test is the evidence for the configured emulated target;
@@ -77,9 +87,12 @@ it is not evidence of physical-device support.
   no general page-table reclamation or mapping teardown API.
 - The current boot mapping is primarily identity mapping; a complete kernel
   higher-half layout and dynamic virtual address allocator are not implemented.
-- There is no per-process address-space object with independent page-table roots.
-- Process memory ownership, user-page lifecycle, copy-on-write, demand paging,
-  swapping, and memory-mapped file support are not implemented.
+- Address-space objects exist, but they are not yet attached to process objects
+  or activated by a context switch through TTBR0_EL1.
+- Individual page unmapping, shared-page reference counting, copy-on-write,
+  demand paging, swapping, and memory-mapped file support are not implemented.
+- Address-space destruction requires the caller to ensure the root is inactive;
+  V1 has no SMP coordination or TLB shootdown mechanism.
 - Full SMP-safe allocator synchronization and per-page reference tracking are
   not implemented.
 - x86_64 and RISC-V memory backends are not implemented.
@@ -91,13 +104,13 @@ it is not evidence of physical-device support.
    allocation/free accounting, and failure rollback.
 2. Define physical-page ownership and lifecycle APIs before sharing pages between
    page tables, processes, or drivers.
-3. Add a virtual-address-space abstraction with explicit root ownership and
-   map/unmap/translate operations.
-4. Integrate one address space per process only after map/unmap and page ownership
-   semantics are tested.
-5. Add SMP-safe synchronization when multi-core execution is introduced.
-6. Expand QEMU tests to verify permission faults and address-space isolation, not
-   only successful identity-mapped execution.
+3. Extend the V1 address-space manager with individual unmap and shared-page
+   reference-counting semantics.
+4. Attach one address-space object to each process and switch TTBR0_EL1 only after
+   context-switch and inactive-root lifetime rules are implemented.
+5. Add SMP-safe synchronization and TLB shootdown before multi-core execution.
+6. Expand QEMU tests to execute in separate EL0 address spaces and verify
+   permission faults, not only software-walker isolation.
 
 ## 5. Verification requirements
 
