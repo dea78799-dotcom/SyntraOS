@@ -2,6 +2,7 @@
 
 #include "exception.h"
 #include "context.h"
+#include "address_space.h"
 
 /*
  * The freestanding ARM64 image provides these symbols in boot.c,
