@@ -73,6 +73,12 @@ int main(void)
     assert(pixels[(size_t)75U * STRIDE + 313U] == 0xFF54D6E8U);
     assert(pixels[(size_t)249U * STRIDE + 49U] == 0xFF54D6E8U);
 
+    /* Settings selection now shows a contextual details panel. */
+    manager.windows[1].app_selection = 3U; /* ABOUT */
+    assert(syntra_gui_render_windows(&framebuffer, &manager) == SYNTRA_STATUS_OK);
+    assert(pixels[(size_t)163U * STRIDE + 310U] == 0xFF54D6E8U);
+    assert(pixels[(size_t)163U * STRIDE + 315U] == 0xFF1A2948U);
+
     /* Selection highlight remains continuous behind opaque text rendering. */
     manager.windows[0].app_selection = 2U; /* DOWNLOADS */
     assert(syntra_gui_render_windows(&framebuffer, &manager) == SYNTRA_STATUS_OK);
