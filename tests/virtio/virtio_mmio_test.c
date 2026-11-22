@@ -403,8 +403,9 @@ static void test_input_event_irq_drain(void)
         assert(available == 1);
         assert(queued.type == SYNTRA_INPUT_EV_KEY &&
                queued.code == 30U && queued.value == 1);
-        assert(syntra_virtio_mmio_pop_input_event(&queue, &queued) ==
+        assert(syntra_virtio_mmio_pop_input_event(&queue, &queued, &available) ==
                SYNTRA_STATUS_OK);
+        assert(available == 1);
         assert(queued.type == SYNTRA_INPUT_EV_KEY &&
                queued.code == 30U && queued.value == 0);
         assert(syntra_virtio_mmio_pop_input_event(&queue, &queued, &available) ==
