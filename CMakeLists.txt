@@ -187,6 +187,11 @@ add_executable(gui_gesture_test tests/gui/gesture_test.c)
 target_link_libraries(gui_gesture_test PRIVATE syntra_gui)
 add_test(NAME GUIGestureEngineTest COMMAND gui_gesture_test)
 
+# SyntraOS desktop uptime panel rendering test
+add_executable(gui_uptime_panel_test tests/gui/uptime_panel_test.c)
+target_link_libraries(gui_uptime_panel_test PRIVATE syntra_gui)
+add_test(NAME GUIUptimePanelTest COMMAND gui_uptime_panel_test)
+
 # QEMU ramfb firmware-directory and wire-format tests
 add_executable(gui_ramfb_test
     tests/gui/ramfb_test.c
