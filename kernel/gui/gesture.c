@@ -52,6 +52,7 @@ syntra_status_t syntra_gesture_update(
     syntra_gesture_result_t *r)
 {
     uint32_t button;
+    uint32_t active_is_down;
     if (g == NULL || g->initialized != 1U || r == NULL)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
@@ -76,7 +77,10 @@ syntra_status_t syntra_gesture_update(
         return SYNTRA_STATUS_OK;
     }
 
-    if (g->pressed && button == g->active_button)
+    active_is_down = g->pressed &&
+        (buttons & g->active_button) != 0U;
+
+    if (active_is_down)
     {
         uint32_t duration = elapsed_ms(now_ms, g->press_started_ms);
         uint64_t moved = distance_squared(x, y, g->start_x, g->start_y);
@@ -118,7 +122,7 @@ syntra_status_t syntra_gesture_update(
         return SYNTRA_STATUS_OK;
     }
 
-    if (g->pressed && button == 0U)
+    if (g->pressed && !active_is_down)
     {
         uint32_t duration = elapsed_ms(now_ms, g->press_started_ms);
         uint32_t old_target = g->target_id;
