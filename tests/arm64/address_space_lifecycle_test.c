@@ -12,22 +12,6 @@
 
 static uint64_t table_storage[TEST_RAM_PAGES][SYNTRA_ARM64_MMU_TABLE_ENTRIES];
 
-static syntra_status_t allocate_page_table(
-    void *context, uint64_t *physical_address)
-{
-    uintptr_t page;
-    syntra_status_t status;
-    (void)context;
-
-    if (physical_address == NULL)
-        return SYNTRA_STATUS_INVALID_ARGUMENT;
-
-    status = syntra_page_alloc_owned(&page, SYNTRA_PAGE_OWNER_PAGE_TABLE);
-    if (status == SYNTRA_STATUS_OK)
-        *physical_address = (uint64_t)page;
-    return status;
-}
-
 static uint64_t *resolve_page(uint64_t physical_address, void *context)
 {
     (void)context;
@@ -54,7 +38,8 @@ int main(void)
 {
     syntra_arm64_address_space_t space = {0};
     syntra_arm64_mmu_translation_t translation;
-    syntra_page_allocator_stats_t before, after;
+    syntra_page_allocator_stats_t before, after_unmap;
+    syntra_page_allocator_stats_t after;
     uintptr_t kernel_root;
     uintptr_t process_page_a, process_page_b;
     size_t initial_free;
@@ -122,7 +107,7 @@ int main(void)
         SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 0) ==
         SYNTRA_STATUS_INVALID_ARGUMENT);
 
-    /* Unmapping one of two pages must keep the shared L3 table alive. */
+    /* Removing one of two pages must keep their shared L3 table alive. */
     assert(syntra_arm64_address_space_unmap_user_page(
         &space, TEST_USER_VA) == SYNTRA_STATUS_OK);
     assert(space.mapping_count == 1U);
@@ -130,11 +115,28 @@ int main(void)
     assert(syntra_arm64_address_space_translate(
         &space, TEST_USER_VA, &translation) != SYNTRA_STATUS_OK);
 
-    /* Destroy releases the remaining PROCESS page and private table tree. */
+    /* Removing the final page must reclaim the now-empty L3 and L2 tables. */
+    assert(syntra_arm64_address_space_unmap_user_page(
+        &space, TEST_USER_VA + SYNTRA_PAGE_SIZE) == SYNTRA_STATUS_OK);
+    assert(space.mapping_count == 0U);
+    assert(syntra_arm64_address_space_validate(&space) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_address_space_translate(
+        &space, TEST_USER_VA + SYNTRA_PAGE_SIZE, &translation) !=
+        SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_get_stats(&after_unmap) == SYNTRA_STATUS_OK);
+    assert(after_unmap.owner_pages[SYNTRA_PAGE_OWNER_PROCESS] == 0U);
+    /* Only the private root and borrowed kernel root should remain. */
+    assert(after_unmap.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] == 2U);
+
+    /* Destroy releases the private root but never frees the borrowed root. */
     assert(syntra_arm64_address_space_destroy(&space) == SYNTRA_STATUS_OK);
     assert(space.initialized == 0U);
     assert(space.mapping_count == 0U);
     assert(space.page_table.root_physical_address == 0ULL);
+
+    assert(syntra_page_allocator_get_stats(&after) == SYNTRA_STATUS_OK);
+    assert(after.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] == 1U);
+    assert(after.owner_pages[SYNTRA_PAGE_OWNER_PROCESS] == 0U);
 
     assert(syntra_page_free_owned(
         kernel_root, SYNTRA_PAGE_OWNER_PAGE_TABLE) == SYNTRA_STATUS_OK);
