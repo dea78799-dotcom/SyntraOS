@@ -22,6 +22,7 @@ typedef struct
     uint32_t width;
     uint32_t height;
     syntra_gui_app_type_t app_type;
+    uint32_t app_selection;
 } syntra_gui_window_t;
 
 /*
