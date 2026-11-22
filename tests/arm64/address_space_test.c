@@ -61,8 +61,8 @@ int main(void)
     assert(syntra_page_alloc_owned(
         &kernel_data_page, SYNTRA_PAGE_OWNER_KERNEL) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_page_table_init(
-        &kernel_table, allocate_table_page, 
-        (syntra_arm64_pt_resolve_fn)resolve_page, NULL) == SYNTRA_STATUS_OK);
+        &kernel_table, allocate_table_page,
+        resolve_page, NULL) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_page_table_map(
         &kernel_table, 0x10000000ULL, kernel_data_page,
         SYNTRA_ARM64_MMU_PAGE_SIZE, SYNTRA_ARM64_MMU_MEMORY_NORMAL,
@@ -96,7 +96,7 @@ int main(void)
     assert(syntra_page_alloc_owned(
         &first_process_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_address_space_map_user_page(
-        &first, 0x40000000ULL, first_process_page,
+        &first, 0x4000000000ULL, first_process_page,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
         SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(syntra_page_free_owned(
@@ -115,7 +115,7 @@ int main(void)
         SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 0) ==
         SYNTRA_STATUS_PERMISSION_DENIED);
     assert(syntra_arm64_address_space_map_user_page(
-        &second, 0x40000000ULL, second_process_page,
+        &second, 0x4000000000ULL, second_process_page,
         SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 0) == SYNTRA_STATUS_OK);
 
     assert(syntra_arm64_address_space_translate(
@@ -125,13 +125,13 @@ int main(void)
     assert(!translation.user_execute);
 
     assert(syntra_arm64_address_space_translate(
-        &second, 0x40000034ULL, &translation) == SYNTRA_STATUS_OK);
+        &second, 0x4000000034ULL, &translation) == SYNTRA_STATUS_OK);
     assert(translation.physical_address == second_process_page + 0x34ULL);
     assert(translation.user_read && !translation.user_write);
     assert(!translation.user_execute);
 
     assert(syntra_arm64_address_space_map_user_page(
-        &first, 0x40000000ULL, second_process_page,
+        &first, 0x4000000000ULL, second_process_page,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) != SYNTRA_STATUS_OK);
     assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_address_space_validate(&second) == SYNTRA_STATUS_OK);
@@ -139,18 +139,18 @@ int main(void)
 
     /* Unmap reclaims the process frame and now-empty L3/L2 tables. */
     assert(syntra_arm64_address_space_unmap_user_page(
-        &first, 0x40000000ULL) == SYNTRA_STATUS_OK);
+        &first, 0x4000000000ULL) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_address_space_unmap_user_page(
-        &first, 0x40000000ULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
+        &first, 0x4000000000ULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(syntra_arm64_address_space_translate(
-        &first, 0x40000000ULL, &translation) == SYNTRA_STATUS_ERROR);
+        &first, 0x4000000000ULL, &translation) == SYNTRA_STATUS_ERROR);
     assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
 
     /* The same virtual range can be populated again after reclamation. */
     assert(syntra_page_alloc_owned(
         &first_process_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_address_space_map_user_page(
-        &first, 0x40000000ULL, first_process_page,
+        &first, 0x4000000000ULL, first_process_page,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
 
