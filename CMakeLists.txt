@@ -259,6 +259,16 @@ add_executable(page_allocator_stress_test
 target_include_directories(page_allocator_stress_test PRIVATE kernel/memory kernel/core)
 add_test(NAME PhysicalPageAllocatorStressTest COMMAND page_allocator_stress_test)
 
+# Physical Stack Allocator V1 Test
+add_executable(stack_allocator_test
+    tests/memory/stack_allocator_test.c
+    kernel/memory/stack_allocator.c
+    kernel/memory/page_allocator.c
+    kernel/memory/memory_region.c
+)
+target_include_directories(stack_allocator_test PRIVATE kernel/memory kernel/core)
+add_test(NAME PhysicalStackAllocatorOwnershipTest COMMAND stack_allocator_test)
+
 # Physical Page Allocator V1 Test
 add_executable(page_allocator_test
     tests/memory/page_allocator_test.c

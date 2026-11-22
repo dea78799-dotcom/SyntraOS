@@ -18,9 +18,11 @@ Each TCB contains:
 - Caller-owned stack base and size.
 - Architecture-owned saved CPU context pointer.
 
-Thread creation currently accepts a caller-provided stack. Dynamic stack
-allocation is intentionally deferred until Memory Management provides it. The
-Scheduler does not own or free caller-provided stack storage.
+Thread creation currently accepts a caller-provided stack. The physical stack
+allocator can reserve contiguous kernel-owned pages, but does not create a
+virtual mapping or expose a dereferenceable pointer. A creator must resolve/map
+the physical range before scheduler registration. The scheduler still does not
+own or free caller-provided stack storage.
 
 ## 3. Scheduling policy
 
@@ -44,7 +46,8 @@ context and all stack metadata, then makes the slot available for reuse.
 
 The reaper does not free kernel or user stack memory: those buffers remain
 owned by the creator. The creator may release or reuse them only after reaping
-succeeds. External owners such as the Process Manager must first drop their
+succeeds. Physical stack allocations managed by `syntra_stack_alloc()` are
+released separately by `syntra_stack_free()` after successful TCB reaping. External owners such as the Process Manager must first drop their
 references to the Thread ID. In particular, release the terminated Process
 record before reaping its associated Thread records. No automatic reaping is
 performed from IRQ or exception paths.
