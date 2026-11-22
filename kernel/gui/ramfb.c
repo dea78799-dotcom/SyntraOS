@@ -372,7 +372,6 @@ syntra_status_t syntra_ramfb_refresh(void)
 syntra_status_t syntra_ramfb_process_input_events(
     syntra_virtio_input_queue_t *input_queue)
 {
-    syntra_framebuffer_t framebuffer;
     syntra_input_event_t event;
     int available;
     int processed = 0;
@@ -395,6 +394,5 @@ syntra_status_t syntra_ramfb_process_input_events(
 
     if (!processed) return SYNTRA_STATUS_OK;
 
-    (void)framebuffer;
     return syntra_ramfb_refresh();
 }
