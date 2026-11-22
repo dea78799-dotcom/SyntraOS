@@ -674,3 +674,21 @@ target_include_directories(arm64_el0_permission_audit_test PRIVATE
 )
 add_test(NAME ARM64EL0PermissionAuditTest
     COMMAND arm64_el0_permission_audit_test)
+
+
+# ARM64 address-space lifecycle and allocator ownership integration test
+add_executable(arm64_address_space_lifecycle_test
+    tests/arm64/address_space_lifecycle_test.c
+    kernel/arch/arm64/address_space.c
+    kernel/arch/arm64/mmu.c
+    kernel/arch/arm64/page_table_builder.c
+    kernel/memory/page_allocator.c
+    kernel/memory/memory_region.c
+)
+target_include_directories(arm64_address_space_lifecycle_test PRIVATE
+    kernel/arch/arm64
+    kernel/memory
+    kernel/core
+)
+add_test(NAME ARM64AddressSpaceLifecycleTest
+    COMMAND arm64_address_space_lifecycle_test)
