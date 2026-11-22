@@ -42,7 +42,17 @@ static syntra_status_t allocate_table(
 
     status = builder->allocate(builder->context, physical);
     if (status != SYNTRA_STATUS_OK) return status;
-    if (!pa_valid(*physical)) return SYNTRA_STATUS_ERROR;
+    if (!pa_valid(*physical))
+    {
+        /*
+         * The allocator reported success, so give its paired release hook a
+         * chance to undo the allocation. The production owner-aware allocator
+         * independently validates address alignment and ownership.
+         */
+        if (builder->release != NULL)
+            (void)builder->release(builder->context, *physical);
+        return SYNTRA_STATUS_ERROR;
+    }
 
     memory = get_table(builder, *physical);
     if (memory == NULL)
