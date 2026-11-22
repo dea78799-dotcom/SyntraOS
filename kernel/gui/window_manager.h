@@ -5,6 +5,7 @@
 #include "../core/status.h"
 
 #define SYNTRA_GUI_MAX_WINDOWS 8U
+#define SYNTRA_GUI_FILES_ENTRY_COUNT 8U
 
 typedef enum
 {
@@ -23,6 +24,10 @@ typedef struct
     uint32_t height;
     syntra_gui_app_type_t app_type;
     uint32_t app_selection;
+    uint32_t app_scroll_offset;
+    uint32_t restore_x, restore_y, restore_width, restore_height;
+    uint8_t minimized;
+    uint8_t maximized;
 } syntra_gui_window_t;
 
 /*
@@ -70,6 +75,13 @@ syntra_status_t syntra_gui_window_move(
     uint32_t window_id,
     uint32_t x,
     uint32_t y);
+
+syntra_status_t syntra_gui_window_minimize(
+    syntra_gui_window_manager_t *manager, uint32_t window_id);
+syntra_status_t syntra_gui_window_maximize(
+    syntra_gui_window_manager_t *manager, uint32_t window_id);
+syntra_status_t syntra_gui_window_restore(
+    syntra_gui_window_manager_t *manager, uint32_t window_id);
 
 syntra_status_t syntra_gui_window_focus(
     syntra_gui_window_manager_t *manager,

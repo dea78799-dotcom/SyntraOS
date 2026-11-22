@@ -62,6 +62,8 @@ add_executable(syntraos_arm64
     "${SYNTRAOS_ROOT}/kernel/gui/window_manager.c"
     "${SYNTRAOS_ROOT}/kernel/gui/window_renderer.c"
     "${SYNTRAOS_ROOT}/kernel/gui/window_interaction.c"
+    "${SYNTRAOS_ROOT}/kernel/gui/gesture.c"
+    "${SYNTRAOS_ROOT}/kernel/gui/uptime_panel.c"
     "${SYNTRAOS_ROOT}/kernel/input/input.c"
     "${SYNTRAOS_ROOT}/kernel/virtio/virtio_mmio.c"
     "${SYNTRAOS_ROOT}/kernel/virtio/input_event_queue.c"

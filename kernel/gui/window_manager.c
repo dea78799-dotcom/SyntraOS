@@ -55,6 +55,13 @@ syntra_status_t syntra_gui_window_manager_init(
         manager->windows[index].height = 0U;
         manager->windows[index].app_type = SYNTRA_GUI_APP_GENERIC;
         manager->windows[index].app_selection = 0U;
+        manager->windows[index].app_scroll_offset = 0U;
+        manager->windows[index].restore_x = 0U;
+        manager->windows[index].restore_y = 0U;
+        manager->windows[index].restore_width = 0U;
+        manager->windows[index].restore_height = 0U;
+        manager->windows[index].minimized = 0U;
+        manager->windows[index].maximized = 0U;
     }
 
     return SYNTRA_STATUS_OK;
@@ -92,6 +99,13 @@ syntra_status_t syntra_gui_window_open_app(
     window->height = height;
     window->app_type = app_type;
     window->app_selection = 0U;
+    window->app_scroll_offset = 0U;
+    window->restore_x = x;
+    window->restore_y = y;
+    window->restore_width = width;
+    window->restore_height = height;
+    window->minimized = 0U;
+    window->maximized = 0U;
 
     *window_id = manager->next_id;
     manager->next_id++;
@@ -135,6 +149,13 @@ syntra_status_t syntra_gui_window_close(
     manager->windows[manager->count].height = 0U;
     manager->windows[manager->count].app_type = SYNTRA_GUI_APP_GENERIC;
     manager->windows[manager->count].app_selection = 0U;
+    manager->windows[manager->count].app_scroll_offset = 0U;
+    manager->windows[manager->count].restore_x = 0U;
+    manager->windows[manager->count].restore_y = 0U;
+    manager->windows[manager->count].restore_width = 0U;
+    manager->windows[manager->count].restore_height = 0U;
+    manager->windows[manager->count].minimized = 0U;
+    manager->windows[manager->count].maximized = 0U;
     return SYNTRA_STATUS_OK;
 }
 
@@ -162,6 +183,77 @@ syntra_status_t syntra_gui_window_move(
     return SYNTRA_STATUS_OK;
 }
 
+syntra_status_t syntra_gui_window_minimize(
+    syntra_gui_window_manager_t *manager, uint32_t window_id)
+{
+    int found;
+    syntra_gui_window_t selected;
+    uint32_t index;
+    if (manager == NULL || manager->initialized != 1 || window_id == 0U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    found = find_window(manager, window_id);
+    if (found < 0) return SYNTRA_STATUS_INVALID_ARGUMENT;
+    selected = manager->windows[(uint32_t)found];
+    selected.minimized = 1U;
+    for (index = (uint32_t)found; index > 0U; --index)
+        manager->windows[index] = manager->windows[index - 1U];
+    manager->windows[0] = selected;
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t syntra_gui_window_maximize(
+    syntra_gui_window_manager_t *manager, uint32_t window_id)
+{
+    int found;
+    syntra_gui_window_t *window;
+    syntra_status_t status;
+    if (manager == NULL || manager->initialized != 1 || window_id == 0U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    found = find_window(manager, window_id);
+    if (found < 0) return SYNTRA_STATUS_INVALID_ARGUMENT;
+    manager->windows[(uint32_t)found].minimized = 0U;
+    status = syntra_gui_window_focus(manager, window_id);
+    if (status != SYNTRA_STATUS_OK) return status;
+    found = find_window(manager, window_id);
+    if (found < 0) return SYNTRA_STATUS_INVALID_ARGUMENT;
+    window = &manager->windows[(uint32_t)found];
+    if (window->maximized == 0U)
+    {
+        window->restore_x = window->x;
+        window->restore_y = window->y;
+        window->restore_width = window->width;
+        window->restore_height = window->height;
+        window->x = 0U;
+        window->y = 0U;
+        window->width = manager->screen_width;
+        window->height = manager->screen_height;
+        window->maximized = 1U;
+    }
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t syntra_gui_window_restore(
+    syntra_gui_window_manager_t *manager, uint32_t window_id)
+{
+    int found;
+    syntra_gui_window_t *window;
+    if (manager == NULL || manager->initialized != 1 || window_id == 0U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    found = find_window(manager, window_id);
+    if (found < 0) return SYNTRA_STATUS_INVALID_ARGUMENT;
+    window = &manager->windows[(uint32_t)found];
+    if (window->maximized != 0U)
+    {
+        window->x = window->restore_x;
+        window->y = window->restore_y;
+        window->width = window->restore_width;
+        window->height = window->restore_height;
+        window->maximized = 0U;
+    }
+    window->minimized = 0U;
+    return syntra_gui_window_focus(manager, window_id);
+}
+
 syntra_status_t syntra_gui_window_focus(
     syntra_gui_window_manager_t *manager,
     uint32_t window_id)
@@ -175,9 +267,14 @@ syntra_status_t syntra_gui_window_focus(
 
     found = find_window(manager, window_id);
     if (found < 0) return SYNTRA_STATUS_INVALID_ARGUMENT;
-    if ((uint32_t)found == manager->count - 1U) return SYNTRA_STATUS_OK;
+    if ((uint32_t)found == manager->count - 1U)
+    {
+        manager->windows[(uint32_t)found].minimized = 0U;
+        return SYNTRA_STATUS_OK;
+    }
 
     selected = manager->windows[(uint32_t)found];
+    selected.minimized = 0U;
     for (index = (uint32_t)found; index + 1U < manager->count; ++index)
         manager->windows[index] = manager->windows[index + 1U];
     manager->windows[manager->count - 1U] = selected;
@@ -205,8 +302,13 @@ syntra_status_t syntra_gui_window_get(
 const syntra_gui_window_t *syntra_gui_window_active(
     const syntra_gui_window_manager_t *manager)
 {
+    uint32_t index;
     if (manager == NULL || manager->initialized != 1 || manager->count == 0U)
         return NULL;
-
-    return &manager->windows[manager->count - 1U];
+    for (index = manager->count; index > 0U; --index)
+    {
+        if (manager->windows[index - 1U].minimized == 0U)
+            return &manager->windows[index - 1U];
+    }
+    return NULL;
 }

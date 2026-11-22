@@ -24,6 +24,8 @@ add_library(syntra_gui STATIC
     kernel/gui/window_renderer.c
     kernel/gui/window_interaction.c
     kernel/gui/gui_runtime.c
+    kernel/gui/gesture.c
+    kernel/gui/uptime_panel.c
     kernel/input/input.c
 )
 target_include_directories(syntra_gui PUBLIC
@@ -179,6 +181,21 @@ add_test(NAME GUIv5ComposedWindowInteractionTest COMMAND gui_v5_interaction_test
 add_executable(gui_runtime_test tests/gui/gui_runtime_test.c)
 target_link_libraries(gui_runtime_test PRIVATE syntra_gui)
 add_test(NAME GUIRuntimeIntegrationTest COMMAND gui_runtime_test)
+
+# SyntraOS pointer gesture engine lifecycle test
+add_executable(gui_gesture_test tests/gui/gesture_test.c)
+target_link_libraries(gui_gesture_test PRIVATE syntra_gui)
+add_test(NAME GUIGestureEngineTest COMMAND gui_gesture_test)
+
+# SyntraOS desktop uptime panel rendering test
+add_executable(gui_uptime_panel_test tests/gui/uptime_panel_test.c)
+target_link_libraries(gui_uptime_panel_test PRIVATE syntra_gui)
+add_test(NAME GUIUptimePanelTest COMMAND gui_uptime_panel_test)
+
+# SyntraOS gesture engine and persistent GUI runtime integration test
+add_executable(gui_gesture_runtime_test tests/gui/gui_gesture_runtime_test.c)
+target_link_libraries(gui_gesture_runtime_test PRIVATE syntra_gui)
+add_test(NAME GUIGestureRuntimeIntegrationTest COMMAND gui_gesture_runtime_test)
 
 # QEMU ramfb firmware-directory and wire-format tests
 add_executable(gui_ramfb_test

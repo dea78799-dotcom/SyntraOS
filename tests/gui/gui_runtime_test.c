@@ -150,6 +150,99 @@ int main(void)
     assert(syntra_gui_window_active(&runtime.windows)->height == 170U);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
 
+    /* Hover tracks the window under the pointer without focusing it. */
+    {
+        uint32_t files_id = syntra_gui_window_active(&runtime.windows)->id;
+        assert(runtime.hover_target_id == files_id);
+        send_event(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_WHEEL, -1);
+        assert(syntra_gui_window_active(&runtime.windows)->app_scroll_offset == 1U);
+        send_event(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_WHEEL, -5);
+        assert(syntra_gui_window_active(&runtime.windows)->app_scroll_offset == 2U);
+        send_event(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_WHEEL, 1);
+        assert(syntra_gui_window_active(&runtime.windows)->app_scroll_offset == 1U);
+        send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+        assert(syntra_gui_window_active(&runtime.windows)->app_selection == 1U);
+        send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+        framebuffer.pixels = pixels;
+        framebuffer.width = 320U;
+        framebuffer.height = 240U;
+        framebuffer.stride_pixels = 320U;
+        assert(syntra_gui_runtime_render(&runtime, &framebuffer) ==
+               SYNTRA_STATUS_OK);
+        assert(pixels[40U * 320U + 10U] == 0xFF54D6E8U);
+        assert(pixels[86U * 320U + 241U] == 0xFF54D6E8U);
+    }
+
+    /* Compact task switcher renders slots and restores minimized windows. */
+    assert(syntra_gui_runtime_init(&runtime, 320U, 240U) ==
+           SYNTRA_STATUS_OK);
+    {
+        uint32_t files_id, settings_id;
+        framebuffer.pixels = pixels;
+        framebuffer.width = 320U;
+        framebuffer.height = 240U;
+        framebuffer.stride_pixels = 320U;
+        assert(syntra_gui_window_open_app(
+            &runtime.windows, 10U, 40U, 240U, 170U,
+            SYNTRA_GUI_APP_FILES, &files_id) == SYNTRA_STATUS_OK);
+        assert(syntra_gui_window_open_app(
+            &runtime.windows, 70U, 40U, 240U, 170U,
+            SYNTRA_GUI_APP_SETTINGS, &settings_id) == SYNTRA_STATUS_OK);
+        assert(syntra_gui_window_minimize(
+            &runtime.windows, settings_id) == SYNTRA_STATUS_OK);
+        assert(syntra_gui_runtime_render(&runtime, &framebuffer) ==
+               SYNTRA_STATUS_OK);
+        /* First slot is minimized; second slot is the active Files window. */
+        assert(pixels[210U * 320U + 40U] == 0xFF263D66U);
+        assert(pixels[210U * 320U + 108U] == 0xFF54D6E8U);
+
+        /* Tap the first 64x22 slot to restore Settings. */
+        move_pointer(&runtime, -88, 101);
+        send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+        assert(syntra_gui_window_active(&runtime.windows)->id == settings_id);
+        assert(syntra_gui_window_active(&runtime.windows)->minimized == 0U);
+        send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+        assert(runtime.windows.count == 2U);
+    }
+
+    /* All eight compact switcher slots remain inside the screen bounds. */
+    assert(syntra_gui_runtime_init(&runtime, 320U, 240U) ==
+           SYNTRA_STATUS_OK);
+    framebuffer.pixels = pixels;
+    framebuffer.width = 320U;
+    framebuffer.height = 240U;
+    framebuffer.stride_pixels = 320U;
+    for (uint32_t index = 0U; index < SYNTRA_GUI_MAX_WINDOWS; ++index)
+    {
+        uint32_t id;
+        assert(syntra_gui_window_open(
+            &runtime.windows, 0U, 0U, 100U, 100U, &id) == SYNTRA_STATUS_OK);
+    }
+    {
+        uint32_t first_slot_id = runtime.windows.windows[0].id;
+        uint32_t last_slot_id =
+            runtime.windows.windows[SYNTRA_GUI_MAX_WINDOWS - 1U].id;
+        assert(syntra_gui_runtime_render(&runtime, &framebuffer) ==
+               SYNTRA_STATUS_OK);
+    /* Eight 30px slots with 4px gaps: x=40 through x=307. */
+    assert(pixels[210U * 320U + 40U] == 0xFF1A2948U);
+    assert(pixels[210U * 320U + 278U] == 0xFF54D6E8U);
+    assert(pixels[210U * 320U + 279U] == 0xFF54D6E8U);
+    assert(pixels[210U * 320U + 280U] == 0xFF25466FU);
+    assert(pixels[210U * 320U + 307U] == 0xFF25466FU);
+    assert(pixels[210U * 320U + 308U] != 0xFF25466FU);
+
+    /* Both edge slots are interactive, not just visually rendered. */
+    move_pointer(&runtime, 130, 100); /* last slot, near the right edge */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(syntra_gui_window_active(&runtime.windows)->id == last_slot_id);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+    move_pointer(&runtime, -240, 0); /* first slot, near the left edge */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(syntra_gui_window_active(&runtime.windows)->id == first_slot_id);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+    }
+
     /* A covered launcher must not intercept clicks from the front app. */
     assert(syntra_gui_runtime_init(&runtime, 640U, 480U) ==
            SYNTRA_STATUS_OK);
@@ -215,6 +308,71 @@ int main(void)
     assert(runtime.windows.count == 1U);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
 
+    /* Right-click a window, render its menu, and close the target. */
+    assert(syntra_gui_runtime_init(&runtime, 640U, 480U) ==
+           SYNTRA_STATUS_OK);
+    move_pointer(&runtime, 80, 60); /* inside Settings */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_RIGHT, 1);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_RIGHT, 0);
+    assert(runtime.last_gesture.action == SYNTRA_GESTURE_CONTEXT_REQUEST);
+    assert(runtime.context_menu_visible == 1U);
+    assert(runtime.context_menu_target ==
+           runtime.windows.windows[1].id);
+    framebuffer.pixels = pixels;
+    framebuffer.width = 640U;
+    framebuffer.height = 480U;
+    framebuffer.stride_pixels = 640U;
+    assert(syntra_gui_runtime_render(&runtime, &framebuffer) ==
+           SYNTRA_STATUS_OK);
+    /* Select the third menu row: CLOSE (after minimize and maximize). */
+    move_pointer(&runtime, 20, 59);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(runtime.context_menu_visible == 0U);
+    assert(runtime.windows.count == 2U);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+
+    /* Right-click the desktop and use OPEN SETTINGS to recreate the app. */
+    move_pointer(&runtime, 80, -259); /* empty desktop area at (500,100) */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_RIGHT, 1);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_RIGHT, 0);
+    assert(runtime.context_menu_visible == 1U);
+    assert(runtime.context_menu_target == UINT32_MAX);
+    move_pointer(&runtime, 20, 44); /* second desktop menu row */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(runtime.context_menu_visible == 0U);
+    assert(runtime.windows.count == 3U);
+    assert(syntra_gui_window_active(&runtime.windows)->app_type ==
+           SYNTRA_GUI_APP_SETTINGS);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+
+    /* Taskbar focuses open windows and restores minimized windows. */
+    assert(syntra_gui_runtime_init(&runtime, 640U, 480U) ==
+           SYNTRA_STATUS_OK);
+    move_pointer(&runtime, -126, 219); /* first taskbar button: Files */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(syntra_gui_window_active(&runtime.windows)->app_type ==
+           SYNTRA_GUI_APP_FILES);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+    move_pointer(&runtime, 45, -259); /* Files minimize titlebar control */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(syntra_gui_window_active(&runtime.windows)->app_type ==
+           SYNTRA_GUI_APP_LAUNCHER);
+    assert(runtime.windows.windows[0].app_type == SYNTRA_GUI_APP_FILES);
+    assert(runtime.windows.windows[0].minimized == 1U);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+    move_pointer(&runtime, -45, 259); /* select minimized Files taskbar item */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(syntra_gui_window_active(&runtime.windows)->app_type ==
+           SYNTRA_GUI_APP_FILES);
+    assert(syntra_gui_window_active(&runtime.windows)->minimized == 0U);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+    framebuffer.pixels = pixels;
+    framebuffer.width = 640U;
+    framebuffer.height = 480U;
+    framebuffer.stride_pixels = 640U;
+    assert(syntra_gui_runtime_render(&runtime, &framebuffer) ==
+           SYNTRA_STATUS_OK);
+    assert(pixels[(size_t)447U * 640U + 340U] == 0xFF54D6E8U);
     /* Invalid dimensions must be rejected rather than creating partial state. */
     assert(syntra_gui_runtime_init(&runtime, 200U, 100U) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);

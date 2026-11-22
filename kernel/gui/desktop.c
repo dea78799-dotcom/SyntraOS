@@ -100,7 +100,7 @@ static syntra_status_t render_compact(syntra_framebuffer_t *framebuffer)
     status = fill(framebuffer, 0U, height - dock_height,
                   width, dock_height, COLOR_PANEL);
     if (status != SYNTRA_STATUS_OK) return status;
-    status = fill(framebuffer, 10U, height - 20U, 10U, 10U, COLOR_CYAN);
+    status = fill(framebuffer, 8U, height - 32U, 24U, 24U, COLOR_CYAN);
     if (status != SYNTRA_STATUS_OK) return status;
     return draw_text(framebuffer, 28U, height - 18U, "DESKTOP PREVIEW",
                      COLOR_WHITE, COLOR_PANEL, 1U);

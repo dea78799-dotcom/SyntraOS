@@ -4,6 +4,397 @@
 #include "desktop.h"
 #include "window_renderer.h"
 
+#define TASKBAR_START_X 148U
+#define TASKBAR_RIGHT_MARGIN 12U
+#define TASKBAR_GAP 3U
+#define TASKBAR_HEIGHT 26U
+#define TASKBAR_BOTTOM_MARGIN 8U
+
+#define COMPACT_SWITCHER_START_X 40U
+#define COMPACT_SWITCHER_RIGHT_MARGIN 8U
+#define COMPACT_SWITCHER_GAP 4U
+#define COMPACT_SWITCHER_MAX_SLOT_WIDTH 64U
+#define COMPACT_SWITCHER_HEIGHT 22U
+#define COMPACT_SWITCHER_BOTTOM_MARGIN 8U
+
+static int compact_switcher_geometry(
+    const syntra_gui_runtime_t *runtime, uint32_t *slot_width)
+{
+    uint32_t available, width;
+    if (runtime->input.width >= 640U || runtime->input.height >= 480U ||
+        runtime->windows.count == 0U || slot_width == NULL ||
+        runtime->input.width <= COMPACT_SWITCHER_START_X +
+            COMPACT_SWITCHER_RIGHT_MARGIN)
+        return 0;
+    available = runtime->input.width - COMPACT_SWITCHER_START_X -
+                COMPACT_SWITCHER_RIGHT_MARGIN -
+                COMPACT_SWITCHER_GAP * (runtime->windows.count - 1U);
+    width = available / runtime->windows.count;
+    if (width > COMPACT_SWITCHER_MAX_SLOT_WIDTH)
+        width = COMPACT_SWITCHER_MAX_SLOT_WIDTH;
+    if (width < 24U) return 0;
+    *slot_width = width;
+    return 1;
+}
+
+static uint32_t compact_switcher_y(const syntra_gui_runtime_t *runtime)
+{
+    return runtime->input.height - COMPACT_SWITCHER_BOTTOM_MARGIN -
+           COMPACT_SWITCHER_HEIGHT;
+}
+
+static uint32_t compact_switcher_slot_x(uint32_t index, uint32_t slot_width)
+{
+    return COMPACT_SWITCHER_START_X +
+           index * (slot_width + COMPACT_SWITCHER_GAP);
+}
+
+static uint32_t gesture_target_at(const syntra_gui_runtime_t *runtime,
+                                  uint32_t x, uint32_t y)
+{
+    uint32_t index = runtime->windows.count;
+    if ((runtime->input.width >= 640U && runtime->input.height >= 480U &&
+         x >= TASKBAR_START_X &&
+         y >= runtime->input.height - TASKBAR_BOTTOM_MARGIN - TASKBAR_HEIGHT - 2U) ||
+        (runtime->input.width < 640U || runtime->input.height < 480U) &&
+         x >= COMPACT_SWITCHER_START_X &&
+         y >= compact_switcher_y(runtime) &&
+         y < compact_switcher_y(runtime) + COMPACT_SWITCHER_HEIGHT)
+        return UINT32_MAX;
+    while (index > 0U)
+    {
+        const syntra_gui_window_t *window = &runtime->windows.windows[--index];
+        if (window->minimized != 0U) continue;
+        if (x >= window->x && y >= window->y &&
+            x - window->x < window->width &&
+            y - window->y < window->height)
+            return window->id;
+    }
+    return UINT32_MAX; /* Reserved ID: cannot collide with a managed window. */
+}
+
+static int taskbar_geometry(
+    const syntra_gui_runtime_t *runtime, uint32_t *slot_width)
+{
+    uint32_t count, available, width;
+    if (runtime->input.width < 640U || runtime->input.height < 480U ||
+        runtime->windows.count == 0U || slot_width == NULL)
+        return 0;
+    count = runtime->windows.count;
+    available = runtime->input.width - TASKBAR_START_X -
+                TASKBAR_RIGHT_MARGIN - TASKBAR_GAP * (count - 1U);
+    width = available / count;
+    if (width > 92U) width = 92U;
+    if (width < 48U) return 0;
+    *slot_width = width;
+    return 1;
+}
+
+static syntra_status_t handle_compact_switcher_click(
+    syntra_gui_runtime_t *runtime, uint32_t x, uint32_t y, int *handled)
+{
+    uint32_t slot_width, index, switcher_y;
+    syntra_status_t status;
+    *handled = 0;
+    if (!compact_switcher_geometry(runtime, &slot_width))
+        return SYNTRA_STATUS_OK;
+    switcher_y = compact_switcher_y(runtime);
+    if (x < COMPACT_SWITCHER_START_X ||
+        x >= runtime->input.width - COMPACT_SWITCHER_RIGHT_MARGIN ||
+        y < switcher_y || y >= switcher_y + COMPACT_SWITCHER_HEIGHT)
+        return SYNTRA_STATUS_OK;
+
+    /* The compact switcher owns its strip, including gaps between slots. */
+    *handled = 1;
+    for (index = 0U; index < runtime->windows.count; ++index)
+    {
+        uint32_t left = compact_switcher_slot_x(index, slot_width);
+        if (x >= left && x < left + slot_width)
+        {
+            uint32_t id = runtime->windows.windows[index].id;
+            status = runtime->windows.windows[index].minimized != 0U
+                ? syntra_gui_window_restore(&runtime->windows, id)
+                : syntra_gui_window_focus(&runtime->windows, id);
+            if (status != SYNTRA_STATUS_OK) return status;
+            break;
+        }
+    }
+    runtime->interaction.drag_window_id = 0U;
+    runtime->interaction.previous_buttons = runtime->input.buttons;
+    return SYNTRA_STATUS_OK;
+}
+
+static syntra_status_t render_compact_switcher(
+    const syntra_gui_runtime_t *runtime, syntra_framebuffer_t *framebuffer)
+{
+    uint32_t slot_width, index, y;
+    syntra_status_t status;
+    if (!compact_switcher_geometry(runtime, &slot_width))
+        return SYNTRA_STATUS_OK;
+    y = compact_switcher_y(runtime);
+    status = syntra_framebuffer_fill_rect(
+        framebuffer, COMPACT_SWITCHER_START_X - 4U, y - 2U,
+        framebuffer->width - COMPACT_SWITCHER_START_X,
+        COMPACT_SWITCHER_HEIGHT + 4U, 0xFF101A2CU);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    for (index = 0U; index < runtime->windows.count; ++index)
+    {
+        const syntra_gui_window_t *window = &runtime->windows.windows[index];
+        uint32_t x = compact_switcher_slot_x(index, slot_width);
+        int active = window->minimized == 0U &&
+            syntra_gui_window_active(&runtime->windows) == window;
+        uint32_t color = window->minimized != 0U ? 0xFF263D66U :
+            (active ? 0xFF25466FU : 0xFF1A2948U);
+        const char *label = "APP";
+        if (slot_width >= 40U)
+        {
+            if (window->app_type == SYNTRA_GUI_APP_FILES) label = "FILES";
+            else if (window->app_type == SYNTRA_GUI_APP_SETTINGS) label = "SET";
+            else if (window->app_type == SYNTRA_GUI_APP_LAUNCHER) label = "HOME";
+            else label = "WINDOW";
+        }
+        else
+        {
+            if (window->app_type == SYNTRA_GUI_APP_FILES) label = "FIL";
+            else if (window->app_type == SYNTRA_GUI_APP_SETTINGS) label = "SET";
+            else if (window->app_type == SYNTRA_GUI_APP_LAUNCHER) label = "HOM";
+        }
+
+        status = syntra_framebuffer_fill_rect(
+            framebuffer, x, y, slot_width, COMPACT_SWITCHER_HEIGHT, color);
+        if (status != SYNTRA_STATUS_OK) return status;
+        if (active)
+        {
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, x, y, 2U, COMPACT_SWITCHER_HEIGHT,
+                0xFF54D6E8U);
+            if (status != SYNTRA_STATUS_OK) return status;
+        }
+        status = syntra_framebuffer_draw_text(
+            framebuffer, x + 2U, y + 7U, label,
+            window->minimized != 0U ? 0xFFB7C5E0U : 0xFFF4F7FFU,
+            color, 1U);
+        if (status != SYNTRA_STATUS_OK) return status;
+    }
+    return SYNTRA_STATUS_OK;
+}
+
+static syntra_status_t handle_taskbar_click(
+    syntra_gui_runtime_t *runtime, uint32_t x, uint32_t y, int *handled)
+{
+    uint32_t slot_width, index, taskbar_y;
+    syntra_status_t status;
+    *handled = 0;
+    if (!taskbar_geometry(runtime, &slot_width)) return SYNTRA_STATUS_OK;
+    taskbar_y = runtime->input.height - TASKBAR_BOTTOM_MARGIN - TASKBAR_HEIGHT;
+    if (x < TASKBAR_START_X || y < taskbar_y ||
+        y >= taskbar_y + TASKBAR_HEIGHT)
+        return SYNTRA_STATUS_OK;
+
+    /* The taskbar owns its full strip, including gaps between buttons. */
+    *handled = 1;
+    for (index = 0U; index < runtime->windows.count; ++index)
+    {
+        uint32_t left = TASKBAR_START_X + index * (slot_width + TASKBAR_GAP);
+        uint32_t right = left + slot_width;
+        if (x >= left && x < right)
+        {
+            uint32_t id = runtime->windows.windows[index].id;
+            status = runtime->windows.windows[index].minimized != 0U
+                ? syntra_gui_window_restore(&runtime->windows, id)
+                : syntra_gui_window_focus(&runtime->windows, id);
+            if (status != SYNTRA_STATUS_OK) return status;
+            break;
+        }
+    }
+    runtime->interaction.drag_window_id = 0U;
+    runtime->interaction.previous_buttons = runtime->input.buttons;
+    return SYNTRA_STATUS_OK;
+}
+
+static syntra_status_t render_taskbar(
+    const syntra_gui_runtime_t *runtime, syntra_framebuffer_t *framebuffer)
+{
+    uint32_t slot_width, index, y;
+    syntra_status_t status;
+    if (!taskbar_geometry(runtime, &slot_width)) return SYNTRA_STATUS_OK;
+    y = framebuffer->height - TASKBAR_BOTTOM_MARGIN - TASKBAR_HEIGHT;
+    status = syntra_framebuffer_fill_rect(
+        framebuffer, TASKBAR_START_X - 6U, y - 2U,
+        framebuffer->width - TASKBAR_START_X + 6U,
+        TASKBAR_HEIGHT + 4U, 0xFF101A2CU);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    for (index = 0U; index < runtime->windows.count; ++index)
+    {
+        const syntra_gui_window_t *window = &runtime->windows.windows[index];
+        uint32_t x = TASKBAR_START_X + index * (slot_width + TASKBAR_GAP);
+        uint32_t color = window->minimized != 0U ? 0xFF263D66U :
+            (syntra_gui_window_active(&runtime->windows) == window
+                ? 0xFF25466FU : 0xFF1A2948U);
+        const char *label = "WINDOW";
+        if (window->app_type == SYNTRA_GUI_APP_FILES) label = "FILES";
+        else if (window->app_type == SYNTRA_GUI_APP_SETTINGS) label = "SETTINGS";
+        else if (window->app_type == SYNTRA_GUI_APP_LAUNCHER) label = "LAUNCHER";
+        status = syntra_framebuffer_fill_rect(
+            framebuffer, x, y, slot_width, TASKBAR_HEIGHT, color);
+        if (status != SYNTRA_STATUS_OK) return status;
+        if (window->minimized == 0U &&
+            syntra_gui_window_active(&runtime->windows) == window)
+        {
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, x, y, 3U, TASKBAR_HEIGHT, 0xFF54D6E8U);
+            if (status != SYNTRA_STATUS_OK) return status;
+        }
+        status = syntra_framebuffer_draw_text(
+            framebuffer, x + 5U, y + 10U, label,
+            window->minimized != 0U ? 0xFFB7C5E0U : 0xFFF4F7FFU,
+            color, 1U);
+        if (status != SYNTRA_STATUS_OK) return status;
+    }
+    return SYNTRA_STATUS_OK;
+}
+static syntra_gui_window_t *active_window_mutable(
+    syntra_gui_window_manager_t *manager)
+{
+    uint32_t index;
+    for (index = manager->count; index > 0U; --index)
+    {
+        if (manager->windows[index - 1U].minimized == 0U)
+            return &manager->windows[index - 1U];
+    }
+    return NULL;
+}
+
+static void update_hover(syntra_gui_runtime_t *runtime)
+{
+    runtime->hover_target_id = gesture_target_at(
+        runtime, runtime->input.pointer_x, runtime->input.pointer_y);
+}
+
+static uint32_t files_visible_rows(const syntra_gui_window_t *window)
+{
+    uint32_t inner_height = window->height > 28U
+        ? window->height - 28U : 0U;
+    uint32_t row;
+    uint32_t visible = 0U;
+    for (row = 0U; row < SYNTRA_GUI_FILES_ENTRY_COUNT; ++row)
+    {
+        uint32_t row_y = 8U + row * 22U;
+        if (row_y + 16U >= inner_height) break;
+        visible++;
+    }
+    return visible;
+}
+
+static void apply_wheel_scroll(syntra_gui_runtime_t *runtime,
+                               int64_t wheel_delta)
+{
+    uint32_t target = gesture_target_at(
+        runtime, runtime->input.pointer_x, runtime->input.pointer_y);
+    syntra_gui_window_t *window = NULL;
+    uint32_t index;
+    uint32_t visible_rows;
+    uint32_t max_offset;
+    uint64_t steps;
+
+    if (wheel_delta == 0 || target == UINT32_MAX)
+        return;
+    for (index = 0U; index < runtime->windows.count; ++index)
+    {
+        if (runtime->windows.windows[index].id == target)
+        {
+            window = &runtime->windows.windows[index];
+            break;
+        }
+    }
+    if (window == NULL || window->app_type != SYNTRA_GUI_APP_FILES ||
+        window->width <= 4U || window->height <= 4U ||
+        runtime->input.pointer_x < window->x ||
+        runtime->input.pointer_y < window->y ||
+        runtime->input.pointer_x - window->x < 42U ||
+        runtime->input.pointer_y - window->y < 24U ||
+        runtime->input.pointer_x - window->x >= window->width - 4U ||
+        runtime->input.pointer_y - window->y >= window->height - 4U)
+        return;
+
+    visible_rows = files_visible_rows(window);
+    if (visible_rows >= SYNTRA_GUI_FILES_ENTRY_COUNT) max_offset = 0U;
+    else max_offset = SYNTRA_GUI_FILES_ENTRY_COUNT - visible_rows;
+    if (window->app_scroll_offset > max_offset)
+        window->app_scroll_offset = max_offset;
+
+    if (wheel_delta > 0)
+    {
+        steps = (uint64_t)wheel_delta;
+        if (steps > window->app_scroll_offset)
+            steps = window->app_scroll_offset;
+        window->app_scroll_offset -= (uint32_t)steps;
+    }
+    else
+    {
+        steps = (uint64_t)(-wheel_delta);
+        if (steps > (uint64_t)(max_offset - window->app_scroll_offset))
+            steps = (uint64_t)(max_offset - window->app_scroll_offset);
+        window->app_scroll_offset += (uint32_t)steps;
+    }
+}
+
+static syntra_status_t render_hover_outline(
+    syntra_gui_runtime_t *runtime, syntra_framebuffer_t *framebuffer)
+{
+    const syntra_gui_window_t *window = NULL;
+    uint32_t x, y, width, height;
+    syntra_status_t status;
+
+    if (runtime->hover_target_id == 0U ||
+        runtime->hover_target_id == UINT32_MAX)
+        return SYNTRA_STATUS_OK;
+    status = syntra_gui_window_get(
+        &runtime->windows, runtime->hover_target_id, &window);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        runtime->hover_target_id = UINT32_MAX;
+        return SYNTRA_STATUS_OK;
+    }
+    x = window->x;
+    y = window->y;
+    width = window->width;
+    height = window->height;
+    if (width < 2U || height < 2U) return SYNTRA_STATUS_OK;
+
+    status = syntra_framebuffer_fill_rect(
+        framebuffer, x, y, width, 2U, 0xFF54D6E8U);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_framebuffer_fill_rect(
+        framebuffer, x, y + height - 2U, width, 2U, 0xFF54D6E8U);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_framebuffer_fill_rect(
+        framebuffer, x, y, 2U, height, 0xFF54D6E8U);
+    if (status != SYNTRA_STATUS_OK) return status;
+    return syntra_framebuffer_fill_rect(
+        framebuffer, x + width - 2U, y, 2U, height, 0xFF54D6E8U);
+}
+
+static syntra_status_t update_gesture(syntra_gui_runtime_t *runtime,
+                                      uint64_t now_ms)
+{
+    uint32_t buttons = 0U;
+    uint32_t target;
+    if ((runtime->input.buttons & SYNTRA_INPUT_BUTTON_LEFT) != 0U)
+        buttons |= SYNTRA_GESTURE_BUTTON_LEFT;
+    if ((runtime->input.buttons & SYNTRA_INPUT_BUTTON_RIGHT) != 0U)
+        buttons |= SYNTRA_GESTURE_BUTTON_RIGHT;
+    target = gesture_target_at(runtime, runtime->input.pointer_x,
+                               runtime->input.pointer_y);
+    runtime->gesture_time_ms = now_ms;
+    return syntra_gesture_update(&runtime->gesture, buttons, target,
+        runtime->input.pointer_x, runtime->input.pointer_y, now_ms,
+        &runtime->last_gesture);
+}
+
+
 syntra_status_t syntra_gui_runtime_init(
     syntra_gui_runtime_t *runtime,
     uint32_t width,
@@ -34,6 +425,16 @@ syntra_status_t syntra_gui_runtime_init(
 
     status = syntra_gui_window_interaction_init(&runtime->interaction);
     if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_gesture_init(&runtime->gesture);
+    if (status != SYNTRA_STATUS_OK) return status;
+    runtime->gesture_time_ms = 0ULL;
+    runtime->context_menu_x = 0U;
+    runtime->context_menu_y = 0U;
+    runtime->context_menu_target = 0U;
+    runtime->hover_target_id = UINT32_MAX;
+    runtime->last_wheel_y = 0;
+    runtime->context_menu_visible = 0U;
+    runtime->last_gesture.action = SYNTRA_GESTURE_NONE;
 
     runtime->initialized = 1;
     return SYNTRA_STATUS_OK;
@@ -100,9 +501,9 @@ static syntra_status_t handle_launcher_dock_click(
 
     if (runtime->input.width < 640U || runtime->input.height < 480U)
     {
-        if (pointer_x < 10U || pointer_x >= 20U ||
-            pointer_y < runtime->input.height - 20U ||
-            pointer_y >= runtime->input.height - 10U)
+        if (pointer_x < 8U || pointer_x >= 32U ||
+            pointer_y < runtime->input.height - 32U ||
+            pointer_y >= runtime->input.height - 8U)
             return SYNTRA_STATUS_OK;
     }
     else if (pointer_x < 14U || pointer_x >= 40U ||
@@ -144,7 +545,8 @@ static syntra_status_t handle_app_surface_click(
     syntra_gui_window_t *window;
     uint32_t left, top, inner_width, inner_height, row;
     if (runtime->windows.count == 0U) return SYNTRA_STATUS_OK;
-    window = &runtime->windows.windows[runtime->windows.count - 1U];
+    window = active_window_mutable(&runtime->windows);
+    if (window == NULL) return SYNTRA_STATUS_OK;
     left = window->x + 4U;
     top = window->y + 24U;
     inner_width = window->width > 8U ? window->width - 8U : 0U;
@@ -155,14 +557,19 @@ static syntra_status_t handle_app_surface_click(
 
     if (window->app_type == SYNTRA_GUI_APP_FILES)
     {
-        if (pointer_x < left + 38U) return SYNTRA_STATUS_OK;
-        for (row = 0U; row < 4U; ++row)
+        if (pointer_x < left + 38U ||
+            window->app_scroll_offset >= SYNTRA_GUI_FILES_ENTRY_COUNT)
+            return SYNTRA_STATUS_OK;
+        for (row = 0U; row < SYNTRA_GUI_FILES_ENTRY_COUNT; ++row)
         {
+            uint32_t entry = window->app_scroll_offset + row;
             uint32_t row_y = top + 8U + row * 22U;
-            if (row_y + 16U >= top + inner_height) break;
+            if (entry >= SYNTRA_GUI_FILES_ENTRY_COUNT ||
+                row_y + 16U >= top + inner_height)
+                break;
             if (pointer_y >= row_y && pointer_y < row_y + 16U)
             {
-                window->app_selection = row;
+                window->app_selection = entry;
                 break;
             }
         }
@@ -245,9 +652,121 @@ static syntra_status_t handle_launcher_click(
     return activate_launcher_tile(runtime, tile);
 }
 
-syntra_status_t syntra_gui_runtime_process_event(
+#define SYNTRA_CONTEXT_MENU_WIDTH 136U
+#define SYNTRA_CONTEXT_MENU_HEIGHT 87U
+
+static void open_context_menu(syntra_gui_runtime_t *runtime,
+                              uint32_t x, uint32_t y, uint32_t target)
+{
+    uint32_t max_x = runtime->input.width - SYNTRA_CONTEXT_MENU_WIDTH;
+    uint32_t max_y = runtime->input.height - SYNTRA_CONTEXT_MENU_HEIGHT;
+    runtime->context_menu_x = x > max_x ? max_x : x;
+    runtime->context_menu_y = y > max_y ? max_y : y;
+    runtime->context_menu_target = target;
+    runtime->context_menu_visible = 1U;
+}
+
+static syntra_status_t handle_context_menu_click(
+    syntra_gui_runtime_t *runtime, uint32_t x, uint32_t y)
+{
+    uint32_t menu_x = runtime->context_menu_x;
+    uint32_t menu_y = runtime->context_menu_y;
+    uint32_t target = runtime->context_menu_target;
+    uint32_t row;
+    syntra_status_t status = SYNTRA_STATUS_OK;
+
+    if (x >= menu_x && x < menu_x + SYNTRA_CONTEXT_MENU_WIDTH &&
+        y >= menu_y + 22U && y < menu_y + 82U)
+    {
+        row = (y - menu_y - 22U) / 15U;
+        if (target == UINT32_MAX)
+        {
+            if (row < 2U)
+                status = activate_launcher_tile(runtime, row);
+            else if (row == 2U)
+            {
+                uint32_t index;
+                for (index = 0U; index < runtime->windows.count; ++index)
+                {
+                    if (runtime->windows.windows[index].minimized != 0U)
+                    {
+                        status = syntra_gui_window_restore(
+                            &runtime->windows, runtime->windows.windows[index].id);
+                        break;
+                    }
+                }
+            }
+        }
+        else if (row == 0U)
+            status = syntra_gui_window_minimize(&runtime->windows, target);
+        else if (row == 1U)
+        {
+            const syntra_gui_window_t *window = NULL;
+            status = syntra_gui_window_get(&runtime->windows, target, &window);
+            if (status == SYNTRA_STATUS_OK)
+                status = window->maximized != 0U
+                    ? syntra_gui_window_restore(&runtime->windows, target)
+                    : syntra_gui_window_maximize(&runtime->windows, target);
+        }
+        else if (row == 2U)
+            status = syntra_gui_window_close(&runtime->windows, target);
+    }
+
+    runtime->context_menu_visible = 0U;
+    runtime->context_menu_target = 0U;
+    return status;
+}
+
+static syntra_status_t render_context_menu(
+    syntra_gui_runtime_t *runtime, syntra_framebuffer_t *framebuffer)
+{
+    static const char *const window_items[] = {
+        "MINIMIZE", "MAXIMIZE / RESTORE", "CLOSE", "DISMISS"
+    };
+    static const char *const desktop_items[] = {
+        "OPEN FILES", "OPEN SETTINGS", "RESTORE WINDOW", "DISMISS"
+    };
+    const char *const *items = runtime->context_menu_target == UINT32_MAX
+        ? desktop_items : window_items;
+    uint32_t x = runtime->context_menu_x;
+    uint32_t y = runtime->context_menu_y;
+    uint32_t row;
+    syntra_status_t status;
+
+    status = syntra_framebuffer_fill_rect(
+        framebuffer, x, y, SYNTRA_CONTEXT_MENU_WIDTH,
+        SYNTRA_CONTEXT_MENU_HEIGHT, 0xFF6D8DB8U);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_framebuffer_fill_rect(
+        framebuffer, x + 2U, y + 2U, SYNTRA_CONTEXT_MENU_WIDTH - 4U,
+        SYNTRA_CONTEXT_MENU_HEIGHT - 4U, 0xFF101A2CU);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_framebuffer_fill_rect(
+        framebuffer, x + 2U, y + 2U, SYNTRA_CONTEXT_MENU_WIDTH - 4U,
+        17U, 0xFF263D66U);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_framebuffer_draw_text(
+        framebuffer, x + 8U, y + 7U,
+        runtime->context_menu_target == UINT32_MAX ? "DESKTOP" : "WINDOW",
+        0xFFF4F7FFU, 0xFF263D66U, 1U);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    for (row = 0U; row < 4U; ++row)
+    {
+        uint32_t row_y = y + 22U + row * 15U;
+        status = syntra_framebuffer_draw_text(
+            framebuffer, x + 8U, row_y + 4U, items[row],
+            row == 3U ? 0xFF9BAAC2U : 0xFFF4F7FFU,
+            0xFF101A2CU, 1U);
+        if (status != SYNTRA_STATUS_OK) return status;
+    }
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t syntra_gui_runtime_process_event_at(
     syntra_gui_runtime_t *runtime,
-    const syntra_input_event_t *event)
+    const syntra_input_event_t *event,
+    uint64_t now_ms)
 {
     syntra_status_t status;
     uint32_t old_buttons;
@@ -255,16 +774,68 @@ syntra_status_t syntra_gui_runtime_process_event(
     if (runtime == NULL || runtime->initialized != 1 || event == NULL)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
+    int64_t wheel_delta;
     old_buttons = runtime->input.buttons;
     status = syntra_input_process(&runtime->input, event);
     if (status != SYNTRA_STATUS_OK) return status;
 
-    status = syntra_gui_window_interaction_process(
-        &runtime->interaction, &runtime->windows, &runtime->input);
+    wheel_delta = (int64_t)runtime->input.wheel_y -
+                  (int64_t)runtime->last_wheel_y;
+    runtime->last_wheel_y = runtime->input.wheel_y;
+
+    /* A visible menu owns the next primary click, including outside dismissal. */
+    if (runtime->context_menu_visible != 0U &&
+        event->type == SYNTRA_INPUT_EV_KEY &&
+        event->code == SYNTRA_INPUT_BTN_LEFT && event->value == 1 &&
+        (old_buttons & SYNTRA_INPUT_BUTTON_LEFT) == 0U)
+        return handle_context_menu_click(
+            runtime, runtime->input.pointer_x, runtime->input.pointer_y);
+
+    {
+        int taskbar_handled = 0;
+        if (event->type == SYNTRA_INPUT_EV_KEY &&
+            (event->code == SYNTRA_INPUT_BTN_LEFT ||
+             event->code == SYNTRA_INPUT_BTN_TOUCH) &&
+            event->value == 1 &&
+            (old_buttons & SYNTRA_INPUT_BUTTON_LEFT) == 0U)
+        {
+            status = handle_taskbar_click(
+                runtime, runtime->input.pointer_x, runtime->input.pointer_y,
+                &taskbar_handled);
+            if (status != SYNTRA_STATUS_OK) return status;
+            if (taskbar_handled == 0)
+            {
+                status = handle_compact_switcher_click(
+                    runtime, runtime->input.pointer_x,
+                    runtime->input.pointer_y, &taskbar_handled);
+                if (status != SYNTRA_STATUS_OK) return status;
+            }
+        }
+        if (taskbar_handled != 0)
+            status = SYNTRA_STATUS_OK;
+        else
+            status = syntra_gui_window_interaction_process(
+                &runtime->interaction, &runtime->windows, &runtime->input);
+    }
     if (status != SYNTRA_STATUS_OK) return status;
 
+    update_hover(runtime);
+    if (runtime->context_menu_visible == 0U)
+        apply_wheel_scroll(runtime, wheel_delta);
+
+    status = update_gesture(runtime, now_ms);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    if (runtime->last_gesture.action == SYNTRA_GESTURE_CONTEXT_REQUEST ||
+        runtime->last_gesture.action == SYNTRA_GESTURE_LONG_PRESS)
+        open_context_menu(runtime, runtime->last_gesture.x,
+                          runtime->last_gesture.y,
+                          runtime->last_gesture.target_id);
+
     if (event->type == SYNTRA_INPUT_EV_KEY &&
-        event->code == SYNTRA_INPUT_BTN_LEFT && event->value == 1 &&
+        (event->code == SYNTRA_INPUT_BTN_LEFT ||
+         event->code == SYNTRA_INPUT_BTN_TOUCH) &&
+        event->value == 1 &&
         (old_buttons & SYNTRA_INPUT_BUTTON_LEFT) == 0U)
     {
         status = handle_launcher_dock_click(
@@ -278,6 +849,33 @@ syntra_status_t syntra_gui_runtime_process_event(
         if (status != SYNTRA_STATUS_OK) return status;
     }
 
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t syntra_gui_runtime_process_event(
+    syntra_gui_runtime_t *runtime,
+    const syntra_input_event_t *event)
+{
+    uint64_t now_ms;
+    if (runtime == NULL || runtime->initialized != 1)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    now_ms = (uint64_t)runtime->input.event_count * 10ULL;
+    return syntra_gui_runtime_process_event_at(runtime, event, now_ms);
+}
+
+syntra_status_t syntra_gui_runtime_tick(
+    syntra_gui_runtime_t *runtime,
+    uint64_t now_ms)
+{
+    syntra_status_t status;
+    if (runtime == NULL || runtime->initialized != 1)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    status = update_gesture(runtime, now_ms);
+    if (status != SYNTRA_STATUS_OK) return status;
+    if (runtime->last_gesture.action == SYNTRA_GESTURE_LONG_PRESS)
+        open_context_menu(runtime, runtime->last_gesture.x,
+                          runtime->last_gesture.y,
+                          runtime->last_gesture.target_id);
     return SYNTRA_STATUS_OK;
 }
 
@@ -299,6 +897,21 @@ syntra_status_t syntra_gui_runtime_render(
     if (runtime->windows.count != 0U)
     {
         status = syntra_gui_render_windows(framebuffer, &runtime->windows);
+        if (status != SYNTRA_STATUS_OK) return status;
+    }
+
+    status = render_hover_outline(runtime, framebuffer);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = render_taskbar(runtime, framebuffer);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = render_compact_switcher(runtime, framebuffer);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    if (runtime->context_menu_visible != 0U)
+    {
+        status = render_context_menu(runtime, framebuffer);
         if (status != SYNTRA_STATUS_OK) return status;
     }
 

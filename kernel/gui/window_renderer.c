@@ -3,6 +3,8 @@
 #define WINDOW_BORDER 2U
 #define WINDOW_TITLE_HEIGHT 20U
 #define WINDOW_CLOSE_SIZE 12U
+#define WINDOW_CONTROL_GAP 5U
+#define WINDOW_CONTROLS_MIN_WIDTH 120U
 
 #define COLOR_WINDOW_BODY 0xFF101A35U
 #define COLOR_WINDOW_BORDER 0xFF5578F2U
@@ -10,6 +12,8 @@
 #define COLOR_WINDOW_INACTIVE 0xFF263D66U
 #define COLOR_WINDOW_TEXT 0xFFF4F7FFU
 #define COLOR_WINDOW_CLOSE 0xFFB83D55U
+#define COLOR_WINDOW_MINIMIZE 0xFFE5A84BU
+#define COLOR_WINDOW_MAXIMIZE 0xFF54D6E8U
 
 
 static syntra_status_t draw_app_surface(
@@ -28,15 +32,18 @@ static syntra_status_t draw_app_surface(
 
     if (window->app_type == SYNTRA_GUI_APP_FILES)
     {
-        static const char *const names[] = {
-            "HOME", "DOCUMENTS", "DOWNLOADS", "PICTURES"
+        static const char *const names[SYNTRA_GUI_FILES_ENTRY_COUNT] = {
+            "HOME", "DOCUMENTS", "DOWNLOADS", "PICTURES",
+            "MUSIC", "VIDEOS", "PROJECTS", "SYSTEM"
         };
         uint32_t row;
+        uint32_t visible_rows = 0U;
+        uint32_t scroll_offset = window->app_scroll_offset;
         status = syntra_framebuffer_fill_rect(
             framebuffer, left, top, inner_width, inner_height, 0xFF0C1428U);
         if (status != SYNTRA_STATUS_OK) return status;
-        /* Avoid narrow Files surfaces overflowing list geometry. */
-        if (inner_width < 64U)
+        if (inner_width < 64U ||
+            scroll_offset >= SYNTRA_GUI_FILES_ENTRY_COUNT)
             return SYNTRA_STATUS_OK;
         status = syntra_framebuffer_fill_rect(
             framebuffer, left, top, 34U, inner_height, 0xFF1A2948U);
@@ -45,11 +52,20 @@ static syntra_status_t draw_app_surface(
             framebuffer, left + 5U, top + 6U, "FILES",
             COLOR_WINDOW_TEXT, 0xFF1A2948U, 1U);
         if (status != SYNTRA_STATUS_OK) return status;
-        for (row = 0U; row < 4U; ++row)
+
+        for (row = 0U; row < SYNTRA_GUI_FILES_ENTRY_COUNT; ++row)
         {
             row_y = top + 8U + row * 22U;
             if (row_y + 16U >= top + inner_height) break;
-            if (window->app_selection == row)
+            visible_rows++;
+        }
+
+        for (row = 0U; row < visible_rows; ++row)
+        {
+            uint32_t entry = scroll_offset + row;
+            row_y = top + 8U + row * 22U;
+            if (entry >= SYNTRA_GUI_FILES_ENTRY_COUNT) break;
+            if (window->app_selection == entry)
             {
                 status = syntra_framebuffer_fill_rect(
                     framebuffer, left + 38U, row_y - 2U,
@@ -63,10 +79,39 @@ static syntra_status_t draw_app_surface(
                 framebuffer, left + 42U, row_y + 3U, 12U, 9U, 0xFF3B9FB5U);
             if (status != SYNTRA_STATUS_OK) return status;
             status = syntra_framebuffer_draw_text(
-                framebuffer, left + 62U, row_y + 2U, names[row],
+                framebuffer, left + 62U, row_y + 2U, names[entry],
                 COLOR_WINDOW_TEXT,
-                window->app_selection == row ? 0xFF25466FU : 0xFF0C1428U,
+                window->app_selection == entry ? 0xFF25466FU : 0xFF0C1428U,
                 1U);
+            if (status != SYNTRA_STATUS_OK) return status;
+        }
+
+        if (visible_rows < SYNTRA_GUI_FILES_ENTRY_COUNT)
+        {
+            uint32_t track_x = left + inner_width - 5U;
+            uint32_t track_y = top + 6U;
+            uint32_t track_height = inner_height - 12U;
+            uint32_t thumb_height = (uint32_t)(
+                ((uint64_t)track_height * visible_rows) /
+                SYNTRA_GUI_FILES_ENTRY_COUNT);
+            uint32_t max_offset =
+                SYNTRA_GUI_FILES_ENTRY_COUNT - visible_rows;
+            uint32_t thumb_y;
+            if (scroll_offset > max_offset) scroll_offset = max_offset;
+            if (thumb_height < 8U) thumb_height = 8U;
+            if (thumb_height > track_height) thumb_height = track_height;
+            thumb_y = track_y;
+            if (max_offset != 0U)
+                thumb_y += (uint32_t)(
+                    ((uint64_t)(track_height - thumb_height) *
+                     scroll_offset) / max_offset);
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, track_x, track_y, 3U, track_height,
+                0xFF263D66U);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, track_x, thumb_y, 3U, thumb_height,
+                0xFF54D6E8U);
             if (status != SYNTRA_STATUS_OK) return status;
         }
         return SYNTRA_STATUS_OK;
@@ -164,6 +209,8 @@ static syntra_status_t draw_window(
     uint32_t title_height;
     uint32_t title_color;
     uint32_t close_x;
+    uint32_t maximize_x;
+    uint32_t minimize_x;
     const char *title_text = "WINDOW";
     syntra_status_t status;
 
@@ -206,21 +253,38 @@ static syntra_status_t draw_window(
     {
         close_x = window->x + window->width - WINDOW_CLOSE_SIZE - 5U;
         status = syntra_framebuffer_fill_rect(
-            framebuffer, close_x,
-            window->y + WINDOW_BORDER + 2U,
-            WINDOW_CLOSE_SIZE, WINDOW_CLOSE_SIZE,
-            COLOR_WINDOW_CLOSE);
+            framebuffer, close_x, window->y + WINDOW_BORDER + 2U,
+            WINDOW_CLOSE_SIZE, WINDOW_CLOSE_SIZE, COLOR_WINDOW_CLOSE);
         if (status != SYNTRA_STATUS_OK) return status;
-
         status = syntra_framebuffer_draw_text(
-            framebuffer, close_x + 3U,
-            window->y + WINDOW_BORDER + 4U,
+            framebuffer, close_x + 3U, window->y + WINDOW_BORDER + 4U,
             "X", COLOR_WINDOW_TEXT, COLOR_WINDOW_CLOSE, 1U);
         if (status != SYNTRA_STATUS_OK) return status;
 
+        if (window->width >= WINDOW_CONTROLS_MIN_WIDTH)
+        {
+            maximize_x = close_x - WINDOW_CONTROL_GAP - WINDOW_CLOSE_SIZE;
+            minimize_x = maximize_x - WINDOW_CONTROL_GAP - WINDOW_CLOSE_SIZE;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, maximize_x, window->y + WINDOW_BORDER + 2U,
+                WINDOW_CLOSE_SIZE, WINDOW_CLOSE_SIZE, COLOR_WINDOW_MAXIMIZE);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, maximize_x + 3U, window->y + WINDOW_BORDER + 5U,
+                6U, 6U, title_color);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, minimize_x, window->y + WINDOW_BORDER + 2U,
+                WINDOW_CLOSE_SIZE, WINDOW_CLOSE_SIZE, COLOR_WINDOW_MINIMIZE);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, minimize_x + 3U, window->y + WINDOW_BORDER + 7U,
+                6U, 2U, title_color);
+            if (status != SYNTRA_STATUS_OK) return status;
+        }
+
         status = syntra_framebuffer_draw_text(
-            framebuffer, window->x + 7U,
-            window->y + 7U, title_text,
+            framebuffer, window->x + 7U, window->y + 7U, title_text,
             COLOR_WINDOW_TEXT, title_color, 1U);
         if (status != SYNTRA_STATUS_OK) return status;
     }
@@ -253,6 +317,7 @@ syntra_status_t syntra_gui_render_windows(
         const syntra_gui_window_t *window = &manager->windows[index];
         const int active = (index + 1U == manager->count);
 
+        if (window->minimized != 0U) continue;
         if (window->id == 0U || window->width == 0U ||
             window->height == 0U ||
             window->width > framebuffer->width ||

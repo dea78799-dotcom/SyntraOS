@@ -29,6 +29,9 @@ static syntra_input_state_t syntra_virtio_input_state;
 static int syntra_virtio_input_irq_registered;
 static int syntra_virtio_input_key_a_test_reported;
 static int syntra_virtio_input_irq_test_reported;
+static uint64_t syntra_gui_last_refresh_tick;
+static uint64_t syntra_gui_last_gesture_tick;
+static int syntra_gui_refresh_timer_ready;
 
 static void syntra_uart_puts(const char *message);
 static void syntra_uart_put_hex(uint64_t value);
@@ -2622,6 +2625,25 @@ syntra_status_t syntra_arm64_boot_main(
     }
 
     /*
+     * Re-arm the already validated 100 Hz Generic Timer for the desktop
+     * refresh scheduler. The same registered IRQ handler advances timer ticks.
+     */
+    status = interrupt_enable(30U);
+    if (status == SYNTRA_STATUS_OK)
+        status = syntra_arm64_timer_enable();
+    if (status == SYNTRA_STATUS_OK)
+    {
+        syntra_gui_last_refresh_tick = timer_get_ticks();
+        syntra_gui_last_gesture_tick = syntra_gui_last_refresh_tick;
+        syntra_gui_refresh_timer_ready = 1;
+        syntra_uart_puts("Desktop refresh timer: ENABLED at 100 Hz\n");
+    }
+    else
+    {
+        syntra_uart_puts("Desktop refresh timer: UNAVAILABLE\n");
+    }
+
+    /*
      * Timer and EL0 validation tests leave DAIF.I masked. Enable IRQ delivery
      * for the running kernel now that device handlers are registered.
      */
@@ -2647,11 +2669,33 @@ void syntra_arm64_boot_idle_loop(void)
 {
     for (;;)
     {
-        if (syntra_fw_cfg_base != 0U &&
-            syntra_virtio_input_queue.ready == 1)
+        uint64_t ticks = timer_get_ticks();
+
+        if (syntra_fw_cfg_base != 0U)
         {
-            (void)syntra_ramfb_process_input_events(
-                &syntra_virtio_input_queue);
+            if (syntra_virtio_input_queue.ready == 1)
+                (void)syntra_ramfb_process_input_events(
+                    &syntra_virtio_input_queue);
+
+            /*
+             * Advance gesture timers on each 100 Hz system tick. This keeps
+             * hold/long-press recognition independent of the 1 Hz redraw.
+             */
+            if (syntra_gui_refresh_timer_ready &&
+                ticks != syntra_gui_last_gesture_tick)
+            {
+                syntra_gui_last_gesture_tick = ticks;
+                (void)syntra_ramfb_tick_gestures();
+            }
+
+            /* Redraw the desktop clock/uptime panel once per second. */
+            if (syntra_gui_refresh_timer_ready &&
+                (ticks - syntra_gui_last_refresh_tick) >=
+                    SYNTRA_ARM64_TIMER_DEFAULT_HZ)
+            {
+                syntra_gui_last_refresh_tick = ticks;
+                (void)syntra_ramfb_refresh();
+            }
         }
 #if defined(__aarch64__)
         __asm__ volatile("dsb sy" ::: "memory");

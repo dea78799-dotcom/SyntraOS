@@ -6,6 +6,7 @@
 #include "desktop.h"
 #include "framebuffer.h"
 #include "gui_runtime.h"
+#include "uptime_panel.h"
 #include "../virtio/virtio_mmio.h"
 
 #define FW_CFG_FILE_DIR 0x0019U
@@ -38,6 +39,52 @@ static uint32_t ramfb_pixels[SYNTRA_RAMFB_WIDTH * SYNTRA_RAMFB_HEIGHT]
     __attribute__((aligned(4096)));
 static syntra_gui_runtime_t ramfb_gui_runtime;
 static int ramfb_gui_runtime_ready;
+static uint64_t ramfb_boot_counter;
+static uint64_t ramfb_counter_frequency;
+
+static uint64_t ramfb_read_counter(void)
+{
+#if defined(__aarch64__)
+    uint64_t value;
+    __asm__ volatile("mrs %0, cntpct_el0" : "=r"(value));
+    return value;
+#else
+    return 0U;
+#endif
+}
+
+static uint64_t ramfb_read_counter_frequency(void)
+{
+#if defined(__aarch64__)
+    uint64_t value;
+    __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(value));
+    return value;
+#else
+    return 0U;
+#endif
+}
+
+static uint64_t ramfb_uptime_milliseconds(void)
+{
+    uint64_t now;
+    uint64_t elapsed;
+    if (ramfb_counter_frequency == 0U) return 0U;
+    now = ramfb_read_counter();
+    if (now < ramfb_boot_counter) return 0U;
+    elapsed = now - ramfb_boot_counter;
+    return (elapsed / ramfb_counter_frequency) * 1000ULL +
+           ((elapsed % ramfb_counter_frequency) * 1000ULL) /
+               ramfb_counter_frequency;
+}
+
+static uint64_t ramfb_uptime_seconds(void)
+{
+    uint64_t now;
+    if (ramfb_counter_frequency == 0U) return 0U;
+    now = ramfb_read_counter();
+    if (now < ramfb_boot_counter) return 0U;
+    return (now - ramfb_boot_counter) / ramfb_counter_frequency;
+}
 
 static uint16_t read_be16(const uint8_t *p)
 {
@@ -284,10 +331,18 @@ syntra_status_t syntra_ramfb_init(uintptr_t fw_cfg_base, size_t fw_cfg_size)
     framebuffer.height = SYNTRA_RAMFB_HEIGHT;
     framebuffer.stride_pixels = SYNTRA_RAMFB_WIDTH;
 
+    ramfb_counter_frequency = ramfb_read_counter_frequency();
+    ramfb_boot_counter = ramfb_read_counter();
+
     status = syntra_gui_runtime_init(
         &ramfb_gui_runtime, SYNTRA_RAMFB_WIDTH, SYNTRA_RAMFB_HEIGHT);
     if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_gui_runtime_tick(
+        &ramfb_gui_runtime, ramfb_uptime_milliseconds());
+    if (status != SYNTRA_STATUS_OK) return status;
     status = syntra_gui_runtime_render(&ramfb_gui_runtime, &framebuffer);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_gui_render_uptime_panel(&framebuffer, ramfb_uptime_seconds());
     if (status != SYNTRA_STATUS_OK) return status;
     ramfb_gui_runtime_ready = 1;
 
@@ -304,6 +359,35 @@ syntra_status_t syntra_ramfb_init(uintptr_t fw_cfg_base, size_t fw_cfg_size)
     return status;
 }
 
+syntra_status_t syntra_ramfb_tick_gestures(void)
+{
+    if (!ramfb_gui_runtime_ready)
+        return SYNTRA_STATUS_ERROR;
+
+    return syntra_gui_runtime_tick(
+        &ramfb_gui_runtime, ramfb_uptime_milliseconds());
+}
+
+syntra_status_t syntra_ramfb_refresh(void)
+{
+    syntra_framebuffer_t framebuffer;
+    syntra_status_t status;
+
+    if (!ramfb_gui_runtime_ready)
+        return SYNTRA_STATUS_ERROR;
+
+    framebuffer.pixels = ramfb_pixels;
+    framebuffer.width = SYNTRA_RAMFB_WIDTH;
+    framebuffer.height = SYNTRA_RAMFB_HEIGHT;
+    framebuffer.stride_pixels = SYNTRA_RAMFB_WIDTH;
+
+    status = syntra_gui_runtime_render(&ramfb_gui_runtime, &framebuffer);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_gui_render_uptime_panel(&framebuffer, ramfb_uptime_seconds());
+    if (status == SYNTRA_STATUS_OK) syntra_dma_barrier();
+    return status;
+}
+
 /*
  * Drain IRQ-produced VirtIO events in normal context. Rendering is performed
  * once after the batch, never from the interrupt handler. The boot idle loop
@@ -313,7 +397,6 @@ syntra_status_t syntra_ramfb_init(uintptr_t fw_cfg_base, size_t fw_cfg_size)
 syntra_status_t syntra_ramfb_process_input_events(
     syntra_virtio_input_queue_t *input_queue)
 {
-    syntra_framebuffer_t framebuffer;
     syntra_input_event_t event;
     int available;
     int processed = 0;
@@ -329,19 +412,13 @@ syntra_status_t syntra_ramfb_process_input_events(
         if (status != SYNTRA_STATUS_OK) return status;
         if (!available) break;
 
-        status = syntra_gui_runtime_process_event(&ramfb_gui_runtime, &event);
+        status = syntra_gui_runtime_process_event_at(
+            &ramfb_gui_runtime, &event, ramfb_uptime_milliseconds());
         if (status != SYNTRA_STATUS_OK) return status;
         processed = 1;
     }
 
     if (!processed) return SYNTRA_STATUS_OK;
 
-    framebuffer.pixels = ramfb_pixels;
-    framebuffer.width = SYNTRA_RAMFB_WIDTH;
-    framebuffer.height = SYNTRA_RAMFB_HEIGHT;
-    framebuffer.stride_pixels = SYNTRA_RAMFB_WIDTH;
-
-    status = syntra_gui_runtime_render(&ramfb_gui_runtime, &framebuffer);
-    if (status == SYNTRA_STATUS_OK) syntra_dma_barrier();
-    return status;
+    return syntra_ramfb_refresh();
 }
