@@ -232,6 +232,44 @@ syntra_status_t process_refresh_all_states(void)
     return SYNTRA_STATUS_OK;
 }
 
+syntra_status_t process_terminate_threads(unsigned int process_id)
+{
+    syntra_process_t *process = process_get(process_id);
+
+    if (process == NULL)
+        return process_initialized
+            ? SYNTRA_STATUS_INVALID_ARGUMENT : SYNTRA_STATUS_ERROR;
+    if (process->thread_count == 0U)
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+
+    /* Preflight the complete thread set before changing scheduler state. */
+    for (unsigned int i = 0U; i < process->thread_count; ++i)
+    {
+        if (scheduler_get_thread(process->thread_ids[i]) == NULL)
+            return SYNTRA_STATUS_ERROR;
+    }
+
+    /*
+     * scheduler_set_thread_state() clears current_slot when the running
+     * thread is terminated. The caller must therefore leave this context
+     * through the exception/scheduler path and must not return to EL0.
+     */
+    for (unsigned int i = 0U; i < process->thread_count; ++i)
+    {
+        syntra_thread_t *thread =
+            scheduler_get_thread(process->thread_ids[i]);
+        if (thread->state == THREAD_TERMINATED)
+            continue;
+
+        syntra_status_t status = scheduler_set_thread_state(
+            process->thread_ids[i], THREAD_TERMINATED);
+        if (status != SYNTRA_STATUS_OK)
+            return status;
+    }
+
+    return process_refresh_state(process_id);
+}
+
 syntra_status_t process_reap_terminated(void)
 {
     if (!process_initialized)

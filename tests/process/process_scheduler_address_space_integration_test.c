@@ -252,7 +252,16 @@ int main(void)
     selected = schedule_and_activate(12U, &process_a_space, &mmu);
     assert(selected->thread_id == 12U);
     assert(process_get(1U)->state == PROCESS_RUNNING);
-    assert(scheduler_terminate_current() == SYNTRA_STATUS_OK);
+
+    /* Process-wide exit terminates every owned thread, not only the caller. */
+    assert(process_terminate_threads(1U) == SYNTRA_STATUS_OK);
+    assert(scheduler_get_current() == NULL);
+    assert(scheduler_get_thread(11U)->state == THREAD_TERMINATED);
+    assert(scheduler_get_thread(12U)->state == THREAD_TERMINATED);
+    assert(process_refresh_all_states() == SYNTRA_STATUS_OK);
+    assert(process_get(1U)->state == PROCESS_TERMINATED);
+    assert(process_get(1U)->address_space == &process_a_space);
+    assert(process_validate() == SYNTRA_STATUS_OK);
 
     /* B is selected before A is reaped, so A's active root is never freed. */
     selected = schedule_and_activate(21U, &process_b_space, &mmu);
