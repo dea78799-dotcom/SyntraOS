@@ -125,6 +125,23 @@ int main(void)
     assert(syntra_gui_window_active(&runtime.windows)->height == 170U);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
 
+    /* A covered launcher must not intercept clicks from the front app. */
+    assert(syntra_gui_runtime_init(&runtime, 640U, 480U) ==
+           SYNTRA_STATUS_OK);
+    assert(syntra_gui_window_close(
+        &runtime.windows, runtime.windows.windows[1].id) == SYNTRA_STATUS_OK);
+    assert(syntra_gui_window_move(
+        &runtime.windows, runtime.windows.windows[2].id, 30U, 200U) ==
+        SYNTRA_STATUS_OK);
+    assert(syntra_gui_window_focus(
+        &runtime.windows, runtime.windows.windows[0].id) == SYNTRA_STATUS_OK);
+    move_pointer(&runtime, -206, -12); /* overlapping Settings tile */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(runtime.windows.count == 2U);
+    assert(syntra_gui_window_active(&runtime.windows)->app_type ==
+           SYNTRA_GUI_APP_FILES);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+
     /* Invalid dimensions must be rejected rather than creating partial state. */
     assert(syntra_gui_runtime_init(&runtime, 200U, 100U) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
