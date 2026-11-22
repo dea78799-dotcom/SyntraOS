@@ -244,7 +244,7 @@ int main(void)
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_RIGHT, 0);
     assert(runtime.context_menu_visible == 1U);
     assert(runtime.context_menu_target == UINT32_MAX);
-    move_pointer(&runtime, -110, -8); /* desktop menu second row */
+    /* Pointer remains on the clamped desktop menu's second row. */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(runtime.context_menu_visible == 0U);
     assert(runtime.windows.count == 3U);
