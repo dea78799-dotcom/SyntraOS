@@ -84,7 +84,8 @@ a general-purpose kernel heap or per-process allocation accounting.
   The QEMU boot path switches TTBR0_EL1 to an inherited root, verifies the
   register, rejects destruction while active, and switches back to the kernel
   root. V1 performs a local full EL1/EL0 TLB invalidation on each switch.
-  Scheduler-driven per-thread activation and SMP shootdown remain unimplemented.
+  The exception/scheduler return bridge now selects the next thread's process
+  root (or the kernel root for kernel threads). SMP shootdown remains unimplemented.
 - Host integration tests create two independent roots, map the same virtual
   address to different physical pages, verify distinct translations and
   read-only/read-write permissions, then validate complete page reclamation.
@@ -104,9 +105,8 @@ it is not evidence of physical-device support.
 - Process Manager now accepts ownership of a validated address-space object.
   Process termination releases that address space only after all attached
   threads are terminated. The manager exposes a thread-to-address-space lookup
-  for the future scheduler switch hook. The ARM64 boot path also audits kernel mapping
-  inheritance on an inactive root. Scheduler-driven TTBR0_EL1 switching,
-  TLB invalidation, and active-root lifetime rules are not implemented. The
+  for the ARM64 exception/scheduler switch path. The boot test validates a
+  hardware TTBR0_EL1 switch to an inherited root and back to the kernel root. The
   reserved upper-half user VA range is a V1 convention, not yet a process ABI.
 - Shared-page reference counting, copy-on-write, demand paging, swapping, and
   memory-mapped file support are not implemented. The V1 registry and its

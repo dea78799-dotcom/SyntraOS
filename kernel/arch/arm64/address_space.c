@@ -633,6 +633,11 @@ syntra_status_t syntra_arm64_address_space_activate(
     return SYNTRA_STATUS_OK;
 }
 
+int syntra_arm64_address_space_kernel_root_registered(void)
+{
+    return registered_kernel_root_physical_address != 0ULL;
+}
+
 syntra_status_t syntra_arm64_address_space_activate_kernel_root(void)
 {
     syntra_status_t status;

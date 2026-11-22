@@ -48,6 +48,7 @@ static void syntra_exception_uart_puts(const char *message)
 #endif
 #include "../../interrupt/interrupt.h"
 #include "../../scheduler/scheduler.h"
+#include "../../process/process.h"
 
 /*
  * SyntraOS ARM64 Hardware Exception Handler
@@ -294,6 +295,21 @@ int syntra_arm64_exception_has_last_context(void)
 #define SYNTRA_ARM64_BOOT_THREAD_ID 1U
 static int scheduler_context_switching_active;
 
+static syntra_status_t activate_thread_address_space(unsigned int thread_id)
+{
+    syntra_arm64_address_space_t *space =
+        process_get_address_space_for_thread(thread_id);
+
+    if (space != NULL)
+        return syntra_arm64_address_space_activate(space);
+
+    /* Early scheduler tests run before MMU setup and kernel-root registration. */
+    if (!syntra_arm64_address_space_kernel_root_registered())
+        return SYNTRA_STATUS_OK;
+
+    return syntra_arm64_address_space_activate_kernel_root();
+}
+
 syntra_arm64_exception_context_t *
 syntra_arm64_exception_handle_and_select(
     syntra_arm64_exception_context_t *context
@@ -347,8 +363,13 @@ syntra_arm64_exception_handle_and_select(
             (void)scheduler_set_thread_state(
                 SYNTRA_ARM64_BOOT_THREAD_ID, THREAD_RUNNING);
             scheduler_context_switching_active = 0;
+            if (activate_thread_address_space(SYNTRA_ARM64_BOOT_THREAD_ID) !=
+                SYNTRA_STATUS_OK)
+                return NULL;
             return context;
         }
+        if (activate_thread_address_space(next->thread_id) != SYNTRA_STATUS_OK)
+            return NULL;
         return (syntra_arm64_exception_context_t *)next->cpu_context;
     }
 
@@ -360,6 +381,8 @@ syntra_arm64_exception_handle_and_select(
 
         next = scheduler_schedule_next_with_context();
         if (next == NULL) return context;
+        if (activate_thread_address_space(next->thread_id) != SYNTRA_STATUS_OK)
+            return NULL;
         return (syntra_arm64_exception_context_t *)next->cpu_context;
     }
 

@@ -71,6 +71,7 @@ syntra_status_t syntra_arm64_address_space_register_kernel_root(
 syntra_status_t syntra_arm64_address_space_activate(
     syntra_arm64_address_space_t *space);
 syntra_status_t syntra_arm64_address_space_activate_kernel_root(void);
+int syntra_arm64_address_space_kernel_root_registered(void);
 
 /* Maps one owned PROCESS page into the reserved upper TTBR0 user range. */
 syntra_status_t syntra_arm64_address_space_map_user_page(
