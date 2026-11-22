@@ -155,9 +155,20 @@ int main(void)
            SYNTRA_STATUS_OK);
     assert(syntra_gui_window_close(
         &runtime.windows, runtime.windows.windows[1].id) == SYNTRA_STATUS_OK);
+    /* Closing Settings compacts the array, so find Launcher by app type. */
+    launcher_id = 0U;
+    for (uint32_t index = 0U; index < runtime.windows.count; ++index)
+    {
+        if (runtime.windows.windows[index].app_type ==
+            SYNTRA_GUI_APP_LAUNCHER)
+        {
+            launcher_id = runtime.windows.windows[index].id;
+            break;
+        }
+    }
+    assert(launcher_id != 0U);
     assert(syntra_gui_window_move(
-        &runtime.windows, runtime.windows.windows[2].id, 30U, 200U) ==
-        SYNTRA_STATUS_OK);
+        &runtime.windows, launcher_id, 30U, 200U) == SYNTRA_STATUS_OK);
     assert(syntra_gui_window_focus(
         &runtime.windows, runtime.windows.windows[0].id) == SYNTRA_STATUS_OK);
     move_pointer(&runtime, -194, -12); /* overlapping Settings tile */
