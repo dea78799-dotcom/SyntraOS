@@ -218,8 +218,12 @@ int main(void)
         assert(syntra_gui_window_open(
             &runtime.windows, 0U, 0U, 100U, 100U, &id) == SYNTRA_STATUS_OK);
     }
-    assert(syntra_gui_runtime_render(&runtime, &framebuffer) ==
-           SYNTRA_STATUS_OK);
+    {
+        uint32_t first_slot_id = runtime.windows.windows[0].id;
+        uint32_t last_slot_id =
+            runtime.windows.windows[SYNTRA_GUI_MAX_WINDOWS - 1U].id;
+        assert(syntra_gui_runtime_render(&runtime, &framebuffer) ==
+               SYNTRA_STATUS_OK);
     /* Eight 30px slots with 4px gaps: x=40 through x=307. */
     assert(pixels[210U * 320U + 40U] == 0xFF1A2948U);
     assert(pixels[210U * 320U + 278U] == 0xFF54D6E8U);
@@ -231,14 +235,13 @@ int main(void)
     /* Both edge slots are interactive, not just visually rendered. */
     move_pointer(&runtime, 130, 100); /* last slot, near the right edge */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
-    assert(syntra_gui_window_active(&runtime.windows)->id ==
-           runtime.windows.windows[7].id);
+    assert(syntra_gui_window_active(&runtime.windows)->id == last_slot_id);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
     move_pointer(&runtime, -240, 0); /* first slot, near the left edge */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
-    assert(syntra_gui_window_active(&runtime.windows)->id ==
-           runtime.windows.windows[0].id);
+    assert(syntra_gui_window_active(&runtime.windows)->id == first_slot_id);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+    }
 
     /* A covered launcher must not intercept clicks from the front app. */
     assert(syntra_gui_runtime_init(&runtime, 640U, 480U) ==
