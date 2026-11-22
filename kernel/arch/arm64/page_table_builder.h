@@ -8,16 +8,27 @@ typedef syntra_status_t (*syntra_arm64_pt_alloc_fn)(
     void *context, uint64_t *physical_address);
 typedef uint64_t *(*syntra_arm64_pt_resolve_fn)(
     uint64_t physical_address, void *context);
+typedef syntra_status_t (*syntra_arm64_pt_release_fn)(
+    void *context, uint64_t physical_address);
 
 typedef struct
 {
     syntra_arm64_pt_alloc_fn allocate;
     syntra_arm64_pt_resolve_fn resolve;
+    syntra_arm64_pt_release_fn release;
     void *context;
     uint64_t root_physical_address;
 } syntra_arm64_page_table_t;
 
 /* Allocates and clears an L1 root. MMU activation is deliberately separate. */
+syntra_status_t syntra_arm64_page_table_init_ex(
+    syntra_arm64_page_table_t *table,
+    syntra_arm64_pt_alloc_fn allocate,
+    syntra_arm64_pt_release_fn release,
+    syntra_arm64_pt_resolve_fn resolve,
+    void *context);
+
+/* Compatibility initializer; newly allocated pages cannot be reclaimed. */
 syntra_status_t syntra_arm64_page_table_init(
     syntra_arm64_page_table_t *table,
     syntra_arm64_pt_alloc_fn allocate,
