@@ -400,6 +400,12 @@ static syntra_status_t page_free_unlocked(
     {
         return SYNTRA_STATUS_ERROR;
     }
+    if (page_owners[index] <= (uint8_t)SYNTRA_PAGE_OWNER_NONE ||
+        page_owners[index] >= (uint8_t)SYNTRA_PAGE_OWNER_MAX ||
+        owner_page_counts[page_owners[index]] == 0U)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
     if (enforce_owner && page_owners[index] != (uint8_t)expected_owner)
     {
         return SYNTRA_STATUS_PERMISSION_DENIED;
