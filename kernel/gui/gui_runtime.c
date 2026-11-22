@@ -10,14 +10,56 @@
 #define TASKBAR_HEIGHT 26U
 #define TASKBAR_BOTTOM_MARGIN 8U
 
+#define COMPACT_SWITCHER_START_X 40U
+#define COMPACT_SWITCHER_RIGHT_MARGIN 8U
+#define COMPACT_SWITCHER_GAP 4U
+#define COMPACT_SWITCHER_MAX_SLOT_WIDTH 64U
+#define COMPACT_SWITCHER_HEIGHT 22U
+#define COMPACT_SWITCHER_BOTTOM_MARGIN 8U
+
+static int compact_switcher_geometry(
+    const syntra_gui_runtime_t *runtime, uint32_t *slot_width)
+{
+    uint32_t available, width;
+    if (runtime->input.width >= 640U || runtime->input.height >= 480U ||
+        runtime->windows.count == 0U || slot_width == NULL ||
+        runtime->input.width <= COMPACT_SWITCHER_START_X +
+            COMPACT_SWITCHER_RIGHT_MARGIN)
+        return 0;
+    available = runtime->input.width - COMPACT_SWITCHER_START_X -
+                COMPACT_SWITCHER_RIGHT_MARGIN -
+                COMPACT_SWITCHER_GAP * (runtime->windows.count - 1U);
+    width = available / runtime->windows.count;
+    if (width > COMPACT_SWITCHER_MAX_SLOT_WIDTH)
+        width = COMPACT_SWITCHER_MAX_SLOT_WIDTH;
+    if (width < 24U) return 0;
+    *slot_width = width;
+    return 1;
+}
+
+static uint32_t compact_switcher_y(const syntra_gui_runtime_t *runtime)
+{
+    return runtime->input.height - COMPACT_SWITCHER_BOTTOM_MARGIN -
+           COMPACT_SWITCHER_HEIGHT;
+}
+
+static uint32_t compact_switcher_slot_x(uint32_t index, uint32_t slot_width)
+{
+    return COMPACT_SWITCHER_START_X +
+           index * (slot_width + COMPACT_SWITCHER_GAP);
+}
 
 static uint32_t gesture_target_at(const syntra_gui_runtime_t *runtime,
                                   uint32_t x, uint32_t y)
 {
     uint32_t index = runtime->windows.count;
-    if (runtime->input.width >= 640U && runtime->input.height >= 480U &&
-        x >= TASKBAR_START_X &&
-        y >= runtime->input.height - TASKBAR_BOTTOM_MARGIN - TASKBAR_HEIGHT - 2U)
+    if ((runtime->input.width >= 640U && runtime->input.height >= 480U &&
+         x >= TASKBAR_START_X &&
+         y >= runtime->input.height - TASKBAR_BOTTOM_MARGIN - TASKBAR_HEIGHT - 2U) ||
+        (runtime->input.width < 640U || runtime->input.height < 480U) &&
+         x >= COMPACT_SWITCHER_START_X &&
+         y >= compact_switcher_y(runtime) &&
+         y < compact_switcher_y(runtime) + COMPACT_SWITCHER_HEIGHT)
         return UINT32_MAX;
     while (index > 0U)
     {
@@ -46,6 +88,86 @@ static int taskbar_geometry(
     if (width < 48U) return 0;
     *slot_width = width;
     return 1;
+}
+
+static syntra_status_t handle_compact_switcher_click(
+    syntra_gui_runtime_t *runtime, uint32_t x, uint32_t y, int *handled)
+{
+    uint32_t slot_width, index, switcher_y;
+    syntra_status_t status;
+    *handled = 0;
+    if (!compact_switcher_geometry(runtime, &slot_width))
+        return SYNTRA_STATUS_OK;
+    switcher_y = compact_switcher_y(runtime);
+    if (x < COMPACT_SWITCHER_START_X ||
+        x >= runtime->input.width - COMPACT_SWITCHER_RIGHT_MARGIN ||
+        y < switcher_y || y >= switcher_y + COMPACT_SWITCHER_HEIGHT)
+        return SYNTRA_STATUS_OK;
+
+    /* The compact switcher owns its strip, including gaps between slots. */
+    *handled = 1;
+    for (index = 0U; index < runtime->windows.count; ++index)
+    {
+        uint32_t left = compact_switcher_slot_x(index, slot_width);
+        if (x >= left && x < left + slot_width)
+        {
+            uint32_t id = runtime->windows.windows[index].id;
+            status = runtime->windows.windows[index].minimized != 0U
+                ? syntra_gui_window_restore(&runtime->windows, id)
+                : syntra_gui_window_focus(&runtime->windows, id);
+            if (status != SYNTRA_STATUS_OK) return status;
+            break;
+        }
+    }
+    runtime->interaction.drag_window_id = 0U;
+    runtime->interaction.previous_buttons = runtime->input.buttons;
+    return SYNTRA_STATUS_OK;
+}
+
+static syntra_status_t render_compact_switcher(
+    const syntra_gui_runtime_t *runtime, syntra_framebuffer_t *framebuffer)
+{
+    uint32_t slot_width, index, y;
+    syntra_status_t status;
+    if (!compact_switcher_geometry(runtime, &slot_width))
+        return SYNTRA_STATUS_OK;
+    y = compact_switcher_y(runtime);
+    status = syntra_framebuffer_fill_rect(
+        framebuffer, COMPACT_SWITCHER_START_X - 4U, y - 2U,
+        framebuffer->width - COMPACT_SWITCHER_START_X,
+        COMPACT_SWITCHER_HEIGHT + 4U, 0xFF101A2CU);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    for (index = 0U; index < runtime->windows.count; ++index)
+    {
+        const syntra_gui_window_t *window = &runtime->windows.windows[index];
+        uint32_t x = compact_switcher_slot_x(index, slot_width);
+        int active = window->minimized == 0U &&
+            syntra_gui_window_active(&runtime->windows) == window;
+        uint32_t color = window->minimized != 0U ? 0xFF263D66U :
+            (active ? 0xFF25466FU : 0xFF1A2948U);
+        const char *label = "WIN";
+        if (window->app_type == SYNTRA_GUI_APP_FILES) label = "FILES";
+        else if (window->app_type == SYNTRA_GUI_APP_SETTINGS) label = "SET";
+        else if (window->app_type == SYNTRA_GUI_APP_LAUNCHER) label = "HOME";
+
+        status = syntra_framebuffer_fill_rect(
+            framebuffer, x, y, slot_width, COMPACT_SWITCHER_HEIGHT, color);
+        if (status != SYNTRA_STATUS_OK) return status;
+        if (active)
+        {
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, x, y, 2U, COMPACT_SWITCHER_HEIGHT,
+                0xFF54D6E8U);
+            if (status != SYNTRA_STATUS_OK) return status;
+        }
+        status = syntra_framebuffer_draw_text(
+            framebuffer, x + 2U, y + 7U, label,
+            window->minimized != 0U ? 0xFFB7C5E0U : 0xFFF4F7FFU,
+            color, 1U);
+        if (status != SYNTRA_STATUS_OK) return status;
+    }
+    return SYNTRA_STATUS_OK;
 }
 
 static syntra_status_t handle_taskbar_click(
@@ -671,6 +793,13 @@ syntra_status_t syntra_gui_runtime_process_event_at(
                 runtime, runtime->input.pointer_x, runtime->input.pointer_y,
                 &taskbar_handled);
             if (status != SYNTRA_STATUS_OK) return status;
+            if (taskbar_handled == 0)
+            {
+                status = handle_compact_switcher_click(
+                    runtime, runtime->input.pointer_x,
+                    runtime->input.pointer_y, &taskbar_handled);
+                if (status != SYNTRA_STATUS_OK) return status;
+            }
         }
         if (taskbar_handled != 0)
             status = SYNTRA_STATUS_OK;
@@ -765,6 +894,9 @@ syntra_status_t syntra_gui_runtime_render(
     if (status != SYNTRA_STATUS_OK) return status;
 
     status = render_taskbar(runtime, framebuffer);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = render_compact_switcher(runtime, framebuffer);
     if (status != SYNTRA_STATUS_OK) return status;
 
     if (runtime->context_menu_visible != 0U)
