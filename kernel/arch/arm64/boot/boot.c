@@ -116,6 +116,7 @@ extern char __user_stack_bottom[];
 extern char __user_stack_top[];
 extern void syntra_arm64_user_fault_halt(void);
 extern void syntra_arm64_user_hello(void *argument);
+extern void syntra_arm64_user_write_private_data(void *argument);
 extern void syntra_arm64_user_write_code_fault(void *argument);
 extern void syntra_arm64_el0_thread_exit_trampoline(void);
 extern void syntra_arm64_enter_user_context(syntra_arm64_exception_context_t *, uintptr_t);
@@ -1243,11 +1244,14 @@ static syntra_arm64_address_space_t process_el0_test_space;
 static syntra_status_t syntra_arm64_process_el0_scheduler_test(void)
 {
     const uint64_t code_va = SYNTRA_ARM64_USER_VA_BASE;
+    const uint64_t data_va = SYNTRA_ARM64_USER_VA_BASE + 0x1000ULL;
     const uint64_t stack_va = SYNTRA_ARM64_USER_VA_BASE + 0x2000ULL;
-    uintptr_t code_page = 0U, stack_page = 0U;
+    const uint64_t data_sentinel = 0x53594E5452410001ULL;
+    uintptr_t code_page = 0U, data_page = 0U, stack_page = 0U;
+    uintptr_t data_page_physical = 0U;
     uintptr_t text_start = (uintptr_t)__user_text_start;
     uintptr_t text_size = (uintptr_t)__user_text_end - text_start;
-    uintptr_t entry_address = (uintptr_t)syntra_arm64_user_hello;
+    uintptr_t entry_address = (uintptr_t)syntra_arm64_user_write_private_data;
     uintptr_t entry_offset;
     uint64_t exit_count_before;
     uint64_t start_counter, timeout_ticks;
@@ -1277,6 +1281,15 @@ static syntra_status_t syntra_arm64_process_el0_scheduler_test(void)
         (void)syntra_page_free_owned(code_page, SYNTRA_PAGE_OWNER_PROCESS);
         return status;
     }
+    status = syntra_page_alloc_owned(&data_page, SYNTRA_PAGE_OWNER_PROCESS);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        (void)syntra_page_free_owned(code_page, SYNTRA_PAGE_OWNER_PROCESS);
+        (void)syntra_page_free_owned(stack_page, SYNTRA_PAGE_OWNER_PROCESS);
+        return status;
+    }
+    data_page_physical = data_page;
+    *(volatile uint64_t *)(uintptr_t)data_page = data_sentinel;
 
     for (size_t i = 0U; i < SYNTRA_ARM64_MMU_PAGE_SIZE; ++i)
         ((uint8_t *)(uintptr_t)code_page)[i] =
@@ -1302,6 +1315,12 @@ static syntra_status_t syntra_arm64_process_el0_scheduler_test(void)
     code_page = 0U;
 
     status = syntra_arm64_address_space_map_user_page(
+        &process_el0_test_space, data_va, (uint64_t)data_page,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0);
+    if (status != SYNTRA_STATUS_OK) goto fail_space;
+    data_page = 0U;
+
+    status = syntra_arm64_address_space_map_user_page(
         &process_el0_test_space, stack_va, (uint64_t)stack_page,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0);
     if (status != SYNTRA_STATUS_OK) goto fail_space;
@@ -1321,12 +1340,12 @@ static syntra_status_t syntra_arm64_process_el0_scheduler_test(void)
         sizeof(process_el0_test_kernel_stack),
         (void *)(uintptr_t)stack_va, SYNTRA_ARM64_MMU_PAGE_SIZE,
         entry.function, syntra_arm64_el0_thread_exit_trampoline,
-        NULL, &context);
+        (void *)(uintptr_t)data_va, &context);
     if (status != SYNTRA_STATUS_OK) goto fail_process;
 
     status = scheduler_create_user_thread(
         SYNTRA_PROCESS_EL0_TEST_THREAD_ID, 1U,
-        entry.function, NULL,
+        entry.function, (void *)(uintptr_t)data_va,
         process_el0_test_kernel_stack,
         sizeof(process_el0_test_kernel_stack),
         (void *)(uintptr_t)stack_va, SYNTRA_ARM64_MMU_PAGE_SIZE,
@@ -1394,13 +1413,20 @@ static syntra_status_t syntra_arm64_process_el0_scheduler_test(void)
         goto fail_process;
     }
 
+    if (*(volatile uint64_t *)(uintptr_t)data_page_physical !=
+        data_sentinel + 1ULL)
+    {
+        status = SYNTRA_STATUS_ERROR;
+        goto fail_process;
+    }
+
     status = process_terminate(SYNTRA_PROCESS_EL0_TEST_ID);
     if (status != SYNTRA_STATUS_OK) return status;
     if (process_validate() != SYNTRA_STATUS_OK)
         return SYNTRA_STATUS_ERROR;
 
     syntra_uart_puts(
-        "Process EL0 scheduler: PASS (private code/stack, SVC exit, root restore)\\n");
+        "Process EL0 memory: PASS (EL0 private-page write, SVC exit, root restore)\\n");
     return SYNTRA_STATUS_OK;
 
 fail_process:
@@ -1420,6 +1446,8 @@ fail_pages:
         (void)syntra_page_free_owned(code_page, SYNTRA_PAGE_OWNER_PROCESS);
     if (stack_page != 0U)
         (void)syntra_page_free_owned(stack_page, SYNTRA_PAGE_OWNER_PROCESS);
+    if (data_page != 0U)
+        (void)syntra_page_free_owned(data_page, SYNTRA_PAGE_OWNER_PROCESS);
     return status;
 }
 
