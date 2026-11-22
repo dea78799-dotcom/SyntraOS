@@ -113,7 +113,9 @@ static syntra_status_t handle_launcher_click(
 
     tile_x = local_x / (tile_width + 4U);
     tile_y = local_y / 32U;
-    if (tile_x > 1U || tile_y > 1U)
+    if (tile_x > 1U || tile_y > 1U ||
+        (local_x % (tile_width + 4U)) >= tile_width ||
+        (local_y % 32U) >= 24U)
         return SYNTRA_STATUS_OK;
     tile = tile_y * 2U + tile_x;
     return activate_launcher_tile(runtime, tile);
