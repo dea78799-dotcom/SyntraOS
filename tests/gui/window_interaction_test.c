@@ -81,6 +81,46 @@ int main(void)
     assert(manager.count == 1U);
     assert(syntra_gui_window_active(&manager)->id == front_id);
 
+    /* Direct titlebar controls maximize, restore and minimize windows. */
+    {
+        uint32_t control_id;
+        assert(syntra_gui_window_open(&manager, 100U, 100U, 180U, 120U,
+                                     &control_id) == SYNTRA_STATUS_OK);
+        set_pointer(&input, 246U, 110U, SYNTRA_INPUT_BUTTON_LEFT);
+        assert(syntra_gui_window_interaction_process(
+            &interaction, &manager, &input) == SYNTRA_STATUS_OK);
+        assert(syntra_gui_window_get(&manager, control_id, &window) ==
+               SYNTRA_STATUS_OK);
+        assert(window->maximized == 1U && window->x == 0U &&
+               window->y == 0U && window->width == 640U &&
+               window->height == 480U);
+
+        set_pointer(&input, 606U, 110U, 0U);
+        assert(syntra_gui_window_interaction_process(
+            &interaction, &manager, &input) == SYNTRA_STATUS_OK);
+        set_pointer(&input, 606U, 110U, SYNTRA_INPUT_BUTTON_LEFT);
+        assert(syntra_gui_window_interaction_process(
+            &interaction, &manager, &input) == SYNTRA_STATUS_OK);
+        assert(syntra_gui_window_get(&manager, control_id, &window) ==
+               SYNTRA_STATUS_OK);
+        assert(window->maximized == 0U && window->x == 100U &&
+               window->y == 100U && window->width == 180U &&
+               window->height == 120U);
+
+        set_pointer(&input, 606U, 110U, 0U);
+        assert(syntra_gui_window_interaction_process(
+            &interaction, &manager, &input) == SYNTRA_STATUS_OK);
+        set_pointer(&input, 229U, 110U, SYNTRA_INPUT_BUTTON_LEFT);
+        assert(syntra_gui_window_interaction_process(
+            &interaction, &manager, &input) == SYNTRA_STATUS_OK);
+        assert(syntra_gui_window_get(&manager, control_id, &window) ==
+               SYNTRA_STATUS_OK);
+        assert(window->minimized == 1U);
+        assert(syntra_gui_window_active(&manager)->id == front_id);
+        assert(syntra_gui_window_restore(&manager, control_id) ==
+               SYNTRA_STATUS_OK);
+        assert(syntra_gui_window_active(&manager)->id == control_id);
+    }
     /* Invalid dimension pairing is rejected without mutating the manager. */
     assert(syntra_input_init(&input, 320U, 240U) == SYNTRA_STATUS_OK);
     assert(syntra_gui_window_interaction_process(
