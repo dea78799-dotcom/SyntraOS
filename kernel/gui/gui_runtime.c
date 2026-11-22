@@ -66,7 +66,18 @@ static syntra_status_t activate_launcher_tile(
     if (existing_id != 0U)
         return syntra_gui_window_focus(&runtime->windows, existing_id);
 
-    if (app_type == SYNTRA_GUI_APP_FILES)
+    if (runtime->input.width < 640U || runtime->input.height < 480U)
+    {
+        if (app_type == SYNTRA_GUI_APP_FILES)
+            status = syntra_gui_window_open_app(
+                &runtime->windows, 10U, 40U, 240U, 170U,
+                app_type, &new_id);
+        else
+            status = syntra_gui_window_open_app(
+                &runtime->windows, 70U, 40U, 240U, 170U,
+                app_type, &new_id);
+    }
+    else if (app_type == SYNTRA_GUI_APP_FILES)
         status = syntra_gui_window_open_app(
             &runtime->windows, 30U, 190U, 270U, 230U,
             app_type, &new_id);
@@ -87,10 +98,19 @@ static syntra_status_t handle_launcher_dock_click(
     uint32_t index;
     uint32_t launcher_id = 0U;
 
-    if (pointer_x < 14U || pointer_x >= 40U ||
-        pointer_y < runtime->input.height - 34U ||
-        pointer_y >= runtime->input.height - 8U)
+    if (runtime->input.width < 640U || runtime->input.height < 480U)
+    {
+        if (pointer_x < 10U || pointer_x >= 20U ||
+            pointer_y < runtime->input.height - 20U ||
+            pointer_y >= runtime->input.height - 10U)
+            return SYNTRA_STATUS_OK;
+    }
+    else if (pointer_x < 14U || pointer_x >= 40U ||
+             pointer_y < runtime->input.height - 34U ||
+             pointer_y >= runtime->input.height - 8U)
+    {
         return SYNTRA_STATUS_OK;
+    }
 
     for (index = 0U; index < runtime->windows.count; ++index)
     {
@@ -104,6 +124,11 @@ static syntra_status_t handle_launcher_dock_click(
 
     if (launcher_id != 0U)
         return syntra_gui_window_focus(&runtime->windows, launcher_id);
+
+    if (runtime->input.width < 640U || runtime->input.height < 480U)
+        return syntra_gui_window_open_app(
+            &runtime->windows, 70U, 45U, 180U, 140U,
+            SYNTRA_GUI_APP_LAUNCHER, &launcher_id);
 
     return syntra_gui_window_open_app(
         &runtime->windows, 230U, 60U, 180U, 140U,
