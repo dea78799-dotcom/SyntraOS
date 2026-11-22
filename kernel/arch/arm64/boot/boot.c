@@ -1115,7 +1115,7 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
      * This audits shared descriptors without loading the new root into TTBR0.
      */
     {
-        syntra_arm64_address_space_t audit_space = {0};
+        static syntra_arm64_address_space_t audit_space;
         syntra_arm64_mmu_translation_t inherited_translation;
         const syntra_arm64_mmu_mapping_t *kernel_mapping = &plan.mappings[0];
 

@@ -45,6 +45,7 @@ add_executable(syntraos_arm64
     "${SYNTRAOS_ARM64_DIR}/registers.c"
     "${SYNTRAOS_ARM64_DIR}/mmu.c"
     "${SYNTRAOS_ARM64_DIR}/page_table_builder.c"
+    "${SYNTRAOS_ARM64_DIR}/address_space.c"
     "${SYNTRAOS_ARM64_DIR}/mmu_mapping_plan.c"
     "${SYNTRAOS_ARM64_DIR}/context.c"
     "${SYNTRAOS_ROOT}/kernel/scheduler/scheduler.c"
