@@ -68,6 +68,7 @@ syntra_status_t process_init(void)
         processes[i].priority = 0U;
         processes[i].state = PROCESS_TERMINATED;
         processes[i].thread_count = 0U;
+        processes[i].address_space = NULL;
         for (unsigned int j = 0U; j < SYNTRA_MAX_PROCESS_THREADS; ++j)
             processes[i].thread_ids[j] = 0U;
     }
@@ -92,6 +93,7 @@ syntra_status_t process_create(unsigned int process_id, unsigned int priority)
     process->priority = priority;
     process->state = PROCESS_READY;
     process->thread_count = 0U;
+    process->address_space = NULL;
     for (unsigned int i = 0U; i < SYNTRA_MAX_PROCESS_THREADS; ++i)
         process->thread_ids[i] = 0U;
 
@@ -105,6 +107,31 @@ syntra_process_t *process_get(unsigned int process_id)
         return NULL;
     slot = process_find_slot(process_id);
     return slot < 0 ? NULL : &processes[(unsigned int)slot];
+}
+
+syntra_status_t process_attach_address_space(
+    unsigned int process_id,
+    syntra_arm64_address_space_t *address_space)
+{
+    syntra_process_t *process = process_get(process_id);
+    syntra_status_t status;
+
+    if (process == NULL || address_space == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    if (process->state == PROCESS_TERMINATED ||
+        process->address_space != NULL)
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+
+    status = syntra_arm64_address_space_validate(address_space);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    for (unsigned int i = 0U; i < process_count; ++i)
+        if (processes[i].address_space == address_space)
+            return SYNTRA_STATUS_PERMISSION_DENIED;
+
+    process->address_space = address_space;
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t process_attach_thread(
@@ -179,6 +206,8 @@ syntra_status_t process_set_state(
             ? SYNTRA_STATUS_INVALID_ARGUMENT : SYNTRA_STATUS_ERROR;
     if (state < PROCESS_READY || state > PROCESS_TERMINATED)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
+    if (state == PROCESS_TERMINATED && process->address_space != NULL)
+        return SYNTRA_STATUS_PERMISSION_DENIED;
 
     if (process->thread_count != 0U)
     {
@@ -195,7 +224,33 @@ syntra_status_t process_set_state(
 
 syntra_status_t process_terminate(unsigned int process_id)
 {
-    return process_set_state(process_id, PROCESS_TERMINATED);
+    syntra_process_t *process = process_get(process_id);
+    syntra_process_state_t derived;
+    syntra_status_t status;
+
+    if (process == NULL)
+        return process_initialized
+            ? SYNTRA_STATUS_INVALID_ARGUMENT : SYNTRA_STATUS_ERROR;
+
+    if (process->thread_count != 0U)
+    {
+        status = process_derive_state(process, &derived);
+        if (status != SYNTRA_STATUS_OK)
+            return status;
+        if (derived != PROCESS_TERMINATED)
+            return SYNTRA_STATUS_PERMISSION_DENIED;
+    }
+
+    if (process->address_space != NULL)
+    {
+        status = syntra_arm64_address_space_destroy(process->address_space);
+        if (status != SYNTRA_STATUS_OK)
+            return status;
+        process->address_space = NULL;
+    }
+
+    process->state = PROCESS_TERMINATED;
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t process_validate(void)
@@ -214,9 +269,21 @@ syntra_status_t process_validate(void)
             process->thread_count > SYNTRA_MAX_PROCESS_THREADS)
             return SYNTRA_STATUS_ERROR;
 
-        for (unsigned int q = p + 1U; q < process_count; ++q)
-            if (process->process_id == processes[q].process_id)
+        if (process->address_space != NULL)
+        {
+            if (process->state == PROCESS_TERMINATED ||
+                syntra_arm64_address_space_validate(
+                    process->address_space) != SYNTRA_STATUS_OK)
                 return SYNTRA_STATUS_ERROR;
+        }
+
+        for (unsigned int q = p + 1U; q < process_count; ++q)
+        {
+            if (process->process_id == processes[q].process_id ||
+                (process->address_space != NULL &&
+                 process->address_space == processes[q].address_space))
+                return SYNTRA_STATUS_ERROR;
+        }
 
         for (unsigned int i = 0U; i < process->thread_count; ++i)
         {

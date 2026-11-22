@@ -98,12 +98,12 @@ it is not evidence of physical-device support.
   no general page-table reclamation or mapping teardown API.
 - The current boot mapping is primarily identity mapping; a complete kernel
   higher-half layout and dynamic virtual address allocator are not implemented.
-- Address-space objects exist, but they are not yet attached to process objects
-  or activated by a context switch through TTBR0_EL1. Their roots currently
-  can inherit the current low identity-mapped kernel root entries, but must not
-  replace the active root until TTBR0 switching, TLB invalidation, and active-root
-  lifetime rules are implemented. The reserved upper-half user VA range is a
-  V1 convention, not yet a process ABI.
+- Process Manager now accepts ownership of a validated address-space object.
+  Process termination releases that address space only after all attached
+  threads are terminated. The ARM64 boot path also audits kernel mapping
+  inheritance on an inactive root. Scheduler-driven TTBR0_EL1 switching,
+  TLB invalidation, and active-root lifetime rules are not implemented. The
+  reserved upper-half user VA range is a V1 convention, not yet a process ABI.
 - Shared-page reference counting, copy-on-write, demand paging, swapping, and
   memory-mapped file support are not implemented. The V1 registry and its
   single-core ownership checks are not SMP-safe.

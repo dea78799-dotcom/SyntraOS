@@ -49,6 +49,7 @@ add_executable(syntraos_arm64
     "${SYNTRAOS_ARM64_DIR}/mmu_mapping_plan.c"
     "${SYNTRAOS_ARM64_DIR}/context.c"
     "${SYNTRAOS_ROOT}/kernel/scheduler/scheduler.c"
+    "${SYNTRAOS_ROOT}/kernel/process/process.c"
     "${SYNTRAOS_ARM64_DIR}/timer.c"
 
     "${SYNTRAOS_ROOT}/kernel/interrupt/interrupt.c"

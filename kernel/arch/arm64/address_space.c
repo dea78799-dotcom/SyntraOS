@@ -418,6 +418,7 @@ syntra_status_t syntra_arm64_address_space_validate(
 
     if (space == NULL || !space->initialized ||
         !address_space_is_registered(space) ||
+        space->kernel_mappings_inherited == 0U ||
         space->address_space_id == 0U ||
         space->mapping_count > SYNTRA_ARM64_ADDRESS_SPACE_MAX_MAPPINGS ||
         space->page_table.root_physical_address == 0ULL)

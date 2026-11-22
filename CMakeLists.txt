@@ -232,6 +232,13 @@ add_executable(process_test
 target_link_libraries(process_test PRIVATE syntra_kernel)
 add_test(NAME ProcessTest COMMAND process_test)
 
+# Process and ARM64 address-space ownership integration test
+add_executable(process_address_space_test
+    tests/process/process_address_space_test.c
+)
+target_link_libraries(process_address_space_test PRIVATE syntra_kernel)
+add_test(NAME ProcessAddressSpaceOwnershipTest COMMAND process_address_space_test)
+
 # IPC Test
 add_executable(ipc_test
     tests/ipc/ipc_test.c

@@ -2,6 +2,7 @@
 #define SYNTRA_PROCESS_H
 
 #include "../core/status.h"
+#include "../arch/arm64/address_space.h"
 
 #define SYNTRA_MAX_PROCESSES 64U
 #define SYNTRA_MAX_PROCESS_THREADS 32U
@@ -21,6 +22,7 @@ typedef struct
     syntra_process_state_t state;
     unsigned int thread_ids[SYNTRA_MAX_PROCESS_THREADS];
     unsigned int thread_count;
+    syntra_arm64_address_space_t *address_space;
 } syntra_process_t;
 
 /* Initialize process manager. */
@@ -31,6 +33,11 @@ syntra_status_t process_create(
     unsigned int process_id,
     unsigned int priority
 );
+
+/* Attach and transfer ownership of a validated, kernel-mapped address space. */
+syntra_status_t process_attach_address_space(
+    unsigned int process_id,
+    syntra_arm64_address_space_t *address_space);
 
 /* Find a process. */
 syntra_process_t *process_get(unsigned int process_id);
@@ -68,7 +75,8 @@ syntra_status_t process_set_state(
     syntra_process_state_t state
 );
 
-/* A process with attached threads can terminate only after all are terminated. */
+/* A process with attached threads can terminate only after all are terminated.
+ * Termination destroys an attached address space owned by the process manager. */
 syntra_status_t process_terminate(unsigned int process_id);
 
 /* Validate process table and process-to-thread ownership invariants. */
