@@ -1,4 +1,4 @@
-# ARM64 Kernel Virtual Address Layout (Proposal v1)
+# ARM64 Kernel Virtual Address Layout (Proposal v2)
 
 Status: design proposal only. No page tables changed and MMU activation remains disabled.
 Base revision: stack-registry-capacity-tests-v9.
@@ -10,30 +10,34 @@ The current MMU helper declares:
 - 4-KiB pages and 512 table entries.
 - 39-bit VA and 48-bit PA.
 - Three 9-bit translation indices plus 12-bit page offset.
-- The address-space module reserves the upper half of TTBR0's 39-bit range for EL0:
+- The address-space module reserves the upper 256-GiB range for EL0:
   `SYNTRA_ARM64_USER_VA_BASE = 1 << 38` (256 GiB),
   `SYNTRA_ARM64_USER_VA_LIMIT = 1 << 39` (512 GiB).
 - Kernel-root inheritance currently copies root entries 0..127 and requires entries
-  128..511 of the kernel root to be zero. Thus kernel mappings must remain in the
-  lower 256-GiB half for this design.
-- The existing MMU mapping-plan builder currently creates identity mappings for RAM,
-  kernel sections, DTB, and discovered MMIO. This proposal reserves a future virtual-only
-  region; it does not relocate or change existing mappings.
+  128..511 of the kernel root to be zero. With the current L1 root granularity of 1 GiB,
+  entries 0..127 cover 0..128 GiB—not 0..256 GiB. Therefore inherited kernel mappings
+  must stay within 0..128 GiB under this mechanism.
+- Root entries 128..255 cover 128..256 GiB and are a reserved gap under the current
+  inheritance validation. Root entries 256..511 cover the existing EL0 range.
+- The existing MMU mapping-plan builder is identity-oriented for RAM, kernel sections,
+  DTB, and discovered MMIO. This proposal does not relocate or change existing mappings.
 
-## 2. Proposed lower-half partition
+## 2. Proposed address partition
 
 All values are hexadecimal and ranges are half-open.
 
 | Region | Range | Purpose | Status |
 |---|---|---|---|
 | Bootstrap identity | 0x000000000000–0x000000FFFFFFFF | Current/required low identity mappings, subject to validated map | Existing plan; audit required |
-| Kernel VA arena | 0x0000002000000000–0x0000003000000000 | Future dynamic kernel mappings, including thread stacks | Proposed |
-| Other lower-half | 0x0000000000000000–0x0000004000000000 | Reserved for future kernel layout and audited identity mappings | Reserved |
+| Kernel VA arena | 0x0000001000000000–0x0000001800000000 | Future dynamic kernel mappings, including thread stacks | Proposed |
+| Kernel-inherited region | 0x0000000000000000–0x0000002000000000 | Root entries 0..127 (0–128 GiB); bootstrap and future kernel mappings | Constraint of current inheritance |
+| Reserved root-entry gap | 0x0000002000000000–0x0000004000000000 | Root entries 128..255 (128–256 GiB) | Reserved by current validation |
 | EL0 user region | 0x0000004000000000–0x0000008000000000 | Existing user VA range | Existing API |
 
-The proposed arena is 64 GiB, from 128 GiB to 192 GiB. It is separated from the
-current low identity-map range and the user half. This separation is conceptual: before
-reservation, every mapping must be checked for overlap.
+The proposed arena is 32 GiB, from 64 GiB to 96 GiB. It lies inside the currently
+inherited 0–128-GiB region and avoids the low 4-GiB identity range. The 32-GiB size
+and base are proposals only; exact overlaps with RAM, reserved-memory, linker, and
+mapping-plan ranges must be audited before implementation.
 
 VA does not imply backing PA. API records must distinguish virtual and physical addresses.
 
