@@ -185,7 +185,7 @@ unsigned int process_get_id_for_thread(unsigned int thread_id)
     if (!process_initialized || thread_id == 0U)
         return 0U;
 
-    for (unsigned int p = 0U; p < process_count; ++p)
+    for (unsigned int p = 0U; p < process_slot_count; ++p)
         for (unsigned int i = 0U; i < processes[p].thread_count; ++i)
             if (processes[p].thread_ids[i] == thread_id)
                 return processes[p].process_id;
@@ -199,7 +199,7 @@ syntra_arm64_address_space_t *process_get_address_space_for_thread(
     if (!process_initialized || thread_id == 0U)
         return NULL;
 
-    for (unsigned int p = 0U; p < process_count; ++p)
+    for (unsigned int p = 0U; p < process_slot_count; ++p)
         for (unsigned int i = 0U; i < processes[p].thread_count; ++i)
             if (processes[p].thread_ids[i] == thread_id)
                 return processes[p].address_space;
@@ -246,7 +246,7 @@ syntra_status_t process_refresh_all_states(void)
      * complete table because a just-terminated thread may no longer be the
      * scheduler's current thread, so its ID is not available to the IRQ path.
      */
-    for (unsigned int i = 0U; i < process_count; ++i)
+    for (unsigned int i = 0U; i < process_slot_count; ++i)
     {
         syntra_status_t status =
             process_refresh_state(processes[i].process_id);
@@ -300,7 +300,7 @@ syntra_status_t process_reap_terminated(void)
     if (!process_initialized)
         return SYNTRA_STATUS_OK;
 
-    for (unsigned int i = 0U; i < process_count; ++i)
+    for (unsigned int i = 0U; i < process_slot_count; ++i)
     {
         syntra_process_t *process = &processes[i];
         if (process->process_id == 0U ||
@@ -419,13 +419,18 @@ syntra_status_t process_validate(void)
         process_slot_count > SYNTRA_MAX_PROCESSES)
         return SYNTRA_STATUS_ERROR;
 
-    for (unsigned int p = 0U; p < process_count; ++p)
+    for (unsigned int p = 0U; p < process_slot_count; ++p)
     {
         const syntra_process_t *process = &processes[p];
         syntra_process_state_t derived;
 
-        if (process->process_id == 0U ||
-            process->state < PROCESS_READY ||
+        if (process->process_id == 0U)
+        {
+            if (process->thread_count != 0U || process->address_space != NULL)
+                return SYNTRA_STATUS_ERROR;
+            continue;
+        }
+        if (process->state < PROCESS_READY ||
             process->state > PROCESS_TERMINATED ||
             process->thread_count > SYNTRA_MAX_PROCESS_THREADS)
             return SYNTRA_STATUS_ERROR;
@@ -464,7 +469,7 @@ syntra_status_t process_validate(void)
                 if (process->thread_ids[i] == process->thread_ids[j])
                     return SYNTRA_STATUS_ERROR;
 
-            for (unsigned int q = p + 1U; q < process_count; ++q)
+            for (unsigned int q = p + 1U; q < process_slot_count; ++q)
                 for (unsigned int j = 0U; j < processes[q].thread_count; ++j)
                     if (process->thread_ids[i] == processes[q].thread_ids[j])
                         return SYNTRA_STATUS_ERROR;
