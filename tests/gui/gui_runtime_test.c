@@ -180,6 +180,21 @@ int main(void)
     assert(syntra_gui_window_active(&runtime.windows)->app_selection == 3U);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
 
+    /* Tiny launcher windows must not trigger tile-geometry underflow. */
+    assert(syntra_gui_window_manager_init(&runtime.windows, 640U, 480U) ==
+           SYNTRA_STATUS_OK);
+    assert(syntra_input_init(&runtime.input, 640U, 480U) == SYNTRA_STATUS_OK);
+    assert(syntra_gui_window_interaction_init(&runtime.interaction) ==
+           SYNTRA_STATUS_OK);
+    runtime.initialized = 1;
+    assert(syntra_gui_window_open_app(
+        &runtime.windows, 300U, 200U, 20U, 30U,
+        SYNTRA_GUI_APP_LAUNCHER, &launcher_id) == SYNTRA_STATUS_OK);
+    move_pointer(&runtime, -15, -15); /* inside tiny launcher surface */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(runtime.windows.count == 1U);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+
     /* Invalid dimensions must be rejected rather than creating partial state. */
     assert(syntra_gui_runtime_init(&runtime, 200U, 100U) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
