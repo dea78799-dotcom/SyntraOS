@@ -30,6 +30,7 @@ static int syntra_virtio_input_irq_registered;
 static int syntra_virtio_input_key_a_test_reported;
 static int syntra_virtio_input_irq_test_reported;
 static uint64_t syntra_gui_last_refresh_tick;
+static int syntra_gui_refresh_timer_ready;
 
 static void syntra_uart_puts(const char *message);
 static void syntra_uart_put_hex(uint64_t value);
@@ -2632,6 +2633,7 @@ syntra_status_t syntra_arm64_boot_main(
     if (status == SYNTRA_STATUS_OK)
     {
         syntra_gui_last_refresh_tick = timer_get_ticks();
+        syntra_gui_refresh_timer_ready = 1;
         syntra_uart_puts("Desktop refresh timer: ENABLED at 100 Hz\n");
     }
     else
@@ -2674,8 +2676,9 @@ void syntra_arm64_boot_idle_loop(void)
                     &syntra_virtio_input_queue);
 
             /* 100 Hz timer: redraw the uptime badge once per second. */
-            if ((ticks - syntra_gui_last_refresh_tick) >=
-                SYNTRA_ARM64_TIMER_DEFAULT_HZ)
+            if (syntra_gui_refresh_timer_ready &&
+                (ticks - syntra_gui_last_refresh_tick) >=
+                    SYNTRA_ARM64_TIMER_DEFAULT_HZ)
             {
                 syntra_gui_last_refresh_tick = ticks;
                 (void)syntra_ramfb_refresh();
