@@ -25,7 +25,9 @@ int main(void)
     assert(runtime.last_gesture.action == SYNTRA_GESTURE_HOLD);
     assert(syntra_gui_runtime_tick(&runtime, 1500U) == SYNTRA_STATUS_OK);
     assert(runtime.last_gesture.action == SYNTRA_GESTURE_LONG_PRESS);
+    assert(runtime.context_menu_visible == 1U);
     event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0, 1600U);
+    assert(runtime.context_menu_visible == 1U);
     assert(runtime.last_gesture.action == SYNTRA_GESTURE_NONE);
 
     event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_RIGHT, 1, 2000U);
