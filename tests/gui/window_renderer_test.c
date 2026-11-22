@@ -51,6 +51,25 @@ int main(void)
     assert(pixels[STRIDE + WIDTH] == 0U);
     assert(pixels[STRIDE - 1U] == 0U);
 
+    /* Compact 320x240 windows keep all three titlebar controls visible. */
+    {
+        uint32_t compact_pixels[320U * 240U] = {0};
+        syntra_framebuffer_t compact_framebuffer = {
+            compact_pixels, 320U, 240U, 320U
+        };
+        syntra_gui_window_manager_t compact_manager;
+        uint32_t compact_id;
+        assert(syntra_gui_window_manager_init(
+            &compact_manager, 320U, 240U) == SYNTRA_STATUS_OK);
+        assert(syntra_gui_window_open(
+            &compact_manager, 40U, 30U, 240U, 170U, &compact_id) ==
+               SYNTRA_STATUS_OK);
+        assert(syntra_gui_render_windows(
+            &compact_framebuffer, &compact_manager) == SYNTRA_STATUS_OK);
+        assert(compact_pixels[34U * 320U + 229U] == 0xFFE5A84BU);
+        assert(compact_pixels[34U * 320U + 246U] == 0xFF54D6E8U);
+        assert(compact_pixels[34U * 320U + 263U] == 0xFFB83D55U);
+    }
     /* Empty manager is a valid no-op; mismatched dimensions are rejected. */
     assert(syntra_gui_window_manager_init(&manager, WIDTH, HEIGHT) ==
            SYNTRA_STATUS_OK);
