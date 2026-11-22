@@ -970,6 +970,164 @@ static const uint64_t *syntra_boot_page_table_walk_resolve(
     return syntra_boot_page_table_resolve(physical_address, context);
 }
 
+#define SYNTRA_PROCESS_AS_TEST_ID 42U
+#define SYNTRA_PROCESS_AS_TEST_THREAD_ID 4U
+
+static _Alignas(16) uint8_t process_as_test_stack[4096];
+static syntra_arm64_address_space_t process_as_test_space;
+static volatile unsigned int process_as_test_result;
+static uint64_t process_as_test_expected_root;
+
+static void syntra_process_as_test_worker(void *argument)
+{
+    uint64_t ttbr0 = 0ULL;
+    syntra_thread_t *current = scheduler_get_current();
+    syntra_arm64_address_space_t *thread_space;
+
+    (void)argument;
+    __asm__ volatile("mrs %0, ttbr0_el1" : "=r"(ttbr0));
+    thread_space = current == NULL ? NULL :
+        process_get_address_space_for_thread(current->thread_id);
+
+    if (current != NULL &&
+        current->thread_id == SYNTRA_PROCESS_AS_TEST_THREAD_ID &&
+        thread_space == &process_as_test_space &&
+        (ttbr0 & SYNTRA_ARM64_MMU_PA_MASK) ==
+            process_as_test_expected_root)
+        process_as_test_result = 1U;
+    else
+        process_as_test_result = 2U;
+}
+
+static syntra_status_t syntra_arm64_process_address_space_scheduler_test(void)
+{
+    syntra_status_t status;
+    syntra_thread_t *thread, *current;
+    syntra_arm64_exception_context_t *initial_context = NULL;
+    syntra_arm64_mmu_registers_t registers;
+    uint64_t start, timeout_ticks;
+
+    current = scheduler_get_current();
+    if (current == NULL ||
+        current->thread_id != SYNTRA_SCHEDULER_TEST_BOOT_ID)
+        return SYNTRA_STATUS_ERROR;
+
+    process_as_test_result = 0U;
+    status = syntra_arm64_address_space_create(
+        &process_as_test_space, SYNTRA_PROCESS_AS_TEST_ID,
+        syntra_boot_page_table_resolve, NULL);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    status = syntra_arm64_address_space_inherit_kernel_mappings(
+        &process_as_test_space,
+        syntra_active_page_table.root_physical_address);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        (void)syntra_arm64_address_space_destroy(&process_as_test_space);
+        return status;
+    }
+
+    process_as_test_expected_root =
+        process_as_test_space.page_table.root_physical_address;
+
+    status = process_create(SYNTRA_PROCESS_AS_TEST_ID, 1U);
+    if (status != SYNTRA_STATUS_OK) goto fail_space;
+    status = process_attach_address_space(
+        SYNTRA_PROCESS_AS_TEST_ID, &process_as_test_space);
+    if (status != SYNTRA_STATUS_OK) goto fail_process;
+
+    status = scheduler_create_thread(
+        SYNTRA_PROCESS_AS_TEST_THREAD_ID, 1U,
+        syntra_process_as_test_worker, NULL,
+        process_as_test_stack, sizeof(process_as_test_stack));
+    if (status != SYNTRA_STATUS_OK) goto fail_process;
+
+    thread = scheduler_get_thread(SYNTRA_PROCESS_AS_TEST_THREAD_ID);
+    if (thread == NULL)
+    {
+        status = SYNTRA_STATUS_ERROR;
+        goto fail_process;
+    }
+
+    status = syntra_arm64_context_initialize(
+        process_as_test_stack, sizeof(process_as_test_stack),
+        syntra_process_as_test_worker, NULL, &initial_context);
+    if (status != SYNTRA_STATUS_OK) goto fail_process;
+    thread->cpu_context = initial_context;
+
+    status = process_attach_thread(
+        SYNTRA_PROCESS_AS_TEST_ID, SYNTRA_PROCESS_AS_TEST_THREAD_ID);
+    if (status != SYNTRA_STATUS_OK) goto fail_process;
+
+    status = interrupt_enable(30U);
+    if (status != SYNTRA_STATUS_OK) goto fail_process;
+    status = syntra_arm64_timer_enable();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        (void)interrupt_disable(30U);
+        goto fail_process;
+    }
+
+    start = syntra_arm64_timer_read_counter();
+    timeout_ticks = syntra_arm64_timer_read_frequency() * 2U;
+    __asm__ volatile("dsb sy" ::: "memory");
+    __asm__ volatile("msr daifclr, #2" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+
+    while (process_as_test_result == 0U ||
+        thread->state != THREAD_TERMINATED)
+    {
+        if ((syntra_arm64_timer_read_counter() - start) > timeout_ticks)
+        {
+            status = SYNTRA_STATUS_ERROR;
+            break;
+        }
+        __asm__ volatile("wfi" ::: "memory");
+    }
+
+    __asm__ volatile("msr daifset, #2" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+    (void)syntra_arm64_timer_disable();
+    (void)interrupt_disable(30U);
+
+    if (status != SYNTRA_STATUS_OK || process_as_test_result != 1U)
+        return SYNTRA_STATUS_ERROR;
+
+    current = scheduler_get_current();
+    if (current == NULL ||
+        current->thread_id != SYNTRA_SCHEDULER_TEST_BOOT_ID)
+        return SYNTRA_STATUS_ERROR;
+
+    status = syntra_arm64_mmu_read_registers(&registers);
+    if (status != SYNTRA_STATUS_OK ||
+        (registers.ttbr0_el1 & SYNTRA_ARM64_MMU_PA_MASK) !=
+            syntra_active_page_table.root_physical_address)
+        return SYNTRA_STATUS_ERROR;
+
+    status = process_terminate(SYNTRA_PROCESS_AS_TEST_ID);
+    if (status != SYNTRA_STATUS_OK) return status;
+    if (process_validate() != SYNTRA_STATUS_OK)
+        return SYNTRA_STATUS_ERROR;
+
+    syntra_uart_puts(
+        "Process scheduler TTBR0 switch: PASS (process root -> kernel root)\n");
+    return SYNTRA_STATUS_OK;
+
+fail_process:
+    thread = scheduler_get_thread(SYNTRA_PROCESS_AS_TEST_THREAD_ID);
+    if (thread != NULL && thread->state != THREAD_TERMINATED)
+        (void)scheduler_set_thread_state(
+            SYNTRA_PROCESS_AS_TEST_THREAD_ID, THREAD_TERMINATED);
+    (void)process_refresh_state(SYNTRA_PROCESS_AS_TEST_ID);
+    (void)process_terminate(SYNTRA_PROCESS_AS_TEST_ID);
+    return status;
+
+fail_space:
+    if (process_as_test_space.initialized)
+        (void)syntra_arm64_address_space_destroy(&process_as_test_space);
+    return status;
+}
+
 /* Build and audit the identity mappings, but leave SCTLR_EL1.M disabled. */
 static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
 {
@@ -1201,7 +1359,14 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
     status = syntra_arm64_post_mmu_timer_irq_test();
     if (status != SYNTRA_STATUS_OK)
     {
-        syntra_uart_puts("Post-MMU Timer IRQ validation: FAIL\n");
+        syntra_uart_puts("Post-MMU Timer IRQ validation: FAIL\\n");
+        return status;
+    }
+
+    status = syntra_arm64_process_address_space_scheduler_test();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("Process scheduler address-space switch: FAIL\\n");
         return status;
     }
     return SYNTRA_STATUS_OK;
