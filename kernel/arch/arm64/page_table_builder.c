@@ -162,7 +162,7 @@ static syntra_status_t ensure_child(
         return *child == NULL ? SYNTRA_STATUS_ERROR : SYNTRA_STATUS_OK;
     }
 
-    if (builder->release == NULL || transaction == NULL ||
+    if (transaction == NULL ||
         transaction->count >= SYNTRA_PT_TXN_MAX_NEW_TABLES)
         return SYNTRA_STATUS_OUT_OF_MEMORY;
 
@@ -253,8 +253,9 @@ syntra_status_t syntra_arm64_page_table_map(
     int executable)
 {
     uint64_t end;
-    syntra_pt_txn_t transaction = {{{0}}};
+    syntra_pt_txn_t transaction;
 
+    transaction.count = 0U;
     /*
      * Validate every descriptor attribute before allocating intermediate
      * tables. Descriptor constructors repeat these checks at the leaf level,
@@ -383,7 +384,9 @@ syntra_status_t syntra_arm64_page_table_map_user(
     syntra_arm64_mmu_access_t access, int executable)
 {
     uint64_t end;
-    syntra_pt_txn_t transaction = {{{0}}};
+    syntra_pt_txn_t transaction;
+
+    transaction.count = 0U;
     if (table == NULL || table->root_physical_address == 0ULL ||
         table->allocate == NULL || table->resolve == NULL ||
         (access != SYNTRA_ARM64_MMU_ACCESS_READ_WRITE &&
