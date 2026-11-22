@@ -162,8 +162,8 @@ static void test_user_page_mappings(void)
     syntra_arm64_page_table_t pt;
     syntra_arm64_mmu_translation_t translation;
     reset();
-    assert(syntra_arm64_page_table_init(
-        &pt, alloc_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_init_ex(
+        &pt, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
 
     /* User code: EL0 read/execute, never EL1 execute, read-only. */
     assert(syntra_arm64_page_table_map_user(
@@ -207,8 +207,8 @@ static void test_invalid_attributes_do_not_allocate_tables(void)
 {
     syntra_arm64_page_table_t pt;
     reset();
-    assert(syntra_arm64_page_table_init(
-        &pt, alloc_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_init_ex(
+        &pt, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
     assert(used == 1U);
 
     assert(syntra_arm64_page_table_map(
@@ -266,8 +266,8 @@ static void test_device_mapping_and_invalid_inputs(void)
 {
     syntra_arm64_page_table_t pt;
     reset();
-    assert(syntra_arm64_page_table_init(
-        &pt, alloc_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_init_ex(
+        &pt, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
 
     assert(syntra_arm64_page_table_map(
         &pt, 0x08000000ULL, 0x08000000ULL, 0x2000ULL,
@@ -288,7 +288,7 @@ static void test_device_mapping_and_invalid_inputs(void)
         SYNTRA_ARM64_MMU_MEMORY_DEVICE,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 1) ==
         SYNTRA_STATUS_INVALID_ARGUMENT);
-    assert(syntra_arm64_page_table_init(
+    assert(syntra_arm64_page_table_init_ex(
         NULL, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
 }
 
@@ -298,7 +298,7 @@ static void test_block_mapping(void)
     syntra_arm64_page_table_t pt;
     syntra_arm64_mmu_translation_t tr;
     reset();
-    assert(syntra_arm64_page_table_init(&pt, alloc_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_init_ex(&pt, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_page_table_map(&pt, 0x40000000ULL, 0x80000000ULL,
         SYNTRA_ARM64_MMU_BLOCK_SIZE, SYNTRA_ARM64_MMU_MEMORY_NORMAL,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
@@ -319,7 +319,7 @@ static void test_block_page_conflict(void)
 {
     syntra_arm64_page_table_t pt;
     reset();
-    assert(syntra_arm64_page_table_init(&pt, alloc_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_init_ex(&pt, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_page_table_map(&pt, 0x60001000ULL, 0x70001000ULL,
         0x1000ULL, SYNTRA_ARM64_MMU_MEMORY_NORMAL,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
@@ -332,7 +332,7 @@ static void test_partial_overlap_preflight(void)
 {
     syntra_arm64_page_table_t pt;
     reset();
-    assert(syntra_arm64_page_table_init(&pt, alloc_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_init_ex(&pt, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_page_table_map(&pt, 0x50002000ULL, 0x60002000ULL, 0x1000ULL,
         SYNTRA_ARM64_MMU_MEMORY_NORMAL, SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_page_table_map(&pt, 0x50001000ULL, 0x70001000ULL, 0x2000ULL,
