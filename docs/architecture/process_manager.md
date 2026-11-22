@@ -100,7 +100,7 @@ generic Process Manager.
    pages, and add per-process fault reporting; write-to-code termination is
    already covered by the QEMU smoke test.
 4. Add process resource cleanup and transactional creation rollback.
-5. Add SMP-safe active-root tracking and remote TLB shootdown before SMP use.
+5. Add SMP-safe active-root tracking and remote TLB shootdown before SMP use.\n6. Define stack allocation ownership and add explicit stack-buffer reclamation.
 
 ## 7. Version status
 
