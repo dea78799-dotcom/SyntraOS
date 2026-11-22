@@ -33,11 +33,13 @@ static syntra_status_t draw_app_surface(
             "MUSIC", "VIDEOS", "PROJECTS", "SYSTEM"
         };
         uint32_t row;
+        uint32_t scroll_offset = window->app_scroll_offset;
         status = syntra_framebuffer_fill_rect(
             framebuffer, left, top, inner_width, inner_height, 0xFF0C1428U);
         if (status != SYNTRA_STATUS_OK) return status;
         /* Avoid narrow Files surfaces overflowing list geometry. */
-        if (inner_width < 64U)
+        if (inner_width < 64U ||
+            scroll_offset >= SYNTRA_GUI_FILES_ENTRY_COUNT)
             return SYNTRA_STATUS_OK;
         status = syntra_framebuffer_fill_rect(
             framebuffer, left, top, 34U, inner_height, 0xFF1A2948U);
@@ -48,7 +50,7 @@ static syntra_status_t draw_app_surface(
         if (status != SYNTRA_STATUS_OK) return status;
         for (row = 0U; row < SYNTRA_GUI_FILES_ENTRY_COUNT; ++row)
         {
-            uint32_t entry = window->app_scroll_offset + row;
+            uint32_t entry = scroll_offset + row;
             row_y = top + 8U + row * 22U;
             if (entry >= SYNTRA_GUI_FILES_ENTRY_COUNT ||
                 row_y + 16U >= top + inner_height)
