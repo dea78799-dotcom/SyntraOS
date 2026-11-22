@@ -62,6 +62,7 @@ add_executable(syntraos_arm64
     "${SYNTRAOS_ROOT}/kernel/gui/window_interaction.c"
     "${SYNTRAOS_ROOT}/kernel/input/input.c"
     "${SYNTRAOS_ROOT}/kernel/virtio/virtio_mmio.c"
+    "${SYNTRAOS_ROOT}/kernel/virtio/input_event_queue.c"
 )
 
 set_target_properties(syntraos_arm64 PROPERTIES
