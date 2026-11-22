@@ -157,6 +157,40 @@ static void test_map_rolls_back_on_allocation_failure(void)
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
 }
 
+static void test_user_map_rolls_back_on_allocation_failure(void)
+{
+    syntra_arm64_page_table_t pt;
+    syntra_arm64_mmu_translation_t translation;
+    reset();
+    released = 0U;
+    release_attempts = 0U;
+    assert(syntra_arm64_page_table_init_ex(
+        &pt, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+
+    /* Root succeeds, L2 succeeds, and the required L3 allocation fails. */
+    allocation_limit = 2U;
+    assert(syntra_arm64_page_table_map_user(
+        &pt, 0x52000000ULL, 0x82000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
+        SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(used == 2U);
+    assert(released == 1U);
+    assert(release_attempts == 1U);
+    assert(storage[0][(0x52000000ULL >> 30U) & 0x1ffU] == 0ULL);
+    assert(syntra_arm64_mmu_walk(pt.root_physical_address, 0x52000000ULL,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_ERROR);
+
+    /* The failed user-map setup leaves the VA available for a retry. */
+    allocation_limit = TABLES;
+    assert(syntra_arm64_page_table_map_user(
+        &pt, 0x52000000ULL, 0x82000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_verify_user(
+        &pt, 0x52000000ULL, 0x82000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+}
+
 static void test_user_page_mappings(void)
 {
     syntra_arm64_page_table_t pt;
@@ -347,6 +381,7 @@ int main(void)
     test_init_reclaims_unresolvable_root();
     test_build_and_walk_verify();
     test_map_rolls_back_on_allocation_failure();
+    test_user_map_rolls_back_on_allocation_failure();
     test_user_page_mappings();
     test_block_mapping();
     test_block_page_conflict();
