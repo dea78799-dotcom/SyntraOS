@@ -97,6 +97,7 @@ syntra_status_t syntra_gui_window_interaction_process(
             const syntra_gui_window_t *window;
             --index;
             window = &manager->windows[index];
+            if (window->minimized != 0U) continue;
 
             if (point_inside(input->pointer_x, input->pointer_y,
                              window->x, window->y,
