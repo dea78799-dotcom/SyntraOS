@@ -41,7 +41,9 @@ int main(void)
     assert(pixels[(size_t)52U * STRIDE + 62U] == 0xFF1479D4U);
     assert(pixels[(size_t)50U * STRIDE + 60U] == 0xFF5578F2U);
 
-    /* The close control has its own visible hit-target-sized visual. */
+    /* Titlebar exposes distinct minimize, maximize and close controls. */
+    assert(pixels[(size_t)54U * STRIDE + 189U] == 0xFFE5A84BU);
+    assert(pixels[(size_t)54U * STRIDE + 206U] == 0xFF54D6E8U);
     assert(pixels[(size_t)54U * STRIDE + 223U] == 0xFFB83D55U);
 
     /* Pixels outside managed windows and stride padding remain untouched. */
