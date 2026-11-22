@@ -220,6 +220,8 @@ syntra_status_t syntra_arm64_exception_handle(
                     mutable_context->elr_el1 =
                         (uint64_t)(uintptr_t)
                             syntra_arm64_el0_thread_exit_trampoline;
+                    /* Return to EL1h with IRQ enabled so the scheduler can run. */
+                    mutable_context->spsr_el1 = 0x345ULL;
                     user_thread_exit_count++;
                 }
                 else
@@ -230,8 +232,9 @@ syntra_status_t syntra_arm64_exception_handle(
 #endif
                     mutable_context->elr_el1 =
                         (uint64_t)(uintptr_t)syntra_arm64_el0_return_trampoline;
+                    /* Preserve the legacy direct EL0 test's masked return state. */
+                    mutable_context->spsr_el1 = 0x3C5ULL;
                 }
-                mutable_context->spsr_el1 = 0x3C5ULL;
                 mutable_context->reserved = SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC;
             }
             else
