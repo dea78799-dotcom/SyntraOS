@@ -211,6 +211,27 @@ syntra_status_t process_refresh_state(unsigned int process_id)
     return SYNTRA_STATUS_OK;
 }
 
+syntra_status_t process_refresh_all_states(void)
+{
+    if (!process_initialized)
+        return SYNTRA_STATUS_OK;
+
+    /*
+     * Process state is derived from scheduler thread states. Refresh the
+     * complete table because a just-terminated thread may no longer be the
+     * scheduler's current thread, so its ID is not available to the IRQ path.
+     */
+    for (unsigned int i = 0U; i < process_count; ++i)
+    {
+        syntra_status_t status =
+            process_refresh_state(processes[i].process_id);
+        if (status != SYNTRA_STATUS_OK)
+            return status;
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t process_set_state(
     unsigned int process_id,
     syntra_process_state_t state)
