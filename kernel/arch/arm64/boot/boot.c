@@ -1259,6 +1259,7 @@ static syntra_status_t syntra_arm64_process_el0_scheduler_test(void)
     syntra_thread_t *thread, *current;
     syntra_arm64_exception_context_t *context = NULL;
     syntra_arm64_mmu_registers_t registers;
+    syntra_arm64_mmu_translation_t data_translation;
     union
     {
         uint64_t address;
@@ -1328,6 +1329,18 @@ static syntra_status_t syntra_arm64_process_el0_scheduler_test(void)
 
     status = syntra_arm64_address_space_validate(&process_el0_test_space);
     if (status != SYNTRA_STATUS_OK) goto fail_space;
+
+    status = syntra_arm64_address_space_translate(
+        &process_el0_test_space, data_va, &data_translation);
+    if (status != SYNTRA_STATUS_OK ||
+        data_translation.physical_address != (uint64_t)data_page_physical ||
+        data_translation.user_read == 0U ||
+        data_translation.user_write == 0U ||
+        data_translation.user_execute != 0U)
+    {
+        status = SYNTRA_STATUS_ERROR;
+        goto fail_space;
+    }
 
     status = process_create(SYNTRA_PROCESS_EL0_TEST_ID, 1U);
     if (status != SYNTRA_STATUS_OK) goto fail_space;
