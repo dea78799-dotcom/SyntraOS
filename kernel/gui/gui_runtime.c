@@ -175,11 +175,11 @@ static syntra_status_t handle_launcher_click(
      * Match renderer geometry exactly: the first tile starts four pixels
      * inside the app surface, with a four-pixel gap between columns/rows.
      */
-    if (pointer_x < launcher->x + 12U ||
-        pointer_y < launcher->y + 32U)
+    if (pointer_x < launcher->x + 8U ||
+        pointer_y < launcher->y + 28U)
         return SYNTRA_STATUS_OK;
-    local_x = pointer_x - (launcher->x + 12U);
-    local_y = pointer_y - (launcher->y + 32U);
+    local_x = pointer_x - (launcher->x + 8U);
+    local_y = pointer_y - (launcher->y + 28U);
     tile_width = (launcher->width - 20U) / 2U;
     if (local_x >= 2U * tile_width + 4U || local_y >= 60U)
         return SYNTRA_STATUS_OK;
