@@ -227,6 +227,18 @@ int main(void)
     assert(pixels[210U * 320U + 307U] == 0xFF25466FU);
     assert(pixels[210U * 320U + 308U] != 0xFF25466FU);
 
+    /* Both edge slots are interactive, not just visually rendered. */
+    move_pointer(&runtime, 130, 100); /* last slot, near the right edge */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(syntra_gui_window_active(&runtime.windows)->id ==
+           runtime.windows.windows[7].id);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+    move_pointer(&runtime, -240, 0); /* first slot, near the left edge */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(syntra_gui_window_active(&runtime.windows)->id ==
+           runtime.windows.windows[0].id);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+
     /* A covered launcher must not intercept clicks from the front app. */
     assert(syntra_gui_runtime_init(&runtime, 640U, 480U) ==
            SYNTRA_STATUS_OK);
