@@ -30,4 +30,7 @@ syntra_status_t syntra_ramfb_init(uintptr_t fw_cfg_base, size_t fw_cfg_size);
 syntra_status_t syntra_ramfb_process_input_events(
     syntra_virtio_input_queue_t *input_queue);
 
+/* Refresh the desktop clock/uptime badge from normal context. */
+syntra_status_t syntra_ramfb_refresh(void);
+
 #endif
