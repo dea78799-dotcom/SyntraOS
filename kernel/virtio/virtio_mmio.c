@@ -466,6 +466,17 @@ syntra_status_t syntra_virtio_mmio_setup_input_event_queue_mapped(
         4096U);
     if (status != SYNTRA_STATUS_OK) return status;
 
+    /*
+     * Legacy VirtIO-MMIO requires GuestPageSize before QueuePFN. The PFN is
+     * shifted by the device's configured guest-page shift; omitting this
+     * register leaves QEMU's shift at zero and points the queue at a bogus
+     * low address instead of the allocated RAM page.
+     */
+    status = virtio_mmio_mapped_write32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_GUEST_PAGE_SIZE, 4096U);
+    if (status != SYNTRA_STATUS_OK) return status;
+
     /* QueuePFN is the publication point and must be written last. */
     status = virtio_mmio_mapped_write32(
         device, mapped_base, mapped_size, SYNTRA_VIRTIO_MMIO_QUEUE_PFN,
