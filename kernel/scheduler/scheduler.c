@@ -296,6 +296,68 @@ syntra_thread_t *scheduler_schedule_next_with_context(void)
     return NULL;
 }
 
+syntra_status_t scheduler_rollback_context_switch(
+    unsigned int previous_thread_id,
+    unsigned int selected_thread_id)
+{
+    int previous_slot = -1;
+    int selected_slot = -1;
+
+    if (!scheduler_initialized)
+        return SYNTRA_STATUS_ERROR;
+    /*
+     * A zero previous ID means the interrupted thread had already exited
+     * and the scheduler has no current slot (the exception frame is an idle
+     * continuation, not a live scheduler thread).
+     */
+    if (previous_thread_id != 0U)
+    {
+        previous_slot = scheduler_find_slot(previous_thread_id);
+        if (previous_slot < 0)
+            return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    if (selected_thread_id != 0U)
+    {
+        selected_slot = scheduler_find_slot(selected_thread_id);
+        if (selected_slot < 0 || current_slot != selected_slot ||
+            threads[(unsigned int)selected_slot].state != THREAD_RUNNING)
+            return SYNTRA_STATUS_PERMISSION_DENIED;
+    }
+    else if (current_slot >= 0)
+    {
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+    }
+
+    if (previous_slot >= 0 &&
+        threads[(unsigned int)previous_slot].state == THREAD_TERMINATED)
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+
+    if (selected_slot >= 0)
+        threads[(unsigned int)selected_slot].state = THREAD_READY;
+
+    if (previous_slot >= 0)
+    {
+        threads[(unsigned int)previous_slot].state = THREAD_RUNNING;
+        current_slot = previous_slot;
+    }
+    else
+    {
+        current_slot = -1;
+    }
+
+    /*
+     * Retry the failed selection first on the next scheduling attempt.
+     * When no candidate existed, resume round-robin after the restored task.
+     */
+    if (selected_slot >= 0)
+        next_slot = (unsigned int)selected_slot;
+    else if (previous_slot >= 0)
+        next_slot = ((unsigned int)previous_slot + 1U) % thread_count;
+
+    return scheduler_validate();
+}
+
 syntra_thread_t *scheduler_get_current(void)
 {
     if (!scheduler_initialized || current_slot < 0)

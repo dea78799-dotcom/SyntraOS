@@ -448,13 +448,20 @@ syntra_arm64_exception_handle_and_select(
             (void)scheduler_set_thread_state(
                 SYNTRA_ARM64_BOOT_THREAD_ID, THREAD_RUNNING);
             scheduler_context_switching_active = 0;
-            if (activate_thread_address_space(SYNTRA_ARM64_BOOT_THREAD_ID) !=
-                SYNTRA_STATUS_OK)
-                return NULL;
+            /*
+             * No task was selected. Keep the interrupted boot context even
+             * when the kernel-root check fails; never return a null frame.
+             */
+            (void)activate_thread_address_space(SYNTRA_ARM64_BOOT_THREAD_ID);
             return context;
         }
         if (activate_thread_address_space(next->thread_id) != SYNTRA_STATUS_OK)
-            return NULL;
+        {
+            (void)scheduler_rollback_context_switch(
+                SYNTRA_ARM64_BOOT_THREAD_ID, next->thread_id);
+            scheduler_context_switching_active = 0;
+            return context;
+        }
         return (syntra_arm64_exception_context_t *)next->cpu_context;
     }
 
@@ -462,12 +469,34 @@ syntra_arm64_exception_handle_and_select(
         context->vector_index == SYNTRA_ARM64_VECTOR_CURRENT_SPX_IRQ)
     {
         current = scheduler_get_current();
-        if (current != NULL) current->cpu_context = context;
+        if (current != NULL)
+            current->cpu_context = context;
 
+        /*
+         * current may be NULL when a thread has just terminated. In that
+         * case this exception frame is the idle continuation while the
+         * scheduler selects the next live thread.
+         */
         next = scheduler_schedule_next_with_context();
-        if (next == NULL) return context;
-        if (activate_thread_address_space(next->thread_id) != SYNTRA_STATUS_OK)
-            return NULL;
+        if (next == NULL)
+            return context;
+
+        status = activate_thread_address_space(next->thread_id);
+        if (status != SYNTRA_STATUS_OK)
+        {
+            unsigned int previous_id =
+                current != NULL ? current->thread_id : 0U;
+            syntra_exception_uart_puts("Scheduler address-space activation failed: previous=");
+            syntra_exception_uart_hex(previous_id);
+            syntra_exception_uart_puts(" next=");
+            syntra_exception_uart_hex(next->thread_id);
+            syntra_exception_uart_puts(" status=");
+            syntra_exception_uart_hex((uint64_t)(int64_t)status);
+            syntra_exception_uart_puts("\\n");
+            (void)scheduler_rollback_context_switch(
+                previous_id, next->thread_id);
+            return context;
+        }
         return (syntra_arm64_exception_context_t *)next->cpu_context;
     }
 

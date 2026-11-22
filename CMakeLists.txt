@@ -211,6 +211,18 @@ add_executable(scheduler_test
 target_link_libraries(scheduler_test PRIVATE syntra_kernel)
 add_test(NAME SchedulerTest COMMAND scheduler_test)
 
+# Scheduler rollback after failed ARM64 address-space activation
+add_executable(scheduler_switch_rollback_test
+    tests/scheduler/scheduler_switch_rollback_test.c
+    kernel/scheduler/scheduler.c
+)
+target_include_directories(scheduler_switch_rollback_test PRIVATE
+    kernel/scheduler
+    kernel/core
+)
+add_test(NAME SchedulerSwitchRollbackTest
+    COMMAND scheduler_switch_rollback_test)
+
 # Memory Region Manager Test
 add_executable(memory_region_test
     tests/memory/memory_region_test.c
