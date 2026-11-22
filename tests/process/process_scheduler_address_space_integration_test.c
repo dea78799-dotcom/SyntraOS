@@ -299,6 +299,10 @@ int main(void)
 
     /* No runnable thread: move to kernel TTBR0 before reaping Process B. */
     assert(scheduler_schedule_next_with_context() == NULL);
+    /* All TCBs are terminated, but the process root is still active. */
+    assert(process_reclaim_terminated(2U) ==
+        SYNTRA_STATUS_PERMISSION_DENIED);
+    assert(process_get(2U) != NULL);
     assert(syntra_arm64_address_space_activate_kernel_root() ==
         SYNTRA_STATUS_OK);
     assert(mmu.ttbr0 == kernel_root);
