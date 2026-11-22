@@ -32,6 +32,14 @@ int main(void)
     assert(runtime.last_gesture.action == SYNTRA_GESTURE_PRESS);
     event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_RIGHT, 0, 2050U);
     assert(runtime.last_gesture.action == SYNTRA_GESTURE_CONTEXT_REQUEST);
+    assert(runtime.context_menu_visible == 1U);
+
+    /* The open context menu consumes and dismisses an outside primary click. */
+    event_at(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_X, 180, 2100U);
+    event_at(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_Y, 160, 2101U);
+    event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1, 2102U);
+    assert(runtime.context_menu_visible == 0U);
+    event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0, 2110U);
 
     event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1, 3000U);
     event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0, 3050U);
