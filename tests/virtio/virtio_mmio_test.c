@@ -238,6 +238,8 @@ static void test_input_event_queue_setup(void)
     assert(registers[SYNTRA_VIRTIO_MMIO_QUEUE_NUM / sizeof(uint32_t)] ==
            SYNTRA_VIRTIO_INPUT_EVENT_QUEUE_SIZE);
     assert(registers[SYNTRA_VIRTIO_MMIO_QUEUE_ALIGN / sizeof(uint32_t)] == 4096U);
+    assert(registers[SYNTRA_VIRTIO_MMIO_GUEST_PAGE_SIZE / sizeof(uint32_t)] ==
+           4096U);
     assert(registers[SYNTRA_VIRTIO_MMIO_QUEUE_PFN / sizeof(uint32_t)] ==
            0x40000U);
 
