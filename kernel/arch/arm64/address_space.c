@@ -210,17 +210,23 @@ syntra_status_t syntra_arm64_address_space_inherit_kernel_mappings(
         if (kernel_root[i] != 0ULL)
             return SYNTRA_STATUS_ERROR;
 
+    /* Preflight the complete source and destination before mutating the root. */
     for (size_t i = 0U; i < 128U; ++i)
     {
+        uint64_t descriptor = kernel_root[i];
         if (root[i] != 0ULL)
             return SYNTRA_STATUS_ERROR;
+        if (descriptor != 0ULL &&
+            ((descriptor & DESC_VALID) == 0ULL ||
+             (descriptor & ~(DESC_ADDR | 3ULL)) != 0ULL))
+            return SYNTRA_STATUS_ERROR;
+    }
+
+    for (size_t i = 0U; i < 128U; ++i)
+    {
         if (kernel_root[i] != 0ULL)
         {
-            uint64_t descriptor = kernel_root[i];
-            if ((descriptor & DESC_VALID) == 0ULL ||
-                (descriptor & ~(DESC_ADDR | 3ULL)) != 0ULL)
-                return SYNTRA_STATUS_ERROR;
-            root[i] = descriptor;
+            root[i] = kernel_root[i];
             root_entry_mark_borrowed(space, i);
         }
     }
@@ -240,6 +246,7 @@ syntra_status_t syntra_arm64_address_space_map_user_page(
 
     if (space == NULL || !space->initialized ||
         !address_space_is_registered(space) ||
+        space->kernel_mappings_inherited == 0U ||
         virtual_address < SYNTRA_ARM64_USER_VA_BASE ||
         virtual_address >= SYNTRA_ARM64_USER_VA_LIMIT ||
         (virtual_address & (SYNTRA_ARM64_MMU_PAGE_SIZE - 1ULL)) != 0ULL ||
