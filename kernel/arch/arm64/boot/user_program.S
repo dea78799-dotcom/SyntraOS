@@ -33,3 +33,18 @@ syntra_arm64_user_write_code_fault:
     wfe
     b .Luser_write_fault_idle
 .size syntra_arm64_user_write_code_fault, . - syntra_arm64_user_write_code_fault
+
+.align 4
+.global syntra_arm64_user_write_private_data
+.type syntra_arm64_user_write_private_data, %function
+/* x0 contains this process's private data-page VA. */
+syntra_arm64_user_write_private_data:
+    mov x1, x0
+    ldr x2, [x1]
+    add x2, x2, #1
+    str x2, [x1]
+    svc #0x45
+.Luser_private_data_idle:
+    wfe
+    b .Luser_private_data_idle
+.size syntra_arm64_user_write_private_data, . - syntra_arm64_user_write_private_data
