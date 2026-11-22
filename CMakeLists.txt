@@ -192,6 +192,11 @@ add_executable(gui_uptime_panel_test tests/gui/uptime_panel_test.c)
 target_link_libraries(gui_uptime_panel_test PRIVATE syntra_gui)
 add_test(NAME GUIUptimePanelTest COMMAND gui_uptime_panel_test)
 
+# SyntraOS gesture engine and persistent GUI runtime integration test
+add_executable(gui_gesture_runtime_test tests/gui/gui_gesture_runtime_test.c)
+target_link_libraries(gui_gesture_runtime_test PRIVATE syntra_gui)
+add_test(NAME GUIGestureRuntimeIntegrationTest COMMAND gui_gesture_runtime_test)
+
 # QEMU ramfb firmware-directory and wire-format tests
 add_executable(gui_ramfb_test
     tests/gui/ramfb_test.c
