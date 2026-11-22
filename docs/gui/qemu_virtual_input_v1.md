@@ -30,7 +30,9 @@ The ARM64 boot diagnostic now performs a limited keyboard transport test:
 1. Discover a VirtIO-MMIO device through the QEMU-generated FDT.
 2. Perform the VirtIO Input status handshake with no transport feature bits
    selected (the VirtIO Input specification defines no feature bits).
-3. Configure event queue 0 with writable event buffers.
+3. Configure event queue 0 with writable event buffers. For the legacy
+   MMIO transport, set `GuestPageSize=4096` before publishing `QueuePFN`;
+   the PFN must be interpreted with the configured guest-page shift.
 4. Register and enable the device interrupt.
 5. Bind the virtual keyboard to the QEMU ramfb console and inject `KEY_A`
    through QMP in CI.
