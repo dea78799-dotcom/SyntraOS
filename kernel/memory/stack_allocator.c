@@ -45,14 +45,16 @@ syntra_status_t syntra_stack_alloc(
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     actual_size = pages * SYNTRA_PAGE_SIZE;
 
-    for (slot = 0U; slot < SYNTRA_STACK_ALLOCATOR_MAX_STACKS; ++slot)
-        if (stack_records[slot].live == 0U)
-            break;
-    if (slot == SYNTRA_STACK_ALLOCATOR_MAX_STACKS)
-        return SYNTRA_STATUS_OUT_OF_MEMORY;
-
     {
         syntra_irq_state_t irq_state = syntra_irq_save();
+        for (slot = 0U; slot < SYNTRA_STACK_ALLOCATOR_MAX_STACKS; ++slot)
+            if (stack_records[slot].live == 0U)
+                break;
+        if (slot == SYNTRA_STACK_ALLOCATOR_MAX_STACKS)
+        {
+            syntra_irq_restore(irq_state);
+            return SYNTRA_STATUS_OUT_OF_MEMORY;
+        }
         status = syntra_page_alloc_contiguous_owned(
             pages, &base, SYNTRA_PAGE_OWNER_KERNEL);
         if (status == SYNTRA_STATUS_OK)
@@ -131,7 +133,7 @@ syntra_status_t syntra_stack_free(
     return SYNTRA_STATUS_OK;
 }
 
-syntra_status_t syntra_stack_allocator_validate(void)
+static syntra_status_t stack_allocator_validate_unlocked(void)
 {
     size_t observed = 0U;
 
@@ -181,7 +183,18 @@ syntra_status_t syntra_stack_allocator_validate(void)
         ? SYNTRA_STATUS_OK : SYNTRA_STATUS_ERROR;
 }
 
+syntra_status_t syntra_stack_allocator_validate(void)
+{
+    syntra_irq_state_t irq_state = syntra_irq_save();
+    syntra_status_t status = stack_allocator_validate_unlocked();
+    syntra_irq_restore(irq_state);
+    return status;
+}
+
 size_t syntra_stack_allocator_live_count(void)
 {
-    return live_count;
+    syntra_irq_state_t irq_state = syntra_irq_save();
+    size_t count = live_count;
+    syntra_irq_restore(irq_state);
+    return count;
 }
