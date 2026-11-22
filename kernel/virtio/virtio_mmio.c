@@ -231,6 +231,10 @@ syntra_status_t syntra_virtio_mmio_prepare_input_mapped(
 {
     uint32_t status_value;
     uint32_t device_id;
+    uint32_t device_features;
+    const uint32_t required_features =
+        SYNTRA_VIRTIO_INPUT_FEATURE_EV_SYN |
+        SYNTRA_VIRTIO_INPUT_FEATURE_EV_KEY;
     syntra_status_t status;
 
     if (identity == NULL ||
@@ -263,19 +267,39 @@ syntra_status_t syntra_virtio_mmio_prepare_input_mapped(
         SYNTRA_VIRTIO_STATUS_ACKNOWLEDGE | SYNTRA_VIRTIO_STATUS_DRIVER);
     if (status != SYNTRA_STATUS_OK) return status;
 
-    /* No optional features are claimed until SyntraOS implements them. */
+    /*
+     * VirtIO Input uses feature bits to advertise event classes. A keyboard
+     * cannot emit EV_KEY events unless the driver accepts EV_KEY; EV_SYN is
+     * also required to delimit event packets. Read the device's feature word
+     * before selecting only the event classes this driver currently handles.
+     */
+    status = virtio_mmio_mapped_write32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_DEVICE_FEATURES_SEL, 0U);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = virtio_mmio_mapped_read32(
+        device, mapped_base, mapped_size,
+        SYNTRA_VIRTIO_MMIO_DEVICE_FEATURES, &device_features);
+    if (status != SYNTRA_STATUS_OK) return status;
+    if ((device_features & required_features) != required_features)
+        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+
     status = virtio_mmio_mapped_write32(
         device, mapped_base, mapped_size,
         SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES_SEL, 0U);
     if (status != SYNTRA_STATUS_OK) return status;
     status = virtio_mmio_mapped_write32(
         device, mapped_base, mapped_size,
-        SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES, 0U);
+        SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES, required_features);
     if (status != SYNTRA_STATUS_OK) return status;
 
-    /* Only the modern transport exposes the upper 32-bit feature word. */
+    /* SyntraOS does not accept optional feature bits in word 1. */
     if (identity->version == SYNTRA_VIRTIO_MMIO_VERSION_MODERN)
     {
+        status = virtio_mmio_mapped_write32(
+            device, mapped_base, mapped_size,
+            SYNTRA_VIRTIO_MMIO_DEVICE_FEATURES_SEL, 1U);
+        if (status != SYNTRA_STATUS_OK) return status;
         status = virtio_mmio_mapped_write32(
             device, mapped_base, mapped_size,
             SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES_SEL, 1U);
