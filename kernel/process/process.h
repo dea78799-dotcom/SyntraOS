@@ -71,6 +71,12 @@ unsigned int process_get_thread_id(
 syntra_status_t process_refresh_state(unsigned int process_id);
 /* Recompute every process state after a scheduler context switch. */
 syntra_status_t process_refresh_all_states(void);
+/*
+ * Mark every thread owned by a process as terminated.
+ * Call only from a kernel path that will schedule away and never resume the
+ * terminated thread's saved context. Address-space reclamation stays deferred.
+ */
+syntra_status_t process_terminate_threads(unsigned int process_id);
 /* Destroy address spaces belonging to processes whose threads all exited. */
 syntra_status_t process_reap_terminated(void);
 
