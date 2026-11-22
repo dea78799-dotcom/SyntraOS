@@ -404,6 +404,12 @@ syntra_status_t syntra_arm64_page_table_verify(
 
     if (table == NULL || table->root_physical_address == 0ULL ||
         table->resolve == NULL ||
+        (type != SYNTRA_ARM64_MMU_MEMORY_NORMAL &&
+         type != SYNTRA_ARM64_MMU_MEMORY_DEVICE) ||
+        (access != SYNTRA_ARM64_MMU_ACCESS_READ_WRITE &&
+         access != SYNTRA_ARM64_MMU_ACCESS_READ_ONLY) ||
+        (executable != 0 && executable != 1) ||
+        (type == SYNTRA_ARM64_MMU_MEMORY_DEVICE && executable != 0) ||
         syntra_arm64_mmu_validate_mapping_range(va, pa, size) !=
             SYNTRA_STATUS_OK)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
