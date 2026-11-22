@@ -45,8 +45,8 @@ timeout --signal=TERM --kill-after=2 "${TIMEOUT_SECONDS}s" "$QEMU_BIN" \
     -cpu cortex-a57 \
     -m 512M \
     -nic none \
-    -device virtio-keyboard-device,bus=virtio-mmio-bus.0 \
-    -device ramfb \
+    -device ramfb,id=ramfb \
+    -device virtio-keyboard-device,display=ramfb,bus=virtio-mmio-bus.0 \
     -kernel "$ELF_PATH" \
     -display none \
     -serial "file:$LOG_FILE" \
@@ -96,6 +96,7 @@ def send_key(down):
     payload = {
         "execute": "input-send-event",
         "arguments": {
+            "device": "ramfb",
             "events": [{
                 "type": "key",
                 "data": {
