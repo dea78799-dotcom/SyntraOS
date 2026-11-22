@@ -267,7 +267,11 @@ syntra_status_t syntra_gui_window_focus(
 
     found = find_window(manager, window_id);
     if (found < 0) return SYNTRA_STATUS_INVALID_ARGUMENT;
-    if ((uint32_t)found == manager->count - 1U) return SYNTRA_STATUS_OK;
+    if ((uint32_t)found == manager->count - 1U)
+    {
+        manager->windows[(uint32_t)found].minimized = 0U;
+        return SYNTRA_STATUS_OK;
+    }
 
     selected = manager->windows[(uint32_t)found];
     selected.minimized = 0U;
