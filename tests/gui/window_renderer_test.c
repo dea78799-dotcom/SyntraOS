@@ -82,7 +82,7 @@ int main(void)
     /* Selection highlight remains continuous behind opaque text rendering. */
     manager.windows[0].app_selection = 2U; /* DOWNLOADS */
     assert(syntra_gui_render_windows(&framebuffer, &manager) == SYNTRA_STATUS_OK);
-    assert(pixels[(size_t)118U * STRIDE + 106U] == 0xFF25466FU);
+    assert(pixels[(size_t)118U * STRIDE + 100U] == 0xFF25466FU);
 
     /* Very narrow Files windows must not underflow list highlight widths. */
     assert(syntra_gui_window_manager_init(&manager, WIDTH, HEIGHT) ==
