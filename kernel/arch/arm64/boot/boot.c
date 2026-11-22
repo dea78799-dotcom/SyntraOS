@@ -11,6 +11,7 @@
 #include "../gic.h"
 #include "../mmu.h"
 #include "../page_table_builder.h"
+#include "../address_space.h"
 #include "../mmu_mapping_plan.h"
 #include "../../../gui/ramfb.h"
 #include "../../../virtio/virtio_mmio.h"
@@ -1108,6 +1109,49 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
     syntra_uart_put_hex(page_table.root_physical_address);
     syntra_uart_puts("\n");
     syntra_uart_puts("MMU post-activation mapping verification: PASS\n");
+
+    /*
+     * Validate that an inactive user root can inherit the active kernel map.
+     * This audits shared descriptors without loading the new root into TTBR0.
+     */
+    {
+        syntra_arm64_address_space_t audit_space = {0};
+        syntra_arm64_mmu_translation_t inherited_translation;
+        const syntra_arm64_mmu_mapping_t *kernel_mapping = &plan.mappings[0];
+
+        status = syntra_arm64_address_space_create(
+            &audit_space, 0xFFFF0001U,
+            syntra_boot_page_table_resolve, NULL);
+        if (status != SYNTRA_STATUS_OK)
+            return status;
+
+        status = syntra_arm64_address_space_inherit_kernel_mappings(
+            &audit_space, syntra_active_page_table.root_physical_address);
+        if (status == SYNTRA_STATUS_OK)
+            status = syntra_arm64_address_space_validate(&audit_space);
+        if (status == SYNTRA_STATUS_OK)
+            status = syntra_arm64_address_space_translate(
+                &audit_space, kernel_mapping->virtual_address,
+                &inherited_translation);
+        if (status == SYNTRA_STATUS_OK &&
+            (inherited_translation.physical_address !=
+                kernel_mapping->physical_address ||
+             inherited_translation.user_read != 0U))
+            status = SYNTRA_STATUS_ERROR;
+
+        if (status != SYNTRA_STATUS_OK)
+        {
+            (void)syntra_arm64_address_space_destroy(&audit_space);
+            syntra_uart_puts("Kernel mapping inheritance audit: FAIL\n");
+            return status;
+        }
+
+        status = syntra_arm64_address_space_destroy(&audit_space);
+        if (status != SYNTRA_STATUS_OK)
+            return status;
+        syntra_uart_puts(
+            "Kernel mapping inheritance audit: PASS (inactive root)\n");
+    }
 
     /* Exercise the synchronous exception vector with translation enabled. */
     status = syntra_arm64_svc_vector_test();
