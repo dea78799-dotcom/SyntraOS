@@ -46,11 +46,14 @@ add_library(syntra_kernel STATIC
     kernel/arch/arm64/registers.c
     kernel/arch/arm64/mmu.c
     kernel/arch/arm64/page_table_builder.c
+    kernel/arch/arm64/address_space.c
     kernel/arch/arm64/mmu_mapping_plan.c
     kernel/arch/arm64/context.c
 
     kernel/scheduler/scheduler.c
     kernel/memory/memory.c
+    kernel/memory/memory_region.c
+    kernel/memory/page_allocator.c
     kernel/process/process.c
     kernel/ipc/ipc.c
 
@@ -198,6 +201,13 @@ add_executable(memory_region_test
 )
 target_include_directories(memory_region_test PRIVATE kernel/memory kernel/core)
 add_test(NAME MemoryRegionManagerTest COMMAND memory_region_test)
+
+# ARM64 independent address-space and ownership integration test
+add_executable(address_space_test
+    tests/arm64/address_space_test.c
+)
+target_link_libraries(address_space_test PRIVATE syntra_kernel)
+add_test(NAME ARM64AddressSpaceIsolationTest COMMAND address_space_test)
 
 # Physical Page Allocator V1 Test
 add_executable(page_allocator_test
