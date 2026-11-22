@@ -28,16 +28,32 @@ All values are hexadecimal and ranges are half-open.
 
 | Region | Range | Purpose | Status |
 |---|---|---|---|
-| Bootstrap identity | 0x000000000000–0x000000FFFFFFFF | Current/required low identity mappings, subject to validated map | Existing plan; audit required |
+| Low-address identity mappings | 0x000000000000–0x000000FFFFFFFF | Broad low-address envelope for bootstrap/platform mappings; not a claim that every address is currently mapped | Reserved envelope; actual ranges are plan-driven |
 | Kernel VA arena | 0x0000001000000000–0x0000001800000000 | Future dynamic kernel mappings, including thread stacks | Proposed |
 | Kernel-inherited region | 0x0000000000000000–0x0000002000000000 | Root entries 0..127 (0–128 GiB); bootstrap and future kernel mappings | Constraint of current inheritance |
 | Reserved root-entry gap | 0x0000002000000000–0x0000004000000000 | Root entries 128..255 (128–256 GiB) | Reserved by current validation |
 | EL0 user region | 0x0000004000000000–0x0000008000000000 | Existing user VA range | Existing API |
 
 The proposed arena is 32 GiB, from 64 GiB to 96 GiB. It lies inside the currently
-inherited 0–128-GiB region and avoids the low 4-GiB identity range. The 32-GiB size
-and base are proposals only; exact overlaps with RAM, reserved-memory, linker, and
-mapping-plan ranges must be audited before implementation.
+inherited 0–128-GiB region and is far above the current low physical identity ranges.
+The 32-GiB size and base are proposals only; exact overlaps with RAM, reserved-memory,
+linker, and mapping-plan ranges must be audited before implementation.
+
+### Mapping-plan audit (current v9 baseline)
+
+- The CI QEMU command configures 512 MiB of RAM. The physical RAM base and full range
+  remain FDT-derived; the CI script does not assert the complete FDT RAM range.
+- The memory-map discovery splits RAM into typed regions and boot later reserves the
+  complete linker-defined kernel image. The DTB and FDT reservations are also tracked.
+- The mapping-plan builder creates identity mappings for RAM, RESERVED, and RECLAIMABLE
+  regions as Normal RW/XN, then adds kernel text/rodata/data/BSS/stack with explicit
+  permissions, the DTB read-only, and discovered UART/fw_cfg/VirtIO/GIC windows as
+  Device RW/XN. Conflicting overlaps are rejected.
+- Existing host mapping-plan fixtures place the kernel near 0x40200000 and MMIO below
+  0x10000000; the proposed 64–96-GiB VA arena does not overlap those fixture ranges.
+  This fixture result is not a substitute for checking the runtime FDT map.
+- The proposed arena is not physical RAM and must not be identity-mapped or allocated
+  as physical backing. It is only a future virtual-address reservation.
 
 VA does not imply backing PA. API records must distinguish virtual and physical addresses.
 
