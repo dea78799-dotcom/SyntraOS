@@ -15,6 +15,10 @@ typedef struct
     syntra_gesture_t gesture;
     syntra_gesture_result_t last_gesture;
     uint64_t gesture_time_ms;
+    uint32_t context_menu_x;
+    uint32_t context_menu_y;
+    uint32_t context_menu_target;
+    uint8_t context_menu_visible;
     uint32_t redraw_count;
     int initialized;
 } syntra_gui_runtime_t;
