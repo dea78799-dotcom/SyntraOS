@@ -39,3 +39,16 @@ The interaction logic is original SyntraOS C code using the project's own window
 The VirtIO input IRQ handler copies accepted normalized events into a bounded 64-event single-producer/single-consumer FIFO. The consumer uses `syntra_virtio_mmio_pop_input_event()` in normal context; `available` distinguishes an empty queue from errors. Queue overflow drops newest events and increments `software_event_dropped`. The IRQ still updates the shared input snapshot for diagnostics, but the ordered FIFO preserves transient press/release events when main-context polling is delayed.
 
 `gui_runtime` owns input state, the persistent v5 window manager, and pointer-interaction state. It processes one normalized event at a time outside IRQ context and renders desktop plus persistent windows. A host integration test exercises drag, close, and rendering. This runtime is not yet called by the ARM64 boot/main loop; live IRQ-to-runtime-to-framebuffer wiring and QEMU validation remain pending.
+
+
+## ARM64 ramfb GUI runtime input pump
+
+The ramfb initializer now creates a persistent GUI runtime (desktop, app windows,
+input state, and drag state) and renders it to the framebuffer. The
+`syntra_ramfb_process_input_events()` pump drains the VirtIO software FIFO
+outside IRQ context, processes the ordered events, and redraws once per drained
+batch. It deliberately does not run in the IRQ handler.
+
+**Integration status:** the pump is implemented but not yet connected to the
+kernel's long-running idle/main loop. Boot currently returns after its boot
+sequence, so this commit does not claim live interactive GUI input on QEMU.
