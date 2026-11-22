@@ -101,6 +101,6 @@ int main(void)
     assert(syntra_page_allocator_free_count() == initial_free);
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
 
-    puts("ARM64 independent address-space ownership and translation passed");
+    puts("ARM64 address-space mapping, unmapping, and reclamation passed");
     return 0;
 }

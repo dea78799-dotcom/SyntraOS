@@ -70,7 +70,8 @@ a general-purpose kernel heap or per-process allocation accounting.
 - The V1 address-space object owns an independent L1 root, creates subordinate
   page-table pages with PAGE_TABLE ownership, maps exclusively owned PROCESS
   pages into EL0, translates addresses through its own root, audits permissions,
-  and releases its page-table and mapped-process pages on destruction.
+  supports single-page unmapping with empty L2/L3 table reclamation, and releases
+  remaining page-table and mapped-process pages on destruction.
 - Host integration tests create two independent roots, map the same virtual
   address to different physical pages, verify distinct translations and
   read-only/read-write permissions, then validate complete page reclamation.
@@ -89,8 +90,8 @@ it is not evidence of physical-device support.
   higher-half layout and dynamic virtual address allocator are not implemented.
 - Address-space objects exist, but they are not yet attached to process objects
   or activated by a context switch through TTBR0_EL1.
-- Individual page unmapping, shared-page reference counting, copy-on-write,
-  demand paging, swapping, and memory-mapped file support are not implemented.
+- Shared-page reference counting, copy-on-write, demand paging, swapping, and
+  memory-mapped file support are not implemented.
 - Address-space destruction requires the caller to ensure the root is inactive;
   V1 has no SMP coordination or TLB shootdown mechanism.
 - Full SMP-safe allocator synchronization and per-page reference tracking are
@@ -104,8 +105,8 @@ it is not evidence of physical-device support.
    allocation/free accounting, and failure rollback.
 2. Define physical-page ownership and lifecycle APIs before sharing pages between
    page tables, processes, or drivers.
-3. Extend the V1 address-space manager with individual unmap and shared-page
-   reference-counting semantics.
+3. Add shared-page reference counting and enforce exclusive/shared mapping
+   ownership across address spaces.
 4. Attach one address-space object to each process and switch TTBR0_EL1 only after
    context-switch and inactive-root lifetime rules are implemented.
 5. Add SMP-safe synchronization and TLB shootdown before multi-core execution.
