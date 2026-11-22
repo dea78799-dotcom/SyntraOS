@@ -294,6 +294,7 @@ syntra_status_t syntra_gui_render_windows(
         const syntra_gui_window_t *window = &manager->windows[index];
         const int active = (index + 1U == manager->count);
 
+        if (window->minimized != 0U) continue;
         if (window->id == 0U || window->width == 0U ||
             window->height == 0U ||
             window->width > framebuffer->width ||
