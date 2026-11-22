@@ -2,13 +2,14 @@
 
 static syntra_thread_t threads[SYNTRA_MAX_THREADS];
 static unsigned int thread_count;
+static unsigned int thread_slot_count;
 static unsigned int next_slot;
 static int current_slot;
 static int scheduler_initialized;
 
 static int scheduler_find_slot(unsigned int thread_id)
 {
-    for (unsigned int i = 0U; i < thread_count; ++i)
+    for (unsigned int i = 0U; i < thread_slot_count; ++i)
     {
         if (threads[i].thread_id == thread_id)
         {
@@ -31,7 +32,7 @@ static int scheduler_ranges_overlap(
 static int scheduler_stack_range_conflicts(
     uintptr_t base, size_t size)
 {
-    for (unsigned int i = 0U; i < thread_count; ++i)
+    for (unsigned int i = 0U; i < thread_slot_count; ++i)
     {
         const syntra_thread_t *thread = &threads[i];
         if (scheduler_ranges_overlap(base, size,
@@ -62,12 +63,19 @@ static syntra_status_t scheduler_insert_thread(
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
 
-    if (thread_count >= SYNTRA_MAX_THREADS)
+    unsigned int slot;
+    for (slot = 0U; slot < thread_slot_count; ++slot)
+        if (threads[slot].thread_id == 0U)
+            break;
+
+    if (slot == thread_slot_count)
     {
-        return SYNTRA_STATUS_OUT_OF_MEMORY;
+        if (thread_slot_count >= SYNTRA_MAX_THREADS)
+            return SYNTRA_STATUS_OUT_OF_MEMORY;
+        ++thread_slot_count;
     }
 
-    syntra_thread_t *thread = &threads[thread_count];
+    syntra_thread_t *thread = &threads[slot];
     thread->thread_id = thread_id;
     thread->priority = priority;
     thread->state = THREAD_READY;
@@ -92,6 +100,7 @@ syntra_status_t scheduler_init(void)
     }
 
     thread_count = 0U;
+    thread_slot_count = 0U;
     next_slot = 0U;
     current_slot = -1;
 
@@ -207,9 +216,9 @@ syntra_thread_t *scheduler_get_next_ready(void)
         return NULL;
     }
 
-    for (unsigned int offset = 0U; offset < thread_count; ++offset)
+    for (unsigned int offset = 0U; offset < thread_slot_count; ++offset)
     {
-        unsigned int slot = (next_slot + offset) % thread_count;
+        unsigned int slot = (next_slot + offset) % thread_slot_count;
         if (threads[slot].state == THREAD_READY)
         {
             return &threads[slot];
@@ -248,7 +257,7 @@ syntra_thread_t *scheduler_schedule_next(void)
 
     current_slot = (int)(selected - threads);
     selected->state = THREAD_RUNNING;
-    next_slot = ((unsigned int)current_slot + 1U) % thread_count;
+    next_slot = ((unsigned int)current_slot + 1U) % thread_slot_count;
     return selected;
 }
 
@@ -266,9 +275,9 @@ syntra_thread_t *scheduler_schedule_next_with_context(void)
         threads[(unsigned int)current_slot].state == THREAD_RUNNING)
         threads[(unsigned int)current_slot].state = THREAD_READY;
 
-    for (unsigned int offset = 0U; offset < thread_count; ++offset)
+    for (unsigned int offset = 0U; offset < thread_slot_count; ++offset)
     {
-        unsigned int slot = (next_slot + offset) % thread_count;
+        unsigned int slot = (next_slot + offset) % thread_slot_count;
         syntra_thread_t *candidate = &threads[slot];
 
         if (candidate->state != THREAD_READY ||
@@ -277,7 +286,7 @@ syntra_thread_t *scheduler_schedule_next_with_context(void)
 
         current_slot = (int)slot;
         candidate->state = THREAD_RUNNING;
-        next_slot = (slot + 1U) % thread_count;
+        next_slot = (slot + 1U) % thread_slot_count;
         return candidate;
     }
 
@@ -353,7 +362,7 @@ syntra_status_t scheduler_rollback_context_switch(
     if (selected_slot >= 0)
         next_slot = (unsigned int)selected_slot;
     else if (previous_slot >= 0)
-        next_slot = ((unsigned int)previous_slot + 1U) % thread_count;
+        next_slot = ((unsigned int)previous_slot + 1U) % thread_slot_count;
 
     return scheduler_validate();
 }
@@ -445,6 +454,45 @@ syntra_status_t scheduler_terminate_current(void)
     return SYNTRA_STATUS_OK;
 }
 
+syntra_status_t scheduler_reap_terminated(unsigned int thread_id)
+{
+    int slot;
+
+    if (!scheduler_initialized)
+        return SYNTRA_STATUS_ERROR;
+    slot = scheduler_find_slot(thread_id);
+    if (slot < 0)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    if (current_slot == slot ||
+        threads[(unsigned int)slot].state != THREAD_TERMINATED)
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+
+    /*
+     * Stack storage is caller-owned. Reaping only releases Scheduler metadata;
+     * the owner may free/reuse stacks after this call succeeds.
+     */
+    syntra_thread_t *thread = &threads[(unsigned int)slot];
+    thread->thread_id = 0U;
+    thread->priority = 0U;
+    thread->state = THREAD_TERMINATED;
+    thread->entry = NULL;
+    thread->argument = NULL;
+    thread->stack_base = 0U;
+    thread->stack_size = 0U;
+    thread->user_stack_base = 0U;
+    thread->user_stack_size = 0U;
+    thread->is_user_thread = 0U;
+    thread->cpu_context = NULL;
+    --thread_count;
+
+    if (thread_slot_count == 0U)
+        next_slot = 0U;
+    else if (next_slot >= thread_slot_count)
+        next_slot = 0U;
+
+    return scheduler_validate();
+}
+
 syntra_thread_t *scheduler_get_thread(unsigned int thread_id)
 {
     if (!scheduler_initialized || thread_id == 0U)
@@ -465,23 +513,38 @@ syntra_status_t scheduler_validate(void)
 {
     unsigned int running_count = 0U;
 
-    if (!scheduler_initialized || thread_count > SYNTRA_MAX_THREADS)
+    if (!scheduler_initialized || thread_count > SYNTRA_MAX_THREADS ||
+        thread_slot_count > SYNTRA_MAX_THREADS)
     {
         return SYNTRA_STATUS_ERROR;
     }
 
-    for (unsigned int i = 0U; i < thread_count; ++i)
+    unsigned int observed_count = 0U;
+    for (unsigned int i = 0U; i < thread_slot_count; ++i)
     {
         const syntra_thread_t *thread = &threads[i];
 
-        if (thread->thread_id == 0U ||
+        if (thread->thread_id == 0U)
+        {
+            if (thread->priority != 0U || thread->entry != NULL ||
+                thread->argument != NULL || thread->stack_base != 0U ||
+                thread->stack_size != 0U || thread->user_stack_base != 0U ||
+                thread->user_stack_size != 0U ||
+                thread->is_user_thread != 0U || thread->cpu_context != NULL ||
+                thread->state != THREAD_TERMINATED)
+                return SYNTRA_STATUS_ERROR;
+            continue;
+        }
+        ++observed_count;
+
+        if (thread->state < THREAD_READY ||
             thread->state < THREAD_READY ||
             thread->state > THREAD_TERMINATED)
         {
             return SYNTRA_STATUS_ERROR;
         }
 
-        for (unsigned int j = i + 1U; j < thread_count; ++j)
+        for (unsigned int j = i + 1U; j < thread_slot_count; ++j)
         {
             if (thread->thread_id == threads[j].thread_id)
             {
@@ -534,10 +597,11 @@ syntra_status_t scheduler_validate(void)
         }
     }
 
-    if (running_count > 1U ||
+    if (observed_count != thread_count || running_count > 1U ||
         (current_slot < 0 && running_count != 0U) ||
         (current_slot >= 0 &&
-            (unsigned int)current_slot >= thread_count))
+            (unsigned int)current_slot >= thread_slot_count ||
+             threads[(unsigned int)current_slot].thread_id == 0U))
     {
         return SYNTRA_STATUS_ERROR;
     }
