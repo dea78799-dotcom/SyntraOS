@@ -175,6 +175,17 @@ int main(void)
                SYNTRA_STATUS_OK);
         assert(compact_window->maximized == 0U &&
                compact_window->x == 40U && compact_window->y == 30U);
+        set_pointer(&compact_input, 0U, 0U, 0U);
+        assert(syntra_gui_window_interaction_process(
+            &compact_interaction, &compact_manager, &compact_input) ==
+               SYNTRA_STATUS_OK);
+        set_pointer(&compact_input, 261U, 49U, SYNTRA_INPUT_BUTTON_LEFT);
+        assert(syntra_gui_window_interaction_process(
+            &compact_interaction, &compact_manager, &compact_input) ==
+               SYNTRA_STATUS_OK);
+        assert(syntra_gui_window_get(
+            &compact_manager, compact_id, &compact_window) ==
+               SYNTRA_STATUS_INVALID_ARGUMENT);
     }
     /* Invalid dimension pairing is rejected without mutating the manager. */
     assert(syntra_input_init(&input, 320U, 240U) == SYNTRA_STATUS_OK);
