@@ -87,7 +87,7 @@ syntra_status_t process_release_terminated(unsigned int process_id);
 /*
  * Fully reclaim an exited process: destroy its inactive address space, release
  * Process Manager ownership, then reap its terminated Scheduler TCBs.
- * Never call from IRQ/exception context. Caller-owned stacks are not freed.
+ * Never call from IRQ/exception context. Caller must serialize against scheduler\n * mutation, including IRQ-driven context switches. Caller-owned stacks are not freed.
  */
 syntra_status_t process_reclaim_terminated(unsigned int process_id);
 
