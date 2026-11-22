@@ -1574,7 +1574,8 @@ static syntra_status_t syntra_arm64_process_el0_write_fault_test(void)
             fault->exception_class != SYNTRA_ARM64_EXCEPTION_DATA_ABORT_LOWER ||
             fault->fault_address < code_va ||
             fault->fault_address >= code_va + SYNTRA_ARM64_MMU_PAGE_SIZE ||
-            (fault->syndrome & (1ULL << 6U)) == 0ULL)
+            (fault->syndrome & (1ULL << 6U)) == 0ULL ||
+            (fault->syndrome & 0x3fULL) != 0x0fULL)
         {
             status = SYNTRA_STATUS_ERROR;
             goto fail_process;
