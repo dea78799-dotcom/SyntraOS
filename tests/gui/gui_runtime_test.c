@@ -275,6 +275,34 @@ int main(void)
            SYNTRA_GUI_APP_SETTINGS);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
 
+    /* Taskbar focuses open windows and restores minimized windows. */
+    assert(syntra_gui_runtime_init(&runtime, 640U, 480U) ==
+           SYNTRA_STATUS_OK);
+    move_pointer(&runtime, -126, 219); /* first taskbar button: Files */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(syntra_gui_window_active(&runtime.windows)->app_type ==
+           SYNTRA_GUI_APP_FILES);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+    move_pointer(&runtime, 45, -259); /* Files minimize titlebar control */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(syntra_gui_window_active(&runtime.windows)->app_type ==
+           SYNTRA_GUI_APP_LAUNCHER);
+    assert(runtime.windows.windows[0].app_type == SYNTRA_GUI_APP_FILES);
+    assert(runtime.windows.windows[0].minimized == 1U);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+    move_pointer(&runtime, -45, 259); /* select minimized Files taskbar item */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(syntra_gui_window_active(&runtime.windows)->app_type ==
+           SYNTRA_GUI_APP_FILES);
+    assert(syntra_gui_window_active(&runtime.windows)->minimized == 0U);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+    framebuffer.pixels = pixels;
+    framebuffer.width = 640U;
+    framebuffer.height = 480U;
+    framebuffer.stride_pixels = 640U;
+    assert(syntra_gui_runtime_render(&runtime, &framebuffer) ==
+           SYNTRA_STATUS_OK);
+    assert(pixels[(size_t)447U * 640U + 150U] == 0xFF54D6E8U);
     /* Invalid dimensions must be rejected rather than creating partial state. */
     assert(syntra_gui_runtime_init(&runtime, 200U, 100U) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
