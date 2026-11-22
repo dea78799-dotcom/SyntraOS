@@ -161,19 +161,19 @@ int main(void)
     /* Files folder and Settings category clicks update app selection. */
     assert(syntra_gui_runtime_init(&runtime, 640U, 480U) ==
            SYNTRA_STATUS_OK);
-    move_pointer(&runtime, -190, 0); /* active Launcher -> Files */
+    move_pointer(&runtime, -42, -140); /* Launcher Files tile */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
-    move_pointer(&runtime, 0, 100); /* Files list: DOWNLOADS row */
+    move_pointer(&runtime, -4, 174); /* Files list: DOWNLOADS row */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(syntra_gui_window_active(&runtime.windows)->app_type ==
            SYNTRA_GUI_APP_FILES);
     assert(syntra_gui_window_active(&runtime.windows)->app_selection == 2U);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
-    move_pointer(&runtime, 300, -30); /* focus Settings */
+    move_pointer(&runtime, 176, -24); /* focus Settings */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
-    move_pointer(&runtime, 10, 75); /* Settings: ABOUT row */
+    move_pointer(&runtime, 0, 42); /* Settings: ABOUT row */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(syntra_gui_window_active(&runtime.windows)->app_type ==
            SYNTRA_GUI_APP_SETTINGS);
