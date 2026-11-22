@@ -105,7 +105,16 @@ syntra_status_t scheduler_wake_thread(unsigned int thread_id);
 syntra_status_t scheduler_block_current(void);
 syntra_status_t scheduler_terminate_current(void);
 
+/*
+ * Release a TERMINATED thread's Scheduler slot after all external owners
+ * (for example, the Process Manager) have dropped references to its ID.
+ * Caller-owned stack storage is not freed; it may be reused after success.
+ * The currently selected slot can never be reaped.
+ */
+syntra_status_t scheduler_reap_terminated(unsigned int thread_id);
+
 syntra_thread_t *scheduler_get_thread(unsigned int thread_id);
+/* Number of registered records, including terminated records not yet reaped. */
 unsigned int scheduler_get_thread_count(void);
 syntra_status_t scheduler_validate(void);
 
