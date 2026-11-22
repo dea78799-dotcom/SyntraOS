@@ -9,10 +9,11 @@
 int main(void)
 {
     syntra_stack_allocation_t a = {0}, b = {0}, c = {0};
+    syntra_stack_allocation_t capacity[SYNTRA_STACK_ALLOCATOR_MAX_STACKS];
     syntra_page_allocator_stats_t stats;
 
     assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
-    assert(syntra_memory_region_add(0x10000000U, 16U * SYNTRA_PAGE_SIZE,
+    assert(syntra_memory_region_add(0x10000000U, 40U * SYNTRA_PAGE_SIZE,
         SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_init() == SYNTRA_STATUS_OK);
     assert(syntra_stack_allocator_validate() == SYNTRA_STATUS_OK);
@@ -40,6 +41,21 @@ int main(void)
     assert(syntra_stack_alloc(0U, &c) == SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(syntra_stack_alloc(SIZE_MAX, &c) == SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(syntra_stack_free(NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    /* Capacity is bounded and failure must not alter the output descriptor. */
+    for (size_t i = 0U; i < SYNTRA_STACK_ALLOCATOR_MAX_STACKS; ++i)
+    {
+        capacity[i] = (syntra_stack_allocation_t){0};
+        assert(syntra_stack_alloc(SYNTRA_PAGE_SIZE, &capacity[i]) == SYNTRA_STATUS_OK);
+    }
+    assert(syntra_stack_allocator_live_count() == SYNTRA_STACK_ALLOCATOR_MAX_STACKS);
+    c = (syntra_stack_allocation_t){0xABC000U, 0x2000U, 2U};
+    assert(syntra_stack_alloc(SYNTRA_PAGE_SIZE, &c) == SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(c.physical_base == 0xABC000U && c.size == 0x2000U && c.page_count == 2U);
+    for (size_t i = 0U; i < SYNTRA_STACK_ALLOCATOR_MAX_STACKS; ++i)
+        assert(syntra_stack_free(&capacity[i]) == SYNTRA_STATUS_OK);
+    assert(syntra_stack_allocator_validate() == SYNTRA_STATUS_OK);
+    assert(syntra_stack_allocator_live_count() == 0U);
 
     /* Slot reuse does not leak pages or registry records. */
     for (unsigned int i = 0U; i < 256U; ++i)
