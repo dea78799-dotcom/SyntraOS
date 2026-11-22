@@ -1566,6 +1566,26 @@ static syntra_status_t syntra_arm64_process_el0_write_fault_test(void)
             fault_count_before + 1U)
         goto fail_process;
 
+    /* Timer IRQs may overwrite the generic exception snapshot; use the dedicated EL0 fault record. */
+    {
+        const syntra_arm64_exception_info_t *fault =
+            syntra_arm64_exception_get_last_user_thread_fault();
+        if (fault == NULL ||
+            fault->exception_class != SYNTRA_ARM64_EXCEPTION_DATA_ABORT_LOWER ||
+            fault->fault_address < code_va ||
+            fault->fault_address >= code_va + SYNTRA_ARM64_MMU_PAGE_SIZE ||
+            (fault->syndrome & (1ULL << 6U)) == 0ULL)
+        {
+            status = SYNTRA_STATUS_ERROR;
+            goto fail_process;
+        }
+        syntra_uart_puts("EL0 fault syndrome validation: PASS FAR=");
+        syntra_uart_put_hex(fault->fault_address);
+        syntra_uart_puts(" ESR=");
+        syntra_uart_put_hex(fault->syndrome);
+        syntra_uart_puts(" (Data Abort, user write, code-page range)\\n");
+    }
+
     current = scheduler_get_current();
     if (current == NULL ||
         current->thread_id != SYNTRA_SCHEDULER_TEST_BOOT_ID)
