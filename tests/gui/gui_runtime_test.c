@@ -121,7 +121,7 @@ int main(void)
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
 
     /* Close launcher, then restore it with the desktop dock home control. */
-    move_pointer(&runtime, 133, -32);
+    move_pointer(&runtime, 131, -18); /* Launcher close control */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(runtime.windows.count == 2U);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
