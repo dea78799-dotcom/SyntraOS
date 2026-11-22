@@ -43,6 +43,9 @@ syntra_status_t process_attach_address_space(
 syntra_arm64_address_space_t *process_get_address_space_for_thread(
     unsigned int thread_id);
 
+/* Refresh the owning process state after this thread changes scheduler state. */
+syntra_status_t process_refresh_state_for_thread(unsigned int thread_id);
+
 /* Find a process. */
 syntra_process_t *process_get(unsigned int process_id);
 
