@@ -130,6 +130,20 @@ int main(void)
     assert(translation.user_read && !translation.user_write);
     assert(!translation.user_execute);
 
+    /* Same VA, separate backing pages: writes must remain private. */
+    {
+        uint64_t *first_backing = resolve_page(
+            (uint64_t)first_process_page, NULL);
+        uint64_t *second_backing = resolve_page(
+            (uint64_t)second_process_page, NULL);
+        assert(first_backing != NULL && second_backing != NULL);
+        first_backing[0] = 0xA11CE001ULL;
+        second_backing[0] = 0xB0B02002ULL;
+        assert(first_backing[0] == 0xA11CE001ULL);
+        assert(second_backing[0] == 0xB0B02002ULL);
+        assert(first_backing[0] != second_backing[0]);
+    }
+
     assert(syntra_arm64_address_space_map_user_page(
         &first, 0x4000000000ULL, second_process_page,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) != SYNTRA_STATUS_OK);
