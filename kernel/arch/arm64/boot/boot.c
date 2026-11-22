@@ -6,6 +6,7 @@
 #include "memory_map.h"
 #include "../../../memory/memory_region.h"
 #include "../../../memory/page_allocator.h"
+#include "../../../process/process.h"
 #include "../exception.h"
 #include "../context.h"
 #include "../gic.h"
@@ -1434,6 +1435,13 @@ syntra_status_t syntra_arm64_boot_main(
     if (status != SYNTRA_STATUS_OK)
     {
         syntra_uart_puts("SyntraOS boot failed: ARM64 Scheduler context switch test\n");
+        return status;
+    }
+
+    status = process_init();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("SyntraOS boot failed: Process Manager initialization\\n");
         return status;
     }
 
