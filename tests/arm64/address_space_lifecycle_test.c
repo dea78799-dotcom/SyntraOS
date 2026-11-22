@@ -56,7 +56,7 @@ int main(void)
     syntra_arm64_page_table_t kernel_table = {0};
     syntra_arm64_mmu_translation_t translation;
     syntra_page_allocator_stats_t before, after_unmap, after;
-    uintptr_t process_page_a, process_page_b;
+    uintptr_t process_page_a, process_page_b, kernel_data_page;
     uint64_t kernel_root, kernel_l2, kernel_l3;
     uint64_t *kernel_root_entries, *kernel_l2_entries;
     size_t initial_free;
@@ -79,8 +79,10 @@ int main(void)
         &kernel_table, allocate_table_page, resolve_page, NULL) ==
         SYNTRA_STATUS_OK);
     kernel_root = kernel_table.root_physical_address;
+    assert(syntra_page_alloc_owned(
+        &kernel_data_page, SYNTRA_PAGE_OWNER_DRIVER) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_page_table_map(
-        &kernel_table, TEST_KERNEL_VA, TEST_RAM_BASE, SYNTRA_PAGE_SIZE,
+        &kernel_table, TEST_KERNEL_VA, (uint64_t)kernel_data_page, SYNTRA_PAGE_SIZE,
         SYNTRA_ARM64_MMU_MEMORY_NORMAL,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
 
@@ -104,7 +106,7 @@ int main(void)
     /* Borrowed kernel mapping remains visible but is not EL0-accessible. */
     assert(syntra_arm64_address_space_translate(
         &space, TEST_KERNEL_VA, &translation) == SYNTRA_STATUS_OK);
-    assert(translation.physical_address == TEST_RAM_BASE);
+    assert(translation.physical_address == (uint64_t)kernel_data_page);
     assert(translation.user_read == 0U);
     assert(translation.user_write == 0U);
 
@@ -184,7 +186,7 @@ int main(void)
     assert(syntra_arm64_mmu_walk(
         kernel_root, TEST_KERNEL_VA, resolve_page, NULL, &translation) ==
         SYNTRA_STATUS_OK);
-    assert(translation.physical_address == TEST_RAM_BASE);
+    assert(translation.physical_address == (uint64_t)kernel_data_page);
     assert_owner_count(SYNTRA_PAGE_OWNER_PAGE_TABLE, 3U);
 
     /* Release the kernel-owned subtree explicitly after the borrower is gone. */
@@ -194,15 +196,19 @@ int main(void)
         (uintptr_t)kernel_l2, SYNTRA_PAGE_OWNER_PAGE_TABLE) == SYNTRA_STATUS_OK);
     assert(syntra_page_free_owned(
         (uintptr_t)kernel_root, SYNTRA_PAGE_OWNER_PAGE_TABLE) == SYNTRA_STATUS_OK);
+    assert(syntra_page_free_owned(
+        kernel_data_page, SYNTRA_PAGE_OWNER_DRIVER) == SYNTRA_STATUS_OK);
 
     assert(syntra_page_allocator_get_stats(&after) == SYNTRA_STATUS_OK);
     assert(after.free_pages == initial_free);
     assert(after.allocated_pages == 0U);
     assert(after.owner_pages[SYNTRA_PAGE_OWNER_PROCESS] == 0U);
     assert(after.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] == 0U);
+    assert(after.owner_pages[SYNTRA_PAGE_OWNER_DRIVER] == 0U);
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
     assert_owner_count(SYNTRA_PAGE_OWNER_PROCESS, 0U);
     assert_owner_count(SYNTRA_PAGE_OWNER_PAGE_TABLE, 0U);
+    assert_owner_count(SYNTRA_PAGE_OWNER_DRIVER, 0U);
 
     puts("ARM64 address-space lifecycle test passed");
     return 0;
