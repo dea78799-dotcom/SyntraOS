@@ -1548,3 +1548,27 @@ syntra_status_t syntra_arm64_boot_main(
 #endif
     return SYNTRA_STATUS_OK;
 }
+
+/*
+ * Permanent normal-context idle loop. IRQ handlers only enqueue input; this
+ * pump drains the FIFO and redraws the framebuffer after events are delivered.
+ * WFI allows the CPU to sleep until the next interrupt.
+ */
+void syntra_arm64_boot_idle_loop(void)
+{
+    for (;;)
+    {
+        if (syntra_fw_cfg_base != 0U &&
+            syntra_virtio_input_queue.ready == 1)
+        {
+            (void)syntra_ramfb_process_input_events(
+                &syntra_virtio_input_queue);
+        }
+#if defined(__aarch64__)
+        __asm__ volatile("dsb sy" ::: "memory");
+        __asm__ volatile("wfi" ::: "memory");
+#else
+        __asm__ volatile("" ::: "memory");
+#endif
+    }
+}
