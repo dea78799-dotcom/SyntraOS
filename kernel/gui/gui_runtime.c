@@ -135,6 +135,55 @@ static syntra_status_t handle_launcher_dock_click(
         SYNTRA_GUI_APP_LAUNCHER, &launcher_id);
 }
 
+/* Select visible Files entries and Settings categories on click. */
+static syntra_status_t handle_app_surface_click(
+    syntra_gui_runtime_t *runtime,
+    uint32_t pointer_x,
+    uint32_t pointer_y)
+{
+    syntra_gui_window_t *window;
+    uint32_t left, top, inner_width, inner_height, row;
+    if (runtime->windows.count == 0U) return SYNTRA_STATUS_OK;
+    window = &runtime->windows.windows[runtime->windows.count - 1U];
+    left = window->x + 4U;
+    top = window->y + 24U;
+    inner_width = window->width > 8U ? window->width - 8U : 0U;
+    inner_height = window->height > 28U ? window->height - 28U : 0U;
+    if (pointer_x < left || pointer_y < top ||
+        pointer_x >= left + inner_width || pointer_y >= top + inner_height)
+        return SYNTRA_STATUS_OK;
+
+    if (window->app_type == SYNTRA_GUI_APP_FILES)
+    {
+        if (pointer_x < left + 38U) return SYNTRA_STATUS_OK;
+        for (row = 0U; row < 4U; ++row)
+        {
+            uint32_t row_y = top + 8U + row * 22U;
+            if (row_y + 16U >= top + inner_height) break;
+            if (pointer_y >= row_y && pointer_y < row_y + 16U)
+            {
+                window->app_selection = row;
+                break;
+            }
+        }
+    }
+    else if (window->app_type == SYNTRA_GUI_APP_SETTINGS)
+    {
+        for (row = 0U; row < 4U; ++row)
+        {
+            uint32_t row_y = top + 5U + row * 22U;
+            if (row_y + 18U >= top + inner_height) break;
+            if (pointer_x >= left + 5U && pointer_x < left + inner_width - 5U &&
+                pointer_y >= row_y && pointer_y < row_y + 17U)
+            {
+                window->app_selection = row;
+                break;
+            }
+        }
+    }
+    return SYNTRA_STATUS_OK;
+}
+
 static syntra_status_t handle_launcher_click(
     syntra_gui_runtime_t *runtime,
     uint32_t pointer_x,
@@ -220,6 +269,9 @@ syntra_status_t syntra_gui_runtime_process_event(
             runtime, runtime->input.pointer_x, runtime->input.pointer_y);
         if (status != SYNTRA_STATUS_OK) return status;
         status = handle_launcher_click(
+            runtime, runtime->input.pointer_x, runtime->input.pointer_y);
+        if (status != SYNTRA_STATUS_OK) return status;
+        status = handle_app_surface_click(
             runtime, runtime->input.pointer_x, runtime->input.pointer_y);
         if (status != SYNTRA_STATUS_OK) return status;
     }
