@@ -164,6 +164,18 @@ int main(void)
     assert(syntra_arm64_address_space_translate(
         &second, 0x4000002000ULL, &translation) == SYNTRA_STATUS_ERROR);
 
+    /* Re-check after both roots are populated: the same VA remains private. */
+    {
+        uint64_t *first_backing = resolve_page(
+            (uint64_t)first_process_page, NULL);
+        assert(first_backing != NULL);
+        first_backing[0] = 0xCAFE0001ULL;
+        assert(first_backing[0] == 0xCAFE0001ULL);
+        assert(syntra_arm64_address_space_translate(
+            &second, 0x4000002000ULL, &translation) ==
+            SYNTRA_STATUS_ERROR);
+    }
+
     assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_address_space_validate(&second) == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
