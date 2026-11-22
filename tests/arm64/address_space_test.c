@@ -133,6 +133,23 @@ int main(void)
     assert(syntra_arm64_address_space_map_user_page(
         &first, 0x4000000000ULL, second_process_page,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) != SYNTRA_STATUS_OK);
+    /*
+     * Private VA test: an additional page exists only in Process A.
+     * Process B must not translate the same VA, even though both spaces
+     * share the same user VA range and independently map the adjacent page.
+     */
+    assert(syntra_page_alloc_owned(
+        &first_process_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_address_space_map_user_page(
+        &first, 0x4000002000ULL, first_process_page,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_address_space_translate(
+        &first, 0x4000002000ULL, &translation) == SYNTRA_STATUS_OK);
+    assert(translation.physical_address == first_process_page);
+    assert(translation.user_read && translation.user_write);
+    assert(syntra_arm64_address_space_translate(
+        &second, 0x4000002000ULL, &translation) == SYNTRA_STATUS_ERROR);
+
     assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_address_space_validate(&second) == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
