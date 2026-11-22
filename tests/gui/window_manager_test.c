@@ -43,6 +43,31 @@ int main(void)
            SYNTRA_STATUS_OK);
     assert(window->x == 100U && window->y == 120U);
 
+    /* Minimize hides a window and exposes the previous visible window. */
+    assert(syntra_gui_window_minimize(&manager, ids[0]) == SYNTRA_STATUS_OK);
+    assert(syntra_gui_window_active(&manager)->id == ids[1]);
+    assert(syntra_gui_window_get(&manager, ids[0], &window) == SYNTRA_STATUS_OK);
+    assert(window->minimized == 1U);
+
+    /* Restore returns a minimized window to the front. */
+    assert(syntra_gui_window_restore(&manager, ids[0]) == SYNTRA_STATUS_OK);
+    assert(syntra_gui_window_active(&manager)->id == ids[0]);
+    assert(syntra_gui_window_active(&manager)->minimized == 0U);
+
+    /* Maximize fills the display; restore preserves the prior geometry. */
+    assert(syntra_gui_window_maximize(&manager, ids[0]) == SYNTRA_STATUS_OK);
+    assert(syntra_gui_window_active(&manager)->maximized == 1U);
+    assert(syntra_gui_window_active(&manager)->x == 0U);
+    assert(syntra_gui_window_active(&manager)->y == 0U);
+    assert(syntra_gui_window_active(&manager)->width == 640U);
+    assert(syntra_gui_window_active(&manager)->height == 480U);
+    assert(syntra_gui_window_restore(&manager, ids[0]) == SYNTRA_STATUS_OK);
+    assert(syntra_gui_window_active(&manager)->x == 100U);
+    assert(syntra_gui_window_active(&manager)->y == 120U);
+    assert(syntra_gui_window_active(&manager)->width == 300U);
+    assert(syntra_gui_window_active(&manager)->height == 200U);
+    assert(syntra_gui_window_active(&manager)->maximized == 0U);
+
     /* Close removes the window and preserves the remaining active window. */
     assert(syntra_gui_window_close(&manager, ids[0]) == SYNTRA_STATUS_OK);
     assert(syntra_gui_window_get(&manager, ids[0], &window) ==
