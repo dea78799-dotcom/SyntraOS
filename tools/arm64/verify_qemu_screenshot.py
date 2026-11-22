@@ -107,7 +107,9 @@ def main():
         "wallpaper": ((10, 40), (16, 26, 53)),
         "top_status_panel": ((10, 10), (32, 45, 73)),
         "welcome_panel": ((30, 60), (32, 45, 73)),
-        "blue_app_tile": ((80, 220), (85, 120, 242)),
+        # The Files window begins at y=190 and covers the tile below it.
+        # Sample the exposed blue strip above that window, not its selected row.
+        "blue_app_tile": ((80, 185), (85, 120, 242)),
         "bottom_dock": ((10, 460), (32, 45, 73)),
     }
 
