@@ -116,6 +116,7 @@ extern char __user_stack_bottom[];
 extern char __user_stack_top[];
 extern void syntra_arm64_user_fault_halt(void);
 extern void syntra_arm64_user_hello(void *argument);
+extern void syntra_arm64_user_write_code_fault(void *argument);
 extern void syntra_arm64_el0_thread_exit_trampoline(void);
 extern void syntra_arm64_enter_user_context(syntra_arm64_exception_context_t *, uintptr_t);
 
@@ -1422,6 +1423,194 @@ fail_pages:
     return status;
 }
 
+#define SYNTRA_PROCESS_EL0_FAULT_ID 45U
+#define SYNTRA_PROCESS_EL0_FAULT_THREAD_ID 7U
+
+static _Alignas(4096) uint8_t process_el0_fault_kernel_stack[4096];
+static syntra_arm64_address_space_t process_el0_fault_space;
+
+static syntra_status_t syntra_arm64_process_el0_write_fault_test(void)
+{
+    const uint64_t code_va = SYNTRA_ARM64_USER_VA_BASE;
+    const uint64_t stack_va = SYNTRA_ARM64_USER_VA_BASE + 0x2000ULL;
+    uintptr_t code_page = 0U, stack_page = 0U;
+    uintptr_t text_start = (uintptr_t)__user_text_start;
+    uintptr_t text_size = (uintptr_t)__user_text_end - text_start;
+    uintptr_t entry_address = (uintptr_t)syntra_arm64_user_write_code_fault;
+    uintptr_t entry_offset;
+    uint64_t fault_count_before, start_counter, timeout_ticks;
+    syntra_status_t status;
+    syntra_thread_t *thread, *current;
+    syntra_arm64_exception_context_t *context = NULL;
+    syntra_arm64_mmu_registers_t registers;
+    union
+    {
+        uint64_t address;
+        void (*function)(void *);
+    } entry;
+
+    current = scheduler_get_current();
+    if (current == NULL ||
+        current->thread_id != SYNTRA_SCHEDULER_TEST_BOOT_ID ||
+        text_size != SYNTRA_ARM64_MMU_PAGE_SIZE ||
+        entry_address < text_start ||
+        entry_address >= text_start + text_size)
+        return SYNTRA_STATUS_ERROR;
+
+    status = syntra_page_alloc_owned(&code_page, SYNTRA_PAGE_OWNER_PROCESS);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_page_alloc_owned(&stack_page, SYNTRA_PAGE_OWNER_PROCESS);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        (void)syntra_page_free_owned(code_page, SYNTRA_PAGE_OWNER_PROCESS);
+        return status;
+    }
+
+    for (size_t i = 0U; i < SYNTRA_ARM64_MMU_PAGE_SIZE; ++i)
+        ((uint8_t *)(uintptr_t)code_page)[i] =
+            ((const uint8_t *)text_start)[i];
+
+    entry_offset = entry_address - text_start;
+    entry.address = code_va + (uint64_t)entry_offset;
+
+    status = syntra_arm64_address_space_create(
+        &process_el0_fault_space, SYNTRA_PROCESS_EL0_FAULT_ID,
+        syntra_boot_page_table_resolve, NULL);
+    if (status != SYNTRA_STATUS_OK) goto fail_pages;
+
+    status = syntra_arm64_address_space_inherit_kernel_mappings(
+        &process_el0_fault_space,
+        syntra_active_page_table.root_physical_address);
+    if (status != SYNTRA_STATUS_OK) goto fail_space;
+
+    status = syntra_arm64_address_space_map_user_page(
+        &process_el0_fault_space, code_va, (uint64_t)code_page,
+        SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 1);
+    if (status != SYNTRA_STATUS_OK) goto fail_space;
+    code_page = 0U;
+
+    status = syntra_arm64_address_space_map_user_page(
+        &process_el0_fault_space, stack_va, (uint64_t)stack_page,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0);
+    if (status != SYNTRA_STATUS_OK) goto fail_space;
+    stack_page = 0U;
+
+    status = syntra_arm64_address_space_validate(&process_el0_fault_space);
+    if (status != SYNTRA_STATUS_OK) goto fail_space;
+
+    status = process_create(SYNTRA_PROCESS_EL0_FAULT_ID, 1U);
+    if (status != SYNTRA_STATUS_OK) goto fail_space;
+    status = process_attach_address_space(
+        SYNTRA_PROCESS_EL0_FAULT_ID, &process_el0_fault_space);
+    if (status != SYNTRA_STATUS_OK) goto fail_process;
+
+    status = syntra_arm64_user_context_initialize(
+        process_el0_fault_kernel_stack,
+        sizeof(process_el0_fault_kernel_stack),
+        (void *)(uintptr_t)stack_va, SYNTRA_ARM64_MMU_PAGE_SIZE,
+        entry.function, syntra_arm64_el0_thread_exit_trampoline,
+        NULL, &context);
+    if (status != SYNTRA_STATUS_OK) goto fail_process;
+
+    status = scheduler_create_user_thread(
+        SYNTRA_PROCESS_EL0_FAULT_THREAD_ID, 1U,
+        entry.function, NULL,
+        process_el0_fault_kernel_stack,
+        sizeof(process_el0_fault_kernel_stack),
+        (void *)(uintptr_t)stack_va, SYNTRA_ARM64_MMU_PAGE_SIZE,
+        context);
+    if (status != SYNTRA_STATUS_OK) goto fail_process;
+
+    status = process_attach_thread(
+        SYNTRA_PROCESS_EL0_FAULT_ID, SYNTRA_PROCESS_EL0_FAULT_THREAD_ID);
+    if (status != SYNTRA_STATUS_OK) goto fail_process;
+
+    thread = scheduler_get_thread(SYNTRA_PROCESS_EL0_FAULT_THREAD_ID);
+    if (thread == NULL) return SYNTRA_STATUS_ERROR;
+
+    fault_count_before = syntra_arm64_exception_user_thread_fault_count();
+    status = interrupt_enable(30U);
+    if (status != SYNTRA_STATUS_OK) goto fail_process;
+    status = syntra_arm64_timer_enable();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        (void)interrupt_disable(30U);
+        goto fail_process;
+    }
+
+    start_counter = syntra_arm64_timer_read_counter();
+    timeout_ticks = syntra_arm64_timer_read_frequency() * 2U;
+    __asm__ volatile("dsb sy" ::: "memory");
+    __asm__ volatile("msr daifclr, #2" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+
+    while (thread->state != THREAD_TERMINATED)
+    {
+        if ((syntra_arm64_timer_read_counter() - start_counter) > timeout_ticks)
+        {
+            status = SYNTRA_STATUS_ERROR;
+            break;
+        }
+        __asm__ volatile("wfi" ::: "memory");
+    }
+
+    __asm__ volatile("msr daifset, #2" ::: "memory");
+    __asm__ volatile("isb" ::: "memory");
+    (void)syntra_arm64_timer_disable();
+    (void)interrupt_disable(30U);
+
+    if (status != SYNTRA_STATUS_OK ||
+        thread->state != THREAD_TERMINATED ||
+        syntra_arm64_exception_user_thread_fault_count() !=
+            fault_count_before + 1U)
+        goto fail_process;
+
+    current = scheduler_get_current();
+    if (current == NULL ||
+        current->thread_id != SYNTRA_SCHEDULER_TEST_BOOT_ID)
+    {
+        status = SYNTRA_STATUS_ERROR;
+        goto fail_process;
+    }
+
+    status = syntra_arm64_mmu_read_registers(&registers);
+    if (status != SYNTRA_STATUS_OK ||
+        (registers.ttbr0_el1 & SYNTRA_ARM64_MMU_PA_MASK) !=
+            syntra_active_page_table.root_physical_address)
+    {
+        status = SYNTRA_STATUS_ERROR;
+        goto fail_process;
+    }
+
+    status = process_terminate(SYNTRA_PROCESS_EL0_FAULT_ID);
+    if (status != SYNTRA_STATUS_OK) return status;
+    if (process_validate() != SYNTRA_STATUS_OK)
+        return SYNTRA_STATUS_ERROR;
+
+    syntra_uart_puts(
+        "Process EL0 write fault: PASS (faulting process terminated, kernel resumed)\\n");
+    return SYNTRA_STATUS_OK;
+
+fail_process:
+    thread = scheduler_get_thread(SYNTRA_PROCESS_EL0_FAULT_THREAD_ID);
+    if (thread != NULL && thread->state != THREAD_TERMINATED)
+        (void)scheduler_set_thread_state(
+            SYNTRA_PROCESS_EL0_FAULT_THREAD_ID, THREAD_TERMINATED);
+    (void)process_refresh_state(SYNTRA_PROCESS_EL0_FAULT_ID);
+    (void)process_terminate(SYNTRA_PROCESS_EL0_FAULT_ID);
+    return status;
+
+fail_space:
+    if (process_el0_fault_space.initialized)
+        (void)syntra_arm64_address_space_destroy(&process_el0_fault_space);
+fail_pages:
+    if (code_page != 0U)
+        (void)syntra_page_free_owned(code_page, SYNTRA_PAGE_OWNER_PROCESS);
+    if (stack_page != 0U)
+        (void)syntra_page_free_owned(stack_page, SYNTRA_PAGE_OWNER_PROCESS);
+    return status;
+}
+
 /* Build and audit the identity mappings, but leave SCTLR_EL1.M disabled. */
 static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
 {
@@ -1668,6 +1857,13 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
     if (status != SYNTRA_STATUS_OK)
     {
         syntra_uart_puts("Process EL0 scheduler execution: FAIL\\n");
+        return status;
+    }
+
+    status = syntra_arm64_process_el0_write_fault_test();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("Process EL0 write-fault isolation: FAIL\\n");
         return status;
     }
     return SYNTRA_STATUS_OK;

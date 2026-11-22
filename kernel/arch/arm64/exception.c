@@ -65,6 +65,7 @@ static syntra_arm64_exception_context_t last_exception_context;
 static syntra_arm64_exception_info_t last_exception_info;
 static int last_exception_valid;
 static unsigned int user_thread_exit_count;
+static unsigned int user_thread_fault_count;
 
 syntra_status_t syntra_arm64_exception_decode(
     uint64_t esr,
@@ -246,15 +247,44 @@ syntra_status_t syntra_arm64_exception_handle(
         else if (last_exception_info.exception_class == SYNTRA_ARM64_EXCEPTION_DATA_ABORT_LOWER ||
                  last_exception_info.exception_class == SYNTRA_ARM64_EXCEPTION_INSTRUCTION_ABORT_LOWER)
         {
-            uintptr_t halt_offset = (uintptr_t)syntra_arm64_user_fault_halt -
-                (uintptr_t)__user_text_start;
-            if (last_exception_info.exception_class == SYNTRA_ARM64_EXCEPTION_DATA_ABORT_LOWER)
-                syntra_exception_uart_puts("EL0 Data Abort: caught; stopping user task\\n");
+            syntra_thread_t *current_thread = scheduler_get_current();
+            if (current_thread != NULL &&
+                current_thread->is_user_thread != 0U)
+            {
+#if !defined(SYNTRA_ARM64_FREESTANDING_IMAGE)
+                if (syntra_arm64_el0_thread_exit_trampoline == NULL)
+                    return SYNTRA_STATUS_NOT_IMPLEMENTED;
+#endif
+                if (last_exception_info.exception_class ==
+                    SYNTRA_ARM64_EXCEPTION_DATA_ABORT_LOWER)
+                    syntra_exception_uart_puts(
+                        "EL0 Data Abort: terminating faulting user thread\\n");
+                else
+                    syntra_exception_uart_puts(
+                        "EL0 Instruction Abort: terminating faulting user thread\\n");
+                mutable_context->elr_el1 =
+                    (uint64_t)(uintptr_t)
+                        syntra_arm64_el0_thread_exit_trampoline;
+                /* Keep timer IRQ enabled so the scheduler can isolate the fault. */
+                mutable_context->spsr_el1 = 0x345ULL;
+                mutable_context->reserved = SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC;
+                user_thread_fault_count++;
+            }
             else
-                syntra_exception_uart_puts("EL0 Instruction Abort: caught; stopping user task\\n");
-            mutable_context->elr_el1 = 0x10000000ULL + halt_offset;
-            mutable_context->spsr_el1 = 0x3C0ULL;
-            mutable_context->reserved = SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC;
+            {
+                uintptr_t halt_offset = (uintptr_t)syntra_arm64_user_fault_halt -
+                    (uintptr_t)__user_text_start;
+                if (last_exception_info.exception_class ==
+                    SYNTRA_ARM64_EXCEPTION_DATA_ABORT_LOWER)
+                    syntra_exception_uart_puts(
+                        "EL0 Data Abort: caught; stopping user task\\n");
+                else
+                    syntra_exception_uart_puts(
+                        "EL0 Instruction Abort: caught; stopping user task\\n");
+                mutable_context->elr_el1 = 0x10000000ULL + halt_offset;
+                mutable_context->spsr_el1 = 0x3C0ULL;
+                mutable_context->reserved = SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC;
+            }
         }
         else
             return SYNTRA_STATUS_NOT_IMPLEMENTED;
@@ -315,6 +345,11 @@ syntra_arm64_exception_get_last_info(void)
 unsigned int syntra_arm64_exception_user_thread_exit_count(void)
 {
     return user_thread_exit_count;
+}
+
+unsigned int syntra_arm64_exception_user_thread_fault_count(void)
+{
+    return user_thread_fault_count;
 }
 
 int syntra_arm64_exception_has_last_context(void)

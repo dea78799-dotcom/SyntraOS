@@ -19,3 +19,17 @@ syntra_arm64_user_fault_halt:
     wfe
     b .Luser_fault_idle
 .size syntra_arm64_user_fault_halt, . - syntra_arm64_user_fault_halt
+
+.align 4
+.global syntra_arm64_user_write_code_fault
+.type syntra_arm64_user_write_code_fault, %function
+syntra_arm64_user_write_code_fault:
+    adr x0, .Luser_write_fault_target
+    mov x1, #1
+.Luser_write_fault_target:
+    str x1, [x0]
+    svc #0x45
+.Luser_write_fault_idle:
+    wfe
+    b .Luser_write_fault_idle
+.size syntra_arm64_user_write_code_fault, . - syntra_arm64_user_write_code_fault
