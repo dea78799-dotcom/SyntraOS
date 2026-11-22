@@ -529,7 +529,8 @@ syntra_status_t syntra_gui_runtime_process_event_at(
     status = update_gesture(runtime, now_ms);
     if (status != SYNTRA_STATUS_OK) return status;
 
-    if (runtime->last_gesture.action == SYNTRA_GESTURE_CONTEXT_REQUEST)
+    if (runtime->last_gesture.action == SYNTRA_GESTURE_CONTEXT_REQUEST ||
+        runtime->last_gesture.action == SYNTRA_GESTURE_LONG_PRESS)
         open_context_menu(runtime, runtime->last_gesture.x,
                           runtime->last_gesture.y,
                           runtime->last_gesture.target_id);
@@ -569,9 +570,16 @@ syntra_status_t syntra_gui_runtime_tick(
     syntra_gui_runtime_t *runtime,
     uint64_t now_ms)
 {
+    syntra_status_t status;
     if (runtime == NULL || runtime->initialized != 1)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
-    return update_gesture(runtime, now_ms);
+    status = update_gesture(runtime, now_ms);
+    if (status != SYNTRA_STATUS_OK) return status;
+    if (runtime->last_gesture.action == SYNTRA_GESTURE_LONG_PRESS)
+        open_context_menu(runtime, runtime->last_gesture.x,
+                          runtime->last_gesture.y,
+                          runtime->last_gesture.target_id);
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t syntra_gui_runtime_render(
