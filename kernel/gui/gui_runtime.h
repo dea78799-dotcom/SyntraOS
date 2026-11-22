@@ -18,6 +18,8 @@ typedef struct
     uint32_t context_menu_x;
     uint32_t context_menu_y;
     uint32_t context_menu_target;
+    uint32_t hover_target_id;
+    int32_t last_wheel_y;
     uint8_t context_menu_visible;
     uint32_t redraw_count;
     int initialized;
