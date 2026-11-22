@@ -448,13 +448,20 @@ syntra_arm64_exception_handle_and_select(
             (void)scheduler_set_thread_state(
                 SYNTRA_ARM64_BOOT_THREAD_ID, THREAD_RUNNING);
             scheduler_context_switching_active = 0;
-            if (activate_thread_address_space(SYNTRA_ARM64_BOOT_THREAD_ID) !=
-                SYNTRA_STATUS_OK)
-                return NULL;
+            /*
+             * No task was selected. Keep the interrupted boot context even
+             * when the kernel-root check fails; never return a null frame.
+             */
+            (void)activate_thread_address_space(SYNTRA_ARM64_BOOT_THREAD_ID);
             return context;
         }
         if (activate_thread_address_space(next->thread_id) != SYNTRA_STATUS_OK)
-            return NULL;
+        {
+            (void)scheduler_rollback_context_switch(
+                SYNTRA_ARM64_BOOT_THREAD_ID, next->thread_id);
+            scheduler_context_switching_active = 0;
+            return context;
+        }
         return (syntra_arm64_exception_context_t *)next->cpu_context;
     }
 
@@ -462,12 +469,22 @@ syntra_arm64_exception_handle_and_select(
         context->vector_index == SYNTRA_ARM64_VECTOR_CURRENT_SPX_IRQ)
     {
         current = scheduler_get_current();
-        if (current != NULL) current->cpu_context = context;
+        if (current == NULL)
+            return context;
 
+        current->cpu_context = context;
         next = scheduler_schedule_next_with_context();
-        if (next == NULL) return context;
+        if (next == NULL)
+        {
+            (void)scheduler_rollback_context_switch(current->thread_id, 0U);
+            return context;
+        }
         if (activate_thread_address_space(next->thread_id) != SYNTRA_STATUS_OK)
-            return NULL;
+        {
+            (void)scheduler_rollback_context_switch(
+                current->thread_id, next->thread_id);
+            return context;
+        }
         return (syntra_arm64_exception_context_t *)next->cpu_context;
     }
 
