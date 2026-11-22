@@ -1,5 +1,7 @@
 #include "kernel_va_registry.h"
 
+#include "../../arch/irq.h"
+
 typedef struct
 {
     uint8_t active;
@@ -110,7 +112,7 @@ static syntra_status_t find_first_fit(
     return SYNTRA_STATUS_OUT_OF_MEMORY;
 }
 
-syntra_status_t syntra_arm64_kernel_va_reserve(
+static syntra_status_t reserve_unlocked(
     uint64_t requested_size,
     uint32_t guard_pages,
     uint32_t owner,
@@ -190,7 +192,7 @@ syntra_status_t syntra_arm64_kernel_va_reserve(
     return SYNTRA_STATUS_OK;
 }
 
-syntra_status_t syntra_arm64_kernel_va_release(
+static syntra_status_t release_unlocked(
     const syntra_arm64_kernel_va_reservation_t *reservation)
 {
     size_t slot;
@@ -221,7 +223,7 @@ syntra_status_t syntra_arm64_kernel_va_release(
     return SYNTRA_STATUS_INVALID_ARGUMENT;
 }
 
-syntra_status_t syntra_arm64_kernel_va_registry_validate(void)
+static syntra_status_t validate_unlocked(void)
 {
     size_t slot;
     size_t counted = 0U;
@@ -301,12 +303,12 @@ syntra_status_t syntra_arm64_kernel_va_registry_validate(void)
         : SYNTRA_STATUS_ERROR;
 }
 
-size_t syntra_arm64_kernel_va_registry_count(void)
+static size_t registry_count_unlocked(void)
 {
     return initialized ? live_count : 0U;
 }
 
-syntra_status_t syntra_arm64_kernel_va_registry_get(
+static syntra_status_t registry_get_unlocked(
     size_t slot,
     syntra_arm64_kernel_va_reservation_t *reservation)
 {
@@ -319,4 +321,41 @@ syntra_status_t syntra_arm64_kernel_va_registry_get(
 
     *reservation = registry[slot].reservation;
     return SYNTRA_STATUS_OK;
+}
+
+/* IRQ masking prevents same-core interrupt re-entry; this is not an SMP lock. */
+syntra_status_t syntra_arm64_kernel_va_reserve(uint64_t requested_size, uint32_t guard_pages, uint32_t owner, syntra_arm64_kernel_va_reservation_t *reservation)
+{
+    syntra_irq_state_t state = syntra_irq_save();
+    syntra_status_t status = reserve_unlocked(requested_size, guard_pages, owner, reservation);
+    syntra_irq_restore(state);
+    return status;
+}
+syntra_status_t syntra_arm64_kernel_va_release(const syntra_arm64_kernel_va_reservation_t *reservation)
+{
+    syntra_irq_state_t state = syntra_irq_save();
+    syntra_status_t status = release_unlocked(reservation);
+    syntra_irq_restore(state);
+    return status;
+}
+syntra_status_t syntra_arm64_kernel_va_registry_validate(void)
+{
+    syntra_irq_state_t state = syntra_irq_save();
+    syntra_status_t status = validate_unlocked();
+    syntra_irq_restore(state);
+    return status;
+}
+size_t syntra_arm64_kernel_va_registry_count(void)
+{
+    syntra_irq_state_t state = syntra_irq_save();
+    size_t count = registry_count_unlocked();
+    syntra_irq_restore(state);
+    return count;
+}
+syntra_status_t syntra_arm64_kernel_va_registry_get(size_t slot, syntra_arm64_kernel_va_reservation_t *reservation)
+{
+    syntra_irq_state_t state = syntra_irq_save();
+    syntra_status_t status = registry_get_unlocked(slot, reservation);
+    syntra_irq_restore(state);
+    return status;
 }
