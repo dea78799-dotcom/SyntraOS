@@ -1,16 +1,16 @@
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 
 #include "../../kernel/arch/arm64/kernel_va_registry.h"
 
-#ifdef NDEBUG
-#undef NDEBUG
-#endif
-
 static void test_validation_and_guard_layout(void)
 {
-    syntra_arm64_kernel_va_reservation_t result = {0xA5U};
+    syntra_arm64_kernel_va_reservation_t result = {.allocation_id = 0xA5U};
     syntra_arm64_kernel_va_reservation_t first;
     syntra_arm64_kernel_va_reservation_t second;
 
@@ -77,7 +77,7 @@ static void test_descriptor_integrity(void)
 static void test_arena_exhaustion(void)
 {
     syntra_arm64_kernel_va_reservation_t whole;
-    syntra_arm64_kernel_va_reservation_t untouched = {0x5AU};
+    syntra_arm64_kernel_va_reservation_t untouched = {.allocation_id = 0x5AU};
 
     assert(syntra_arm64_kernel_va_reserve(
         SYNTRA_ARM64_KERNEL_VA_SIZE, 0U, 5U, &whole) == SYNTRA_STATUS_OK);
@@ -96,7 +96,7 @@ static void test_registry_capacity(void)
 {
     syntra_arm64_kernel_va_reservation_t allocations[
         SYNTRA_ARM64_KERNEL_VA_REGISTRY_CAPACITY];
-    syntra_arm64_kernel_va_reservation_t extra = {0xCCU};
+    syntra_arm64_kernel_va_reservation_t extra = {.allocation_id = 0xCCU};
     size_t index;
 
     for (index = 0U; index < SYNTRA_ARM64_KERNEL_VA_REGISTRY_CAPACITY;
