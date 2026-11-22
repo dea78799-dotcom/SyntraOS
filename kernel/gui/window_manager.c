@@ -206,17 +206,17 @@ syntra_status_t syntra_gui_window_maximize(
 {
     int found;
     syntra_gui_window_t *window;
+    syntra_status_t status;
     if (manager == NULL || manager->initialized != 1 || window_id == 0U)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     found = find_window(manager, window_id);
     if (found < 0) return SYNTRA_STATUS_INVALID_ARGUMENT;
+    manager->windows[(uint32_t)found].minimized = 0U;
+    status = syntra_gui_window_focus(manager, window_id);
+    if (status != SYNTRA_STATUS_OK) return status;
+    found = find_window(manager, window_id);
+    if (found < 0) return SYNTRA_STATUS_INVALID_ARGUMENT;
     window = &manager->windows[(uint32_t)found];
-    if (window->minimized != 0U)
-    {
-        window->minimized = 0U;
-        if ((uint32_t)found + 1U != manager->count)
-            return syntra_gui_window_focus(manager, window_id);
-    }
     if (window->maximized == 0U)
     {
         window->restore_x = window->x;
