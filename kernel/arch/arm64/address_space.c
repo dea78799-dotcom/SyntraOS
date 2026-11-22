@@ -85,17 +85,31 @@ static void address_space_unregister(
 static syntra_status_t allocate_page_table_page(
     void *context, uint64_t *physical_address)
 {
+    syntra_arm64_address_space_t *space =
+        (syntra_arm64_address_space_t *)context;
     uintptr_t page;
     syntra_status_t status;
-    (void)context;
 
-    if (physical_address == NULL)
+    if (space == NULL || space->resolve == NULL || physical_address == NULL)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
     status = syntra_page_alloc_owned(&page, SYNTRA_PAGE_OWNER_PAGE_TABLE);
-    if (status == SYNTRA_STATUS_OK)
-        *physical_address = (uint64_t)page;
-    return status;
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    /*
+     * Validate the allocator's physical-to-virtual mapping before handing the
+     * page to the generic page-table builder. Otherwise its resolver failure
+     * would leave an allocated page with no owner able to reclaim it.
+     */
+    if (space->resolve((uint64_t)page, space->resolve_context) == NULL)
+    {
+        (void)syntra_page_free_owned(page, SYNTRA_PAGE_OWNER_PAGE_TABLE);
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    *physical_address = (uint64_t)page;
+    return SYNTRA_STATUS_OK;
 }
 
 static uint64_t *resolve_page_table_page(
@@ -259,6 +273,74 @@ syntra_status_t syntra_arm64_address_space_inherit_kernel_mappings(
     return SYNTRA_STATUS_OK;
 }
 
+/*
+ * A failed user mapping may have allocated one or both private table levels.
+ * Detach and release only empty tables, preserving any pre-existing siblings.
+ */
+static int table_is_empty(const uint64_t *table);
+
+static syntra_status_t rollback_empty_user_tables(
+    syntra_arm64_address_space_t *space,
+    uint64_t virtual_address)
+{
+    uint16_t indices[4];
+    uint64_t *root, *level2, *level3;
+    uint64_t descriptor, level2_pa, level3_pa;
+    syntra_status_t status;
+
+    status = syntra_arm64_mmu_get_table_indices(virtual_address, indices);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    root = resolve_page_table_page(
+        space->page_table.root_physical_address, space);
+    if (root == NULL)
+        return SYNTRA_STATUS_ERROR;
+
+    descriptor = root[indices[0]];
+    if ((descriptor & (DESC_VALID | DESC_TYPE)) !=
+        (DESC_VALID | DESC_TYPE))
+        return SYNTRA_STATUS_OK;
+    if ((descriptor & ~(DESC_ADDR | 3ULL)) != 0ULL)
+        return SYNTRA_STATUS_ERROR;
+
+    level2_pa = descriptor & DESC_ADDR;
+    level2 = resolve_page_table_page(level2_pa, space);
+    if (level2 == NULL)
+        return SYNTRA_STATUS_ERROR;
+
+    descriptor = level2[indices[1]];
+    if ((descriptor & DESC_VALID) != 0ULL)
+    {
+        if ((descriptor & DESC_TYPE) == 0ULL ||
+            (descriptor & ~(DESC_ADDR | 3ULL)) != 0ULL)
+            return SYNTRA_STATUS_ERROR;
+
+        level3_pa = descriptor & DESC_ADDR;
+        level3 = resolve_page_table_page(level3_pa, space);
+        if (level3 == NULL)
+            return SYNTRA_STATUS_ERROR;
+
+        if (table_is_empty(level3))
+        {
+            level2[indices[1]] = 0ULL;
+            status = syntra_page_free_owned(
+                (uintptr_t)level3_pa, SYNTRA_PAGE_OWNER_PAGE_TABLE);
+            if (status != SYNTRA_STATUS_OK)
+                return status;
+        }
+    }
+
+    if (table_is_empty(level2))
+    {
+        root[indices[0]] = 0ULL;
+        return syntra_page_free_owned(
+            (uintptr_t)level2_pa, SYNTRA_PAGE_OWNER_PAGE_TABLE);
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_arm64_address_space_map_user_page(
     syntra_arm64_address_space_t *space,
     uint64_t virtual_address,
@@ -299,7 +381,11 @@ syntra_status_t syntra_arm64_address_space_map_user_page(
         access,
         executable);
     if (status != SYNTRA_STATUS_OK)
-        return status;
+    {
+        syntra_status_t rollback_status =
+            rollback_empty_user_tables(space, virtual_address);
+        return rollback_status == SYNTRA_STATUS_OK ? status : rollback_status;
+    }
 
     space->mappings[space->mapping_count].virtual_address = virtual_address;
     space->mappings[space->mapping_count].physical_address = physical_address;
