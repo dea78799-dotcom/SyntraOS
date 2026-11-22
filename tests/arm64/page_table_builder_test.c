@@ -7,6 +7,7 @@
 #define BASE_PA 0x1000ULL
 static uint64_t storage[TABLES][512];
 static unsigned int used;
+static unsigned int released;
 
 static syntra_status_t alloc_cb(void *ctx, uint64_t *pa)
 {
@@ -32,6 +33,37 @@ static void reset(void)
     for (unsigned int i = 0U; i < TABLES; ++i)
         for (unsigned int j = 0U; j < 512U; ++j)
             storage[i][j] = 0ULL;
+}
+
+
+static syntra_status_t release_cb(void *ctx, uint64_t pa)
+{
+    (void)ctx;
+    if (pa < BASE_PA || pa >= BASE_PA + (uint64_t)TABLES * 4096ULL ||
+        ((pa - BASE_PA) & 4095ULL) != 0ULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    ++released;
+    return SYNTRA_STATUS_OK;
+}
+
+static uint64_t *resolve_fail_cb(uint64_t pa, void *ctx)
+{
+    (void)pa;
+    (void)ctx;
+    return NULL;
+}
+
+static void test_init_reclaims_unresolvable_root(void)
+{
+    syntra_arm64_page_table_t pt;
+    reset();
+    released = 0U;
+    assert(syntra_arm64_page_table_init_ex(
+        &pt, alloc_cb, release_cb, resolve_fail_cb, NULL) ==
+        SYNTRA_STATUS_ERROR);
+    assert(used == 1U);
+    assert(released == 1U);
+    assert(pt.root_physical_address == 0ULL);
 }
 
 static void test_build_and_walk_verify(void)
@@ -193,6 +225,7 @@ static void test_partial_overlap_preflight(void)
 
 int main(void)
 {
+    test_init_reclaims_unresolvable_root();
     test_build_and_walk_verify();
     test_user_page_mappings();
     test_block_mapping();
