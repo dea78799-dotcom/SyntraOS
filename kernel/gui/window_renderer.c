@@ -3,6 +3,8 @@
 #define WINDOW_BORDER 2U
 #define WINDOW_TITLE_HEIGHT 20U
 #define WINDOW_CLOSE_SIZE 12U
+#define WINDOW_CONTROL_GAP 5U
+#define WINDOW_CONTROLS_MIN_WIDTH 78U
 
 #define COLOR_WINDOW_BODY 0xFF101A35U
 #define COLOR_WINDOW_BORDER 0xFF5578F2U
@@ -10,6 +12,8 @@
 #define COLOR_WINDOW_INACTIVE 0xFF263D66U
 #define COLOR_WINDOW_TEXT 0xFFF4F7FFU
 #define COLOR_WINDOW_CLOSE 0xFFB83D55U
+#define COLOR_WINDOW_MINIMIZE 0xFFE5A84BU
+#define COLOR_WINDOW_MAXIMIZE 0xFF54D6E8U
 
 
 static syntra_status_t draw_app_surface(
@@ -205,6 +209,8 @@ static syntra_status_t draw_window(
     uint32_t title_height;
     uint32_t title_color;
     uint32_t close_x;
+    uint32_t maximize_x;
+    uint32_t minimize_x;
     const char *title_text = "WINDOW";
     syntra_status_t status;
 
@@ -247,21 +253,38 @@ static syntra_status_t draw_window(
     {
         close_x = window->x + window->width - WINDOW_CLOSE_SIZE - 5U;
         status = syntra_framebuffer_fill_rect(
-            framebuffer, close_x,
-            window->y + WINDOW_BORDER + 2U,
-            WINDOW_CLOSE_SIZE, WINDOW_CLOSE_SIZE,
-            COLOR_WINDOW_CLOSE);
+            framebuffer, close_x, window->y + WINDOW_BORDER + 2U,
+            WINDOW_CLOSE_SIZE, WINDOW_CLOSE_SIZE, COLOR_WINDOW_CLOSE);
         if (status != SYNTRA_STATUS_OK) return status;
-
         status = syntra_framebuffer_draw_text(
-            framebuffer, close_x + 3U,
-            window->y + WINDOW_BORDER + 4U,
+            framebuffer, close_x + 3U, window->y + WINDOW_BORDER + 4U,
             "X", COLOR_WINDOW_TEXT, COLOR_WINDOW_CLOSE, 1U);
         if (status != SYNTRA_STATUS_OK) return status;
 
+        if (window->width >= WINDOW_CONTROLS_MIN_WIDTH)
+        {
+            maximize_x = close_x - WINDOW_CONTROL_GAP - WINDOW_CLOSE_SIZE;
+            minimize_x = maximize_x - WINDOW_CONTROL_GAP - WINDOW_CLOSE_SIZE;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, maximize_x, window->y + WINDOW_BORDER + 2U,
+                WINDOW_CLOSE_SIZE, WINDOW_CLOSE_SIZE, COLOR_WINDOW_MAXIMIZE);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, maximize_x + 3U, window->y + WINDOW_BORDER + 5U,
+                6U, 6U, title_color);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, minimize_x, window->y + WINDOW_BORDER + 2U,
+                WINDOW_CLOSE_SIZE, WINDOW_CLOSE_SIZE, COLOR_WINDOW_MINIMIZE);
+            if (status != SYNTRA_STATUS_OK) return status;
+            status = syntra_framebuffer_fill_rect(
+                framebuffer, minimize_x + 3U, window->y + WINDOW_BORDER + 7U,
+                6U, 2U, title_color);
+            if (status != SYNTRA_STATUS_OK) return status;
+        }
+
         status = syntra_framebuffer_draw_text(
-            framebuffer, window->x + 7U,
-            window->y + 7U, title_text,
+            framebuffer, window->x + 7U, window->y + 7U, title_text,
             COLOR_WINDOW_TEXT, title_color, 1U);
         if (status != SYNTRA_STATUS_OK) return status;
     }
