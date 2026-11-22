@@ -124,6 +124,58 @@ int main(void)
                SYNTRA_STATUS_OK);
         assert(syntra_gui_window_active(&manager)->id == control_id);
     }
+    /* Compact 320x240 titlebar controls accept enlarged edge touch targets. */
+    {
+        syntra_gui_window_manager_t compact_manager;
+        syntra_gui_window_interaction_t compact_interaction;
+        syntra_input_state_t compact_input;
+        uint32_t compact_id;
+        const syntra_gui_window_t *compact_window = NULL;
+        assert(syntra_gui_window_manager_init(
+            &compact_manager, 320U, 240U) == SYNTRA_STATUS_OK);
+        assert(syntra_gui_window_interaction_init(
+            &compact_interaction) == SYNTRA_STATUS_OK);
+        assert(syntra_input_init(&compact_input, 320U, 240U) ==
+               SYNTRA_STATUS_OK);
+        assert(syntra_gui_window_open(
+            &compact_manager, 40U, 30U, 240U, 170U, &compact_id) ==
+               SYNTRA_STATUS_OK);
+        set_pointer(&compact_input, 243U, 49U, SYNTRA_INPUT_BUTTON_LEFT);
+        assert(syntra_gui_window_interaction_process(
+            &compact_interaction, &compact_manager, &compact_input) ==
+               SYNTRA_STATUS_OK);
+        assert(syntra_gui_window_get(
+            &compact_manager, compact_id, &compact_window) ==
+               SYNTRA_STATUS_OK);
+        assert(compact_window->minimized == 1U);
+        assert(syntra_gui_window_restore(&compact_manager, compact_id) ==
+               SYNTRA_STATUS_OK);
+        set_pointer(&compact_input, 0U, 0U, 0U);
+        assert(syntra_gui_window_interaction_process(
+            &compact_interaction, &compact_manager, &compact_input) ==
+               SYNTRA_STATUS_OK);
+        set_pointer(&compact_input, 260U, 49U, SYNTRA_INPUT_BUTTON_LEFT);
+        assert(syntra_gui_window_interaction_process(
+            &compact_interaction, &compact_manager, &compact_input) ==
+               SYNTRA_STATUS_OK);
+        assert(syntra_gui_window_get(
+            &compact_manager, compact_id, &compact_window) ==
+               SYNTRA_STATUS_OK);
+        assert(compact_window->maximized == 1U);
+        set_pointer(&compact_input, 300U, 19U, 0U);
+        assert(syntra_gui_window_interaction_process(
+            &compact_interaction, &compact_manager, &compact_input) ==
+               SYNTRA_STATUS_OK);
+        set_pointer(&compact_input, 300U, 19U, SYNTRA_INPUT_BUTTON_LEFT);
+        assert(syntra_gui_window_interaction_process(
+            &compact_interaction, &compact_manager, &compact_input) ==
+               SYNTRA_STATUS_OK);
+        assert(syntra_gui_window_get(
+            &compact_manager, compact_id, &compact_window) ==
+               SYNTRA_STATUS_OK);
+        assert(compact_window->maximized == 0U &&
+               compact_window->x == 40U && compact_window->y == 30U);
+    }
     /* Invalid dimension pairing is rejected without mutating the manager. */
     assert(syntra_input_init(&input, 320U, 240U) == SYNTRA_STATUS_OK);
     assert(syntra_gui_window_interaction_process(
