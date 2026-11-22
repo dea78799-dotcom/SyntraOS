@@ -3,7 +3,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include "../core/status.h"\n#include "../virtio/virtio_mmio.h"
+#include "../core/status.h"
+#include "../virtio/virtio_mmio.h"
 
 #define SYNTRA_RAMFB_WIDTH 640U
 #define SYNTRA_RAMFB_HEIGHT 480U
@@ -23,6 +24,10 @@ syntra_status_t syntra_ramfb_encode_config(
     uint32_t width, uint32_t height, uint32_t stride);
 
 /* Configure QEMU ramfb through the fw_cfg DMA interface and render the desktop. */
-syntra_status_t syntra_ramfb_init(uintptr_t fw_cfg_base, size_t fw_cfg_size);\n\n/* Drain queued input and redraw once; call from normal/idle context, not IRQ. */\nsyntra_status_t syntra_ramfb_process_input_events(\n    syntra_virtio_input_queue_t *input_queue);
+syntra_status_t syntra_ramfb_init(uintptr_t fw_cfg_base, size_t fw_cfg_size);
+
+/* Drain queued input and redraw once; call from normal/idle context, not IRQ. */
+syntra_status_t syntra_ramfb_process_input_events(
+    syntra_virtio_input_queue_t *input_queue);
 
 #endif
