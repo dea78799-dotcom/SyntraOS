@@ -205,6 +205,27 @@ int main(void)
         assert(runtime.windows.count == 2U);
     }
 
+    /* All eight compact switcher slots remain inside the screen bounds. */
+    assert(syntra_gui_runtime_init(&runtime, 320U, 240U) ==
+           SYNTRA_STATUS_OK);
+    framebuffer.pixels = pixels;
+    framebuffer.width = 320U;
+    framebuffer.height = 240U;
+    framebuffer.stride_pixels = 320U;
+    for (uint32_t index = 0U; index < SYNTRA_GUI_MAX_WINDOWS; ++index)
+    {
+        uint32_t id;
+        assert(syntra_gui_window_open(
+            &runtime.windows, 0U, 0U, 100U, 100U, &id) == SYNTRA_STATUS_OK);
+    }
+    assert(syntra_gui_runtime_render(&runtime, &framebuffer) ==
+           SYNTRA_STATUS_OK);
+    /* Eight 30px slots with 4px gaps: x=40 through x=307. */
+    assert(pixels[210U * 320U + 40U] == 0xFF1A2948U);
+    assert(pixels[210U * 320U + 278U] == 0xFF25466FU);
+    assert(pixels[210U * 320U + 307U] == 0xFF25466FU);
+    assert(pixels[210U * 320U + 308U] != 0xFF25466FU);
+
     /* A covered launcher must not intercept clicks from the front app. */
     assert(syntra_gui_runtime_init(&runtime, 640U, 480U) ==
            SYNTRA_STATUS_OK);
