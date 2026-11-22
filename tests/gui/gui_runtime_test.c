@@ -92,7 +92,7 @@ int main(void)
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
 
     /* Settings tile also focuses its existing window without duplication. */
-    move_pointer(&runtime, 42, 14); /* gap -> Settings tile */
+    move_pointer(&runtime, 42, 0); /* gap -> Settings tile */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(syntra_gui_window_active(&runtime.windows)->app_type ==
            SYNTRA_GUI_APP_SETTINGS);
