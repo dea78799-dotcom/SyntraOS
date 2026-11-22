@@ -35,6 +35,9 @@ static syntra_status_t draw_app_surface(
         status = syntra_framebuffer_fill_rect(
             framebuffer, left, top, inner_width, inner_height, 0xFF0C1428U);
         if (status != SYNTRA_STATUS_OK) return status;
+        /* Avoid narrow Files surfaces overflowing list geometry. */
+        if (inner_width < 64U)
+            return SYNTRA_STATUS_OK;
         status = syntra_framebuffer_fill_rect(
             framebuffer, left, top, 34U, inner_height, 0xFF1A2948U);
         if (status != SYNTRA_STATUS_OK) return status;
@@ -61,7 +64,9 @@ static syntra_status_t draw_app_surface(
             if (status != SYNTRA_STATUS_OK) return status;
             status = syntra_framebuffer_draw_text(
                 framebuffer, left + 62U, row_y + 2U, names[row],
-                COLOR_WINDOW_TEXT, 0xFF0C1428U, 1U);
+                COLOR_WINDOW_TEXT,
+                window->app_selection == row ? 0xFF25466FU : 0xFF0C1428U,
+                1U);
             if (status != SYNTRA_STATUS_OK) return status;
         }
         return SYNTRA_STATUS_OK;
