@@ -19,6 +19,15 @@ typedef enum
     SYNTRA_PAGE_OWNER_MAX
 } syntra_page_owner_t;
 
+typedef struct
+{
+    size_t total_pages;
+    size_t free_pages;
+    size_t allocated_pages;
+    size_t owner_pages[SYNTRA_PAGE_OWNER_MAX];
+    int valid;
+} syntra_page_allocator_stats_t;
+
 /*
  * V1 uses a static bitmap for the first 4 GiB of physical address space.
  * RAM ranges crossing 4 GiB are clipped; ranges wholly above it are ignored.
@@ -27,6 +36,9 @@ typedef enum
 syntra_status_t syntra_page_allocator_init(void);
 /* Full bitmap/summary/accounting audit; intended for diagnostics and tests. */
 syntra_status_t syntra_page_allocator_validate(void);
+/* O(1) consistent snapshot; owner counters are maintained on each mutation. */
+syntra_status_t syntra_page_allocator_get_stats(
+    syntra_page_allocator_stats_t *stats);
 /* Owned APIs enforce owner tags; legacy APIs allocate/free as KERNEL/any. */
 syntra_status_t syntra_page_alloc_owned(
     uintptr_t *physical_address, syntra_page_owner_t owner);
