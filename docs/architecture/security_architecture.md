@@ -1,7 +1,7 @@
 # SyntraOS Security Architecture
 
 Version: 0.1.0
-Status: Design Phase
+Status: Partial Implementation
 
 ## 1. Overview
 
@@ -42,6 +42,25 @@ crashing the entire operating system.
 
 ## 6. Current Status
 
-Security Architecture is not implemented yet.
+Security-related memory primitives are partially implemented on ARM64:
 
-This document describes the planned design.
+- Independent process address spaces with separate user page-table roots.
+- User mappings with read/write and execute permission enforcement.
+- EL0 execution with per-thread kernel stacks and process-owned user mappings.
+- TTBR0 address-space switching during scheduler context switches.
+- Runtime QEMU validation that two EL0 processes can use the same user data
+  virtual address while retaining different physical backing pages and
+  independent data.
+- EL0 write attempts against read-only executable code pages are trapped;
+  the faulting user thread is terminated and control returns to EL1.
+
+The following planned security features are not yet implemented:
+
+- Capability-based authorization for kernel objects and services.
+- Secure IPC and cross-process resource transfer.
+- A complete application loader and production process lifecycle.
+- SMP-safe address-space and allocator synchronization.
+- A complete kernel/user virtual address separation policy.
+
+The current tests establish specific ARM64 memory-protection behaviors. They
+are not a complete security audit and do not make SyntraOS production-ready.
