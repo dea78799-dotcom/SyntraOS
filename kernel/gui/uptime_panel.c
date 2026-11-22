@@ -43,7 +43,7 @@ syntra_status_t syntra_gui_render_uptime_panel(
         two_digits(&label[8], (uint32_t)((elapsed_seconds / 3600ULL) % 24ULL));
         label[10] = ':';
         two_digits(&label[11], (uint32_t)((elapsed_seconds / 60ULL) % 60ULL));
-        label[13] = '\\0';
+        label[13] = '\0';
     }
     else
     {
