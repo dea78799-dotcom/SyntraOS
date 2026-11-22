@@ -22,6 +22,7 @@ static size_t allocation_cursor;
 static int initialized;
 /* One byte per managed physical page; zero means the page is free. */
 static uint8_t page_owners[SYNTRA_PAGE_COUNT];
+static size_t owner_page_counts[SYNTRA_PAGE_OWNER_MAX];
 
 static unsigned int bit_index(uint64_t value)
 {
@@ -170,6 +171,10 @@ syntra_status_t syntra_page_allocator_init(void)
     {
         page_owners[index] = (uint8_t)SYNTRA_PAGE_OWNER_NONE;
     }
+    for (index = 0U; index < SYNTRA_PAGE_OWNER_MAX; ++index)
+    {
+        owner_page_counts[index] = 0U;
+    }
 
     for (index = 0U; index < SYNTRA_BITMAP_WORD_COUNT; ++index)
     {
@@ -281,6 +286,7 @@ static syntra_status_t page_alloc_unlocked(
     free_page_clear(index);
     bitmap_set(allocated_bitmap, index);
     page_owners[index] = (uint8_t)owner;
+    owner_page_counts[owner]++;
     free_pages--;
 
     allocation_cursor = index + 1U;
@@ -362,6 +368,7 @@ static syntra_status_t page_alloc_contiguous_unlocked(
             free_page_clear(index + offset);
             bitmap_set(allocated_bitmap, index + offset);
             page_owners[index + offset] = (uint8_t)owner;
+            owner_page_counts[owner]++;
         }
     }
 
@@ -399,6 +406,7 @@ static syntra_status_t page_free_unlocked(
     }
 
     bitmap_clear(allocated_bitmap, index);
+    owner_page_counts[page_owners[index]]--;
     page_owners[index] = (uint8_t)SYNTRA_PAGE_OWNER_NONE;
     free_page_set(index);
     free_pages++;
@@ -469,6 +477,15 @@ static syntra_status_t page_allocator_validate_unlocked(void)
         if ((allocated && (owner <= (uint8_t)SYNTRA_PAGE_OWNER_NONE ||
                            owner >= (uint8_t)SYNTRA_PAGE_OWNER_MAX)) ||
             (!allocated && owner != (uint8_t)SYNTRA_PAGE_OWNER_NONE))
+            return SYNTRA_STATUS_ERROR;
+    }
+
+    {
+        size_t owner_total = 0U;
+        size_t owner_index;
+        for (owner_index = 1U; owner_index < SYNTRA_PAGE_OWNER_MAX; ++owner_index)
+            owner_total += owner_page_counts[owner_index];
+        if (owner_total != observed_allocated)
             return SYNTRA_STATUS_ERROR;
     }
 
@@ -579,6 +596,33 @@ size_t syntra_page_allocator_total_count(void)
     size_t count = page_allocator_total_count_unlocked();
     syntra_irq_restore(irq_state);
     return count;
+}
+
+
+syntra_status_t syntra_page_allocator_get_stats(
+    syntra_page_allocator_stats_t *stats)
+{
+    syntra_irq_state_t irq_state;
+    size_t owner_index;
+
+    if (stats == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    irq_state = syntra_irq_save();
+    if (!initialized)
+    {
+        syntra_irq_restore(irq_state);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    stats->total_pages = total_pages;
+    stats->free_pages = free_pages;
+    stats->allocated_pages = total_pages - free_pages;
+    for (owner_index = 0U; owner_index < SYNTRA_PAGE_OWNER_MAX; ++owner_index)
+        stats->owner_pages[owner_index] = owner_page_counts[owner_index];
+    stats->valid = 1;
+    syntra_irq_restore(irq_state);
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t syntra_page_allocator_validate(void)
