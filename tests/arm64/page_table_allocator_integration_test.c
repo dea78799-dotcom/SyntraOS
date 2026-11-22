@@ -15,7 +15,8 @@ static syntra_status_t allocate_page(void *context, uint64_t *physical_address)
 {
     (void)context;
     if (physical_address == NULL) return SYNTRA_STATUS_INVALID_ARGUMENT;
-    return syntra_page_alloc((uintptr_t *)physical_address);
+    return syntra_page_alloc_owned((uintptr_t *)physical_address,
+        SYNTRA_PAGE_OWNER_PAGE_TABLE);
 }
 
 static uint64_t *resolve_page(uint64_t physical_address, void *context)

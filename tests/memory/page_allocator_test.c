@@ -27,6 +27,21 @@ int main(void)
     assert(syntra_page_allocator_free_count() == 2U);
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
 
+    /* Ownership tags reject cross-subsystem frees and clear on release. */
+    {
+        syntra_page_owner_t owner = SYNTRA_PAGE_OWNER_NONE;
+        assert(syntra_page_alloc_owned(&third, SYNTRA_PAGE_OWNER_PAGE_TABLE) == SYNTRA_STATUS_OK);
+        assert(syntra_page_get_owner(third, &owner) == SYNTRA_STATUS_OK);
+        assert(owner == SYNTRA_PAGE_OWNER_PAGE_TABLE);
+        assert(syntra_page_free_owned(third, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_PERMISSION_DENIED);
+        assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+        assert(syntra_page_free_owned(third, SYNTRA_PAGE_OWNER_PAGE_TABLE) == SYNTRA_STATUS_OK);
+        assert(syntra_page_get_owner(third, &owner) == SYNTRA_STATUS_ERROR);
+        assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+        assert(syntra_page_alloc_owned(&third, SYNTRA_PAGE_OWNER_NONE) == SYNTRA_STATUS_INVALID_ARGUMENT);
+        assert(syntra_page_alloc_owned(&third, SYNTRA_PAGE_OWNER_MAX) == SYNTRA_STATUS_INVALID_ARGUMENT);
+    }
+
     assert(syntra_page_alloc(NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(syntra_page_alloc(&first) == SYNTRA_STATUS_OK);
     assert(syntra_page_alloc(&second) == SYNTRA_STATUS_OK);
@@ -108,6 +123,18 @@ int main(void)
            SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(syntra_page_alloc_contiguous(2U, NULL) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_page_alloc_contiguous_owned(2U, &first,
+        SYNTRA_PAGE_OWNER_DRIVER) == SYNTRA_STATUS_OK);
+    {
+        syntra_page_owner_t owner = SYNTRA_PAGE_OWNER_NONE;
+        assert(syntra_page_get_owner(first, &owner) == SYNTRA_STATUS_OK);
+        assert(owner == SYNTRA_PAGE_OWNER_DRIVER);
+        assert(syntra_page_get_owner(first + SYNTRA_PAGE_SIZE, &owner) == SYNTRA_STATUS_OK);
+        assert(owner == SYNTRA_PAGE_OWNER_DRIVER);
+        assert(syntra_page_free_owned(first, SYNTRA_PAGE_OWNER_DRIVER) == SYNTRA_STATUS_OK);
+        assert(syntra_page_free_owned(first + SYNTRA_PAGE_SIZE,
+            SYNTRA_PAGE_OWNER_DRIVER) == SYNTRA_STATUS_OK);
+    }
     assert(syntra_page_alloc_contiguous(2U, &first) == SYNTRA_STATUS_OK);
     assert(first == (uintptr_t)0x40000000U);
     assert(syntra_page_allocator_free_count() == 2U);

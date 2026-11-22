@@ -20,6 +20,8 @@ static size_t total_pages;
 static size_t free_pages;
 static size_t allocation_cursor;
 static int initialized;
+/* One byte per managed physical page; zero means the page is free. */
+static uint8_t page_owners[SYNTRA_PAGE_COUNT];
 
 static unsigned int bit_index(uint64_t value)
 {
@@ -164,6 +166,11 @@ syntra_status_t syntra_page_allocator_init(void)
 {
     size_t index;
 
+    for (index = 0U; index < SYNTRA_PAGE_COUNT; ++index)
+    {
+        page_owners[index] = (uint8_t)SYNTRA_PAGE_OWNER_NONE;
+    }
+
     for (index = 0U; index < SYNTRA_BITMAP_WORD_COUNT; ++index)
     {
         free_bitmap[index] = 0U;
@@ -249,11 +256,13 @@ syntra_status_t syntra_page_allocator_init(void)
     return SYNTRA_STATUS_OK;
 }
 
-static syntra_status_t page_alloc_unlocked(uintptr_t *physical_address)
+static syntra_status_t page_alloc_unlocked(
+    uintptr_t *physical_address, syntra_page_owner_t owner)
 {
     size_t index;
 
-    if (!initialized || physical_address == NULL)
+    if (!initialized || physical_address == NULL ||
+        owner <= SYNTRA_PAGE_OWNER_NONE || owner >= SYNTRA_PAGE_OWNER_MAX)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
@@ -271,6 +280,7 @@ static syntra_status_t page_alloc_unlocked(uintptr_t *physical_address)
 
     free_page_clear(index);
     bitmap_set(allocated_bitmap, index);
+    page_owners[index] = (uint8_t)owner;
     free_pages--;
 
     allocation_cursor = index + 1U;
@@ -321,13 +331,15 @@ static int find_free_contiguous_range(
 
 static syntra_status_t page_alloc_contiguous_unlocked(
     size_t page_count,
-    uintptr_t *physical_address)
+    uintptr_t *physical_address,
+    syntra_page_owner_t owner)
 {
     size_t index;
     size_t end_exclusive;
 
     if (!initialized || physical_address == NULL || page_count == 0U ||
-        page_count > SYNTRA_PAGE_COUNT)
+        page_count > SYNTRA_PAGE_COUNT ||
+        owner <= SYNTRA_PAGE_OWNER_NONE || owner >= SYNTRA_PAGE_OWNER_MAX)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
     if (free_pages < page_count)
@@ -349,6 +361,7 @@ static syntra_status_t page_alloc_contiguous_unlocked(
         {
             free_page_clear(index + offset);
             bitmap_set(allocated_bitmap, index + offset);
+            page_owners[index + offset] = (uint8_t)owner;
         }
     }
 
@@ -361,7 +374,10 @@ static syntra_status_t page_alloc_contiguous_unlocked(
     return SYNTRA_STATUS_OK;
 }
 
-static syntra_status_t page_free_unlocked(uintptr_t physical_address)
+static syntra_status_t page_free_unlocked(
+    uintptr_t physical_address,
+    syntra_page_owner_t expected_owner,
+    int enforce_owner)
 {
     size_t index;
 
@@ -377,8 +393,13 @@ static syntra_status_t page_free_unlocked(uintptr_t physical_address)
     {
         return SYNTRA_STATUS_ERROR;
     }
+    if (enforce_owner && page_owners[index] != (uint8_t)expected_owner)
+    {
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+    }
 
     bitmap_clear(allocated_bitmap, index);
+    page_owners[index] = (uint8_t)SYNTRA_PAGE_OWNER_NONE;
     free_page_set(index);
     free_pages++;
     if (index < allocation_cursor)
@@ -441,6 +462,16 @@ static syntra_status_t page_allocator_validate_unlocked(void)
         observed_allocated += (size_t)count_set_bits(allocated_word);
     }
 
+    for (word_index = 0U; word_index < SYNTRA_PAGE_COUNT; ++word_index)
+    {
+        int allocated = bitmap_test(allocated_bitmap, word_index);
+        uint8_t owner = page_owners[word_index];
+        if ((allocated && (owner <= (uint8_t)SYNTRA_PAGE_OWNER_NONE ||
+                           owner >= (uint8_t)SYNTRA_PAGE_OWNER_MAX)) ||
+            (!allocated && owner != (uint8_t)SYNTRA_PAGE_OWNER_NONE))
+            return SYNTRA_STATUS_ERROR;
+    }
+
     if (observed_free != free_pages ||
         observed_free + observed_allocated != total_pages ||
         total_pages > SYNTRA_PAGE_COUNT)
@@ -456,22 +487,49 @@ static syntra_status_t page_allocator_validate_unlocked(void)
  * update. This is not an SMP lock and does not make the allocator safe for
  * concurrent access from multiple CPU cores.
  */
-syntra_status_t syntra_page_alloc(uintptr_t *physical_address)
+syntra_status_t syntra_page_alloc_owned(
+    uintptr_t *physical_address, syntra_page_owner_t owner)
 {
     syntra_irq_state_t irq_state = syntra_irq_save();
-    syntra_status_t status = page_alloc_unlocked(physical_address);
+    syntra_status_t status = page_alloc_unlocked(physical_address, owner);
     syntra_irq_restore(irq_state);
     return status;
 }
 
+syntra_status_t syntra_page_alloc(uintptr_t *physical_address)
+{
+    return syntra_page_alloc_owned(physical_address, SYNTRA_PAGE_OWNER_KERNEL);
+}
 
-syntra_status_t syntra_page_alloc_contiguous(
-    size_t page_count,
-    uintptr_t *physical_address)
+
+syntra_status_t syntra_page_alloc_contiguous_owned(
+    size_t page_count, uintptr_t *physical_address,
+    syntra_page_owner_t owner)
 {
     syntra_irq_state_t irq_state = syntra_irq_save();
-    syntra_status_t status =
-        page_alloc_contiguous_unlocked(page_count, physical_address);
+    syntra_status_t status = page_alloc_contiguous_unlocked(
+        page_count, physical_address, owner);
+    syntra_irq_restore(irq_state);
+    return status;
+}
+
+syntra_status_t syntra_page_alloc_contiguous(
+    size_t page_count, uintptr_t *physical_address)
+{
+    return syntra_page_alloc_contiguous_owned(
+        page_count, physical_address, SYNTRA_PAGE_OWNER_KERNEL);
+}
+
+syntra_status_t syntra_page_free_owned(
+    uintptr_t physical_address, syntra_page_owner_t expected_owner)
+{
+    syntra_irq_state_t irq_state = syntra_irq_save();
+    syntra_status_t status;
+    if (expected_owner <= SYNTRA_PAGE_OWNER_NONE ||
+        expected_owner >= SYNTRA_PAGE_OWNER_MAX)
+        status = SYNTRA_STATUS_INVALID_ARGUMENT;
+    else
+        status = page_free_unlocked(physical_address, expected_owner, 1);
     syntra_irq_restore(irq_state);
     return status;
 }
@@ -479,7 +537,30 @@ syntra_status_t syntra_page_alloc_contiguous(
 syntra_status_t syntra_page_free(uintptr_t physical_address)
 {
     syntra_irq_state_t irq_state = syntra_irq_save();
-    syntra_status_t status = page_free_unlocked(physical_address);
+    syntra_status_t status = page_free_unlocked(physical_address,
+        SYNTRA_PAGE_OWNER_NONE, 0);
+    syntra_irq_restore(irq_state);
+    return status;
+}
+
+syntra_status_t syntra_page_get_owner(
+    uintptr_t physical_address, syntra_page_owner_t *owner)
+{
+    syntra_irq_state_t irq_state;
+    size_t index;
+    syntra_status_t status = SYNTRA_STATUS_OK;
+    if (owner == NULL ||
+        physical_address % (uintptr_t)SYNTRA_PAGE_SIZE != 0U ||
+        (uint64_t)physical_address >= SYNTRA_PAGE_ALLOCATOR_MAX_PHYSICAL_ADDRESS)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    irq_state = syntra_irq_save();
+    index = (size_t)(physical_address / (uintptr_t)SYNTRA_PAGE_SIZE);
+    if (!initialized)
+        status = SYNTRA_STATUS_INVALID_ARGUMENT;
+    else if (!bitmap_test(allocated_bitmap, index))
+        status = SYNTRA_STATUS_ERROR;
+    else
+        *owner = (syntra_page_owner_t)page_owners[index];
     syntra_irq_restore(irq_state);
     return status;
 }
