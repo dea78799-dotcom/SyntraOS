@@ -79,6 +79,23 @@ int main(void)
     assert(syntra_arm64_address_space_validate(&second) == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
 
+    /* Unmap reclaims the process frame and now-empty L3/L2 tables. */
+    assert(syntra_arm64_address_space_unmap_user_page(
+        &first, 0x40000000ULL) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_address_space_unmap_user_page(
+        &first, 0x40000000ULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
+    assert(syntra_arm64_address_space_translate(
+        &first, 0x40000000ULL, &translation) == SYNTRA_STATUS_ERROR);
+    assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
+
+    /* The same virtual range can be populated again after reclamation. */
+    assert(syntra_page_alloc_owned(
+        &first_process_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_address_space_map_user_page(
+        &first, 0x40000000ULL, first_process_page,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
+
     assert(syntra_arm64_address_space_destroy(&first) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_address_space_destroy(&second) == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_free_count() == initial_free);

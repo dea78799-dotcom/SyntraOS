@@ -146,6 +146,112 @@ syntra_status_t syntra_arm64_address_space_map_user_page(
     return SYNTRA_STATUS_OK;
 }
 
+static int table_is_empty(const uint64_t *table)
+{
+    for (size_t i = 0U; i < SYNTRA_ARM64_MMU_TABLE_ENTRIES; ++i)
+        if (table[i] != 0ULL)
+            return 0;
+    return 1;
+}
+
+syntra_status_t syntra_arm64_address_space_unmap_user_page(
+    syntra_arm64_address_space_t *space,
+    uint64_t virtual_address)
+{
+    uint16_t indices[4];
+    uint64_t *root, *level2, *level3;
+    uint64_t descriptor, level2_pa, level3_pa, process_pa;
+    size_t mapping_index;
+    syntra_status_t status;
+
+    if (space == NULL || !space->initialized ||
+        (virtual_address & (SYNTRA_ARM64_MMU_PAGE_SIZE - 1ULL)) != 0ULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    for (mapping_index = 0U; mapping_index < space->mapping_count;
+         ++mapping_index)
+        if (space->mappings[mapping_index].virtual_address == virtual_address)
+            break;
+    if (mapping_index == space->mapping_count)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    process_pa = space->mappings[mapping_index].physical_address;
+    status = page_owner_is(process_pa, SYNTRA_PAGE_OWNER_PROCESS);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    status = syntra_arm64_mmu_get_table_indices(virtual_address, indices);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    root = resolve_page_table_page(
+        space->page_table.root_physical_address, space);
+    if (root == NULL)
+        return SYNTRA_STATUS_ERROR;
+
+    descriptor = root[indices[0]];
+    if ((descriptor & (DESC_VALID | DESC_TYPE)) !=
+        (DESC_VALID | DESC_TYPE) ||
+        (descriptor & ~(DESC_ADDR | 3ULL)) != 0ULL)
+        return SYNTRA_STATUS_ERROR;
+    level2_pa = descriptor & DESC_ADDR;
+    status = page_owner_is(level2_pa, SYNTRA_PAGE_OWNER_PAGE_TABLE);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+    level2 = resolve_page_table_page(level2_pa, space);
+    if (level2 == NULL)
+        return SYNTRA_STATUS_ERROR;
+
+    descriptor = level2[indices[1]];
+    if ((descriptor & (DESC_VALID | DESC_TYPE)) !=
+        (DESC_VALID | DESC_TYPE) ||
+        (descriptor & ~(DESC_ADDR | 3ULL)) != 0ULL)
+        return SYNTRA_STATUS_ERROR;
+    level3_pa = descriptor & DESC_ADDR;
+    status = page_owner_is(level3_pa, SYNTRA_PAGE_OWNER_PAGE_TABLE);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+    level3 = resolve_page_table_page(level3_pa, space);
+    if (level3 == NULL)
+        return SYNTRA_STATUS_ERROR;
+
+    descriptor = level3[indices[2]];
+    if ((descriptor & (DESC_VALID | DESC_TYPE)) !=
+        (DESC_VALID | DESC_TYPE) ||
+        (descriptor & DESC_ADDR) != process_pa)
+        return SYNTRA_STATUS_ERROR;
+
+    level3[indices[2]] = 0ULL;
+    status = syntra_page_free_owned(
+        (uintptr_t)process_pa, SYNTRA_PAGE_OWNER_PROCESS);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    for (size_t i = mapping_index + 1U; i < space->mapping_count; ++i)
+        space->mappings[i - 1U] = space->mappings[i];
+    space->mapping_count--;
+
+    if (table_is_empty(level3))
+    {
+        level2[indices[1]] = 0ULL;
+        status = syntra_page_free_owned(
+            (uintptr_t)level3_pa, SYNTRA_PAGE_OWNER_PAGE_TABLE);
+        if (status != SYNTRA_STATUS_OK)
+            return status;
+
+        if (table_is_empty(level2))
+        {
+            root[indices[0]] = 0ULL;
+            status = syntra_page_free_owned(
+                (uintptr_t)level2_pa, SYNTRA_PAGE_OWNER_PAGE_TABLE);
+            if (status != SYNTRA_STATUS_OK)
+                return status;
+        }
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_arm64_address_space_translate(
     syntra_arm64_address_space_t *space,
     uint64_t virtual_address,

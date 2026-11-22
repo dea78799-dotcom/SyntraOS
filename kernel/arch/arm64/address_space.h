@@ -53,6 +53,11 @@ syntra_status_t syntra_arm64_address_space_map_user_page(
     syntra_arm64_mmu_access_t access,
     int executable);
 
+/* Remove a mapping and release its exclusively owned PROCESS page. */
+syntra_status_t syntra_arm64_address_space_unmap_user_page(
+    syntra_arm64_address_space_t *space,
+    uint64_t virtual_address);
+
 /* Translate through this address space's root, without changing TTBR0_EL1. */
 syntra_status_t syntra_arm64_address_space_translate(
     syntra_arm64_address_space_t *space,
