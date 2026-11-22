@@ -102,7 +102,8 @@ static syntra_status_t process_key(
     if ((code > SYNTRA_INPUT_KEY_MAX &&
          code != SYNTRA_INPUT_BTN_LEFT &&
          code != SYNTRA_INPUT_BTN_RIGHT &&
-         code != SYNTRA_INPUT_BTN_MIDDLE) ||
+         code != SYNTRA_INPUT_BTN_MIDDLE &&
+         code != SYNTRA_INPUT_BTN_TOUCH) ||
         (value != 0 && value != 1 && value != 2))
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
@@ -124,6 +125,7 @@ static syntra_status_t process_key(
     if (code == SYNTRA_INPUT_BTN_LEFT) button = SYNTRA_INPUT_BUTTON_LEFT;
     else if (code == SYNTRA_INPUT_BTN_RIGHT) button = SYNTRA_INPUT_BUTTON_RIGHT;
     else if (code == SYNTRA_INPUT_BTN_MIDDLE) button = SYNTRA_INPUT_BUTTON_MIDDLE;
+    else if (code == SYNTRA_INPUT_BTN_TOUCH) button = SYNTRA_INPUT_BUTTON_LEFT;
 
     if (button != 0U)
     {
@@ -245,6 +247,8 @@ int syntra_input_key_down(
         return (state->buttons & SYNTRA_INPUT_BUTTON_RIGHT) != 0U;
     if (key_code == SYNTRA_INPUT_BTN_MIDDLE)
         return (state->buttons & SYNTRA_INPUT_BUTTON_MIDDLE) != 0U;
+    if (key_code == SYNTRA_INPUT_BTN_TOUCH)
+        return (state->buttons & SYNTRA_INPUT_BUTTON_LEFT) != 0U;
     if (key_code > SYNTRA_INPUT_KEY_MAX)
         return 0;
 
