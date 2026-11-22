@@ -469,28 +469,32 @@ syntra_arm64_exception_handle_and_select(
         context->vector_index == SYNTRA_ARM64_VECTOR_CURRENT_SPX_IRQ)
     {
         current = scheduler_get_current();
-        if (current == NULL)
-            return context;
+        if (current != NULL)
+            current->cpu_context = context;
 
-        current->cpu_context = context;
+        /*
+         * current may be NULL when a thread has just terminated. In that
+         * case this exception frame is the idle continuation while the
+         * scheduler selects the next live thread.
+         */
         next = scheduler_schedule_next_with_context();
         if (next == NULL)
-        {
-            (void)scheduler_rollback_context_switch(current->thread_id, 0U);
             return context;
-        }
+
         status = activate_thread_address_space(next->thread_id);
         if (status != SYNTRA_STATUS_OK)
         {
+            unsigned int previous_id =
+                current != NULL ? current->thread_id : 0U;
             syntra_exception_uart_puts("Scheduler address-space activation failed: previous=");
-            syntra_exception_uart_hex(current->thread_id);
+            syntra_exception_uart_hex(previous_id);
             syntra_exception_uart_puts(" next=");
             syntra_exception_uart_hex(next->thread_id);
             syntra_exception_uart_puts(" status=");
             syntra_exception_uart_hex((uint64_t)(int64_t)status);
             syntra_exception_uart_puts("\\n");
             (void)scheduler_rollback_context_switch(
-                current->thread_id, next->thread_id);
+                previous_id, next->thread_id);
             return context;
         }
         return (syntra_arm64_exception_context_t *)next->cpu_context;
