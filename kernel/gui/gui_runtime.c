@@ -535,7 +535,9 @@ syntra_status_t syntra_gui_runtime_process_event_at(
                           runtime->last_gesture.target_id);
 
     if (event->type == SYNTRA_INPUT_EV_KEY &&
-        event->code == SYNTRA_INPUT_BTN_LEFT && event->value == 1 &&
+        (event->code == SYNTRA_INPUT_BTN_LEFT ||
+         event->code == SYNTRA_INPUT_BTN_TOUCH) &&
+        event->value == 1 &&
         (old_buttons & SYNTRA_INPUT_BUTTON_LEFT) == 0U)
     {
         status = handle_launcher_dock_click(
