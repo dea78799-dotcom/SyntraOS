@@ -26,8 +26,9 @@ typedef struct
 } syntra_arm64_kernel_va_reservation_t;
 
 /*
- * Initializes the bounded registry once. This V1 registry is not synchronized;
- * callers must keep it single-threaded until an IRQ-safe locking layer is added.
+ * Initializes once during boot, before publication and before IRQ enablement.
+ * Runtime operations mask local IRQ exceptions on the current single-core target;
+ * this is not an SMP lock and does not provide cross-core exclusion.
  * It reserves virtual ranges only: it does not allocate physical pages, create
  * page-table mappings, or enable the MMU.
  */
