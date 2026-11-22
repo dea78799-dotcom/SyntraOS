@@ -72,7 +72,7 @@ int main(void)
     syntra_arm64_mmu_translation_t translation;
     syntra_page_allocator_stats_t before, after_unmap, after;
     uintptr_t process_page_a, process_page_b, kernel_data_page;
-    uintptr_t failure_process_page, filler_pages[10];
+    uintptr_t failure_process_page, filler_pages[9];
     uint64_t kernel_root, kernel_l2, kernel_l3;
     uint64_t *kernel_root_entries, *kernel_l2_entries;
     size_t initial_free;
@@ -202,7 +202,7 @@ int main(void)
      */
     assert(syntra_page_alloc_owned(
         &failure_process_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
-    for (size_t i = 0U; i < 10U; ++i)
+    for (size_t i = 0U; i < 9U; ++i)
         assert(syntra_page_alloc_owned(
             &filler_pages[i], SYNTRA_PAGE_OWNER_DRIVER) == SYNTRA_STATUS_OK);
 
@@ -219,7 +219,7 @@ int main(void)
     assert(after.free_pages == 1U);
     assert(after.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] == 4U);
     assert(after.owner_pages[SYNTRA_PAGE_OWNER_PROCESS] == 1U);
-    assert(after.owner_pages[SYNTRA_PAGE_OWNER_DRIVER] == 10U);
+    assert(after.owner_pages[SYNTRA_PAGE_OWNER_DRIVER] == 9U);
 
     for (size_t i = 0U; i < 10U; ++i)
         assert(syntra_page_free_owned(
