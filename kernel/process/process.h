@@ -82,6 +82,8 @@ syntra_status_t process_refresh_all_states(void);
 syntra_status_t process_terminate_threads(unsigned int process_id);
 /* Destroy address spaces belonging to processes whose threads all exited. */
 syntra_status_t process_reap_terminated(void);
+/* Release a fully terminated process record after its address space is gone. */
+syntra_status_t process_release_terminated(unsigned int process_id);
 
 /*
  * With attached threads, state changes are accepted only when they match
