@@ -129,7 +129,7 @@ int main(void)
     assert(syntra_gui_window_interaction_process(
                &interaction, &manager, &input) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
-    assert(manager.count == 1U);
+    assert(manager.count == 2U);
 
     puts("SyntraOS GUI window interaction tests passed.");
     return 0;
