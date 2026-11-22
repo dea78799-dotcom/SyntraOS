@@ -1202,7 +1202,7 @@ static syntra_status_t syntra_arm64_process_address_space_scheduler_test(void)
         return SYNTRA_STATUS_ERROR;
 
     syntra_uart_puts(
-        "Process scheduler TTBR0 isolation: PASS (process A <-> process B -> kernel root)\n");
+        "Process scheduler TTBR0 switching: PASS (process A <-> process B -> kernel root)\n");
     return SYNTRA_STATUS_OK;
 
 fail_processes:
