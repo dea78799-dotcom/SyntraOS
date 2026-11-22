@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "../../core/status.h"
+#include "../../../core/status.h"
 
 #define SYNTRA_FDT_MAGIC 0xD00DFEEDU
 #define SYNTRA_FDT_MAX_VERSION 17U
