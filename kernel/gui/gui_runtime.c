@@ -39,21 +39,112 @@ syntra_status_t syntra_gui_runtime_init(
     return SYNTRA_STATUS_OK;
 }
 
+/* Launcher tile activation is handled in normal input context. */
+static syntra_status_t activate_launcher_tile(
+    syntra_gui_runtime_t *runtime,
+    uint32_t tile)
+{
+    syntra_gui_app_type_t app_type;
+    uint32_t index;
+    uint32_t existing_id = 0U;
+    uint32_t new_id;
+    syntra_status_t status;
+
+    if (tile == 0U) app_type = SYNTRA_GUI_APP_FILES;
+    else if (tile == 1U) app_type = SYNTRA_GUI_APP_SETTINGS;
+    else return SYNTRA_STATUS_OK; /* APP/INFO are reserved surfaces. */
+
+    for (index = 0U; index < runtime->windows.count; ++index)
+    {
+        if (runtime->windows.windows[index].app_type == app_type)
+        {
+            existing_id = runtime->windows.windows[index].id;
+            break;
+        }
+    }
+
+    if (existing_id != 0U)
+        return syntra_gui_window_focus(&runtime->windows, existing_id);
+
+    if (app_type == SYNTRA_GUI_APP_FILES)
+        status = syntra_gui_window_open_app(
+            &runtime->windows, 30U, 190U, 270U, 230U,
+            app_type, &new_id);
+    else
+        status = syntra_gui_window_open_app(
+            &runtime->windows, 340U, 190U, 270U, 230U,
+            app_type, &new_id);
+
+    return status;
+}
+
+static syntra_status_t handle_launcher_click(
+    syntra_gui_runtime_t *runtime,
+    uint32_t pointer_x,
+    uint32_t pointer_y)
+{
+    uint32_t index;
+    const syntra_gui_window_t *launcher = NULL;
+    uint32_t tile_width;
+    uint32_t tile_x;
+    uint32_t tile_y;
+    uint32_t local_x;
+    uint32_t local_y;
+    uint32_t tile;
+    
+    for (index = 0U; index < runtime->windows.count; ++index)
+    {
+        if (runtime->windows.windows[index].app_type ==
+            SYNTRA_GUI_APP_LAUNCHER)
+        {
+            launcher = &runtime->windows.windows[index];
+            break;
+        }
+    }
+    if (launcher == NULL || pointer_x < launcher->x + 4U ||
+        pointer_y < launcher->y + 24U)
+        return SYNTRA_STATUS_OK;
+
+    local_x = pointer_x - (launcher->x + 8U);
+    local_y = pointer_y - (launcher->y + 28U);
+    tile_width = (launcher->width - 20U) / 2U;
+    if (local_x >= 2U * tile_width + 4U || local_y >= 64U)
+        return SYNTRA_STATUS_OK;
+
+    tile_x = local_x / (tile_width + 4U);
+    tile_y = local_y / 32U;
+    if (tile_x > 1U || tile_y > 1U)
+        return SYNTRA_STATUS_OK;
+    tile = tile_y * 2U + tile_x;
+    return activate_launcher_tile(runtime, tile);
+}
+
 syntra_status_t syntra_gui_runtime_process_event(
     syntra_gui_runtime_t *runtime,
     const syntra_input_event_t *event)
 {
     syntra_status_t status;
+    uint32_t old_buttons;
 
     if (runtime == NULL || runtime->initialized != 1 || event == NULL)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
+    old_buttons = runtime->input.buttons;
     status = syntra_input_process(&runtime->input, event);
     if (status != SYNTRA_STATUS_OK) return status;
 
     status = syntra_gui_window_interaction_process(
         &runtime->interaction, &runtime->windows, &runtime->input);
     if (status != SYNTRA_STATUS_OK) return status;
+
+    if (event->type == SYNTRA_INPUT_EV_KEY &&
+        event->code == SYNTRA_INPUT_BTN_LEFT && event->value == 1 &&
+        (old_buttons & SYNTRA_INPUT_BUTTON_LEFT) == 0U)
+    {
+        status = handle_launcher_click(
+            runtime, runtime->input.pointer_x, runtime->input.pointer_y);
+        if (status != SYNTRA_STATUS_OK) return status;
+    }
 
     return SYNTRA_STATUS_OK;
 }
