@@ -1,51 +1,118 @@
 # SyntraOS Memory Manager
 
 Version: 0.1.0
-Status: Design Phase
+Status: Implemented foundation; virtual-memory isolation in progress
+Target currently validated by CI: ARM64 QEMU `virt` and host tests
 
-## 1. Overview
+## 1. Scope
 
-The Memory Manager controls memory resources
-used by the SyntraOS kernel and processes.
+The memory subsystem currently contains three distinct layers:
 
-## 2. Main Responsibilities
+1. A fixed kernel allocation pool in `kernel/memory/memory.c`.
+2. A physical memory-region registry and physical page allocator.
+3. ARM64 translation descriptors, page-table construction, mapping-plan validation,
+   and a boot-time MMU activation path.
 
-- Manage physical memory.
-- Manage virtual memory.
-- Allocate memory to processes.
-- Release unused memory.
-- Track memory usage.
-- Protect memory regions.
+These layers must not be treated as interchangeable. In particular, the fixed
+kernel pool is not the physical page allocator.
 
-## 3. Memory Types
+## 2. Implemented foundation
 
-SyntraOS plans to support:
+### 2.1 Fixed kernel allocation pool
 
-- Physical Memory (RAM)
-- Virtual Memory
-- Kernel Memory
-- User-space Memory
+- 4 KiB allocation blocks.
+- 1024 blocks (4 MiB total pool).
+- Allocation/release tracking, diagnostics, snapshots, and validation APIs.
+- This pool is backed by a static array; it does not represent arbitrary physical RAM.
 
-## 4. Memory Protection
+### 2.2 Physical memory map
 
-- Isolate process memory spaces.
-- Prevent unauthorized memory access.
-- Protect kernel memory.
-- Validate memory operations.
+- FDT discovery of enabled root-level RAM nodes.
+- Discovery of static `/reserved-memory` children.
+- Application of FDT header reservation-map entries.
+- Reservation of the DTB and complete linker-defined kernel image before page
+  allocation begins.
+- A bounded region registry rejects overlapping added regions and supports carving
+  reserved ranges out of RAM.
 
-## 5. Architecture Support
+Dynamic `/reserved-memory` nodes that specify `size` rather than `reg` are not
+allocated by the current discovery path.
 
-Memory management must support:
+### 2.3 Physical page allocator V1
 
-- ARM64
-- x86_64
-- RISC-V 64
+- 4 KiB pages managed with static free/allocated bitmaps and a summary bitmap.
+- Single-page and physically contiguous page allocation.
+- Allocation is limited to physical addresses below 4 GiB; RAM crossing that
+  boundary is clipped and RAM entirely above it is ignored.
+- Local IRQ masking protects allocator metadata against same-core interrupt
+  re-entry on the current single-core target.
 
-Architecture-specific memory operations
-will be implemented separately.
+Limitations: this is not an SMP lock, there is no page ownership/refcount model,
+and the allocator does not yet provide a general-purpose kernel heap or per-process
+allocation accounting.
 
-## 6. Current Status
+### 2.4 ARM64 MMU and page tables
 
-Memory Manager is not implemented yet.
+- 4 KiB granule descriptor helpers and a software page-table walker.
+- L1/L2/L3 table construction with 1 GiB / 2 MiB block and 4 KiB page mappings
+  where supported by the builder.
+- Mapping-plan construction for the kernel image, DTB, UART, GIC, and discovered
+  optional MMIO devices.
+- Permission policy separates executable read-only kernel text from read-only
+  non-executable rodata and writable non-executable data/stack; MMIO is Device
+  memory and non-executable.
+- The ARM64 QEMU boot path builds and verifies identity mappings, prepares the
+  translation registers, enables the MMU, checks register state, and re-walks
+  planned mappings after activation.
 
-This document describes the planned design.
+A successful host descriptor test or ELF build alone is not proof of hardware
+translation. The QEMU boot test is the evidence for the configured emulated target;
+it is not evidence of physical-device support.
+
+## 3. Current limitations
+
+- The physical allocator is capped at 4 GiB and is designed for the current
+  single-core boot target.
+- Page-table pages are allocated from the physical page allocator, but there is
+  no general page-table reclamation or mapping teardown API.
+- The current boot mapping is primarily identity mapping; a complete kernel
+  higher-half layout and dynamic virtual address allocator are not implemented.
+- There is no per-process address-space object with independent page-table roots.
+- Process memory ownership, user-page lifecycle, copy-on-write, demand paging,
+  swapping, and memory-mapped file support are not implemented.
+- Full SMP-safe allocator synchronization and per-page reference tracking are
+  not implemented.
+- x86_64 and RISC-V memory backends are not implemented.
+
+## 4. Next implementation priorities
+
+1. Add stronger validation for memory-region maps and page allocator invariants,
+   including overflow, reservation boundaries, duplicate/overlapping ranges,
+   allocation/free accounting, and failure rollback.
+2. Define physical-page ownership and lifecycle APIs before sharing pages between
+   page tables, processes, or drivers.
+3. Add a virtual-address-space abstraction with explicit root ownership and
+   map/unmap/translate operations.
+4. Integrate one address space per process only after map/unmap and page ownership
+   semantics are tested.
+5. Add SMP-safe synchronization when multi-core execution is introduced.
+6. Expand QEMU tests to verify permission faults and address-space isolation, not
+   only successful identity-mapped execution.
+
+## 5. Verification requirements
+
+Every memory change must pass:
+
+- Host Debug and Release builds and unit tests.
+- ARM64 cross-compilation and ELF architecture checks.
+- QEMU boot tests for the configured ARM64 platform.
+- Focused tests for allocator invariants and mapping permissions.
+
+Do not mark a milestone complete from compilation alone. Record separately whether
+host tests, ARM64 build, QEMU boot, and hardware testing have actually run.
+
+## 6. Version policy
+
+This document describes the v0.1.0 foundation. The project remains v0.1.0
+(Early Development) until the required kernel, memory, scheduler, process, IPC,
+GUI, and integration-test exit criteria are met.
