@@ -5,6 +5,7 @@
 #include "../core/status.h"
 
 #define SYNTRA_GUI_MAX_WINDOWS 8U
+#define SYNTRA_GUI_FILES_ENTRY_COUNT 8U
 
 typedef enum
 {
@@ -23,6 +24,7 @@ typedef struct
     uint32_t height;
     syntra_gui_app_type_t app_type;
     uint32_t app_selection;
+    uint32_t app_scroll_offset;
 } syntra_gui_window_t;
 
 /*
