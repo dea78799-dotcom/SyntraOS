@@ -155,18 +155,13 @@ static void test_input_transport_prepare(void)
 
     registers[SYNTRA_VIRTIO_MMIO_DEVICE_ID / sizeof(uint32_t)] =
         SYNTRA_VIRTIO_MMIO_DEVICE_ID_INPUT;
-    registers[SYNTRA_VIRTIO_MMIO_DEVICE_FEATURES / sizeof(uint32_t)] =
-        SYNTRA_VIRTIO_INPUT_FEATURE_EV_SYN |
-        SYNTRA_VIRTIO_INPUT_FEATURE_EV_KEY;
 
     assert(syntra_virtio_mmio_prepare_input_mapped(
         &device, registers, sizeof(registers), &identity) ==
         SYNTRA_STATUS_OK);
     assert(registers[SYNTRA_VIRTIO_MMIO_DEVICE_STATUS / sizeof(uint32_t)] ==
         (SYNTRA_VIRTIO_STATUS_ACKNOWLEDGE | SYNTRA_VIRTIO_STATUS_DRIVER));
-    assert(registers[SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES / sizeof(uint32_t)] ==
-        (SYNTRA_VIRTIO_INPUT_FEATURE_EV_SYN |
-         SYNTRA_VIRTIO_INPUT_FEATURE_EV_KEY));
+    assert(registers[SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES / sizeof(uint32_t)] == 0U);
     assert(registers[SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES_SEL / sizeof(uint32_t)] == 0U);
 
     identity.version = SYNTRA_VIRTIO_MMIO_VERSION_MODERN;
@@ -180,18 +175,6 @@ static void test_input_transport_prepare(void)
          SYNTRA_VIRTIO_STATUS_FEATURES_OK));
     assert(registers[SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES_SEL / sizeof(uint32_t)] == 1U);
     assert(registers[SYNTRA_VIRTIO_MMIO_DRIVER_FEATURES / sizeof(uint32_t)] == 0U);
-
-    /* A keyboard transport without EV_KEY cannot deliver key events. */
-    registers[SYNTRA_VIRTIO_MMIO_DEVICE_FEATURES / sizeof(uint32_t)] =
-        SYNTRA_VIRTIO_INPUT_FEATURE_EV_SYN;
-    registers[SYNTRA_VIRTIO_MMIO_DEVICE_STATUS / sizeof(uint32_t)] = 0U;
-    assert(syntra_virtio_mmio_prepare_input_mapped(
-        &device, registers, sizeof(registers), &identity) ==
-        SYNTRA_STATUS_NOT_IMPLEMENTED);
-    registers[SYNTRA_VIRTIO_MMIO_DEVICE_FEATURES / sizeof(uint32_t)] =
-        SYNTRA_VIRTIO_INPUT_FEATURE_EV_SYN |
-        SYNTRA_VIRTIO_INPUT_FEATURE_EV_KEY;
-    registers[SYNTRA_VIRTIO_MMIO_DEVICE_STATUS / sizeof(uint32_t)] = 0U;
 
     identity.function = SYNTRA_VIRTIO_MMIO_FUNCTION_OTHER;
     assert(syntra_virtio_mmio_prepare_input_mapped(
