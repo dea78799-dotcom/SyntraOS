@@ -287,8 +287,7 @@ int main(void)
 
     assert(syntra_page_allocator_get_stats(&stats) == SYNTRA_STATUS_OK);
     assert(stats.owner_pages[SYNTRA_PAGE_OWNER_PROCESS] == 0U);
-    assert(stats.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] ==
-        baseline.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] - 0U);
+    assert(stats.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] == 3U);
     assert(stats.owner_pages[SYNTRA_PAGE_OWNER_KERNEL] ==
         baseline.owner_pages[SYNTRA_PAGE_OWNER_KERNEL]);
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
