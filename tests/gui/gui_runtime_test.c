@@ -105,6 +105,11 @@ int main(void)
     assert(runtime.windows.count == 2U);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
     move_pointer(&runtime, -18, -105); /* launcher Files tile */
+    /* Launcher is behind Settings; focus it before its tile receives input. */
+    move_pointer(&runtime, -22, -20); /* launcher title bar */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+    move_pointer(&runtime, 22, 20); /* Files tile */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(runtime.windows.count == 3U);
     assert(syntra_gui_window_active(&runtime.windows)->app_type ==
