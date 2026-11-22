@@ -42,7 +42,7 @@ static void test_validation_and_guard_layout(void)
 
     assert(syntra_arm64_kernel_va_release(&first) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_kernel_va_release(&first) ==
-        SYNTRA_STATUS_NOT_IMPLEMENTED);
+        SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(syntra_arm64_kernel_va_registry_validate() == SYNTRA_STATUS_OK);
 
     /* Released first-fit space is reused; the ID remains unique. */
