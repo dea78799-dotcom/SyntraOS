@@ -150,6 +150,29 @@ int main(void)
     assert(syntra_gui_window_active(&runtime.windows)->height == 170U);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
 
+    /* Hover tracks the window under the pointer without focusing it. */
+    {
+        uint32_t files_id = syntra_gui_window_active(&runtime.windows)->id;
+        assert(runtime.hover_target_id == files_id);
+        send_event(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_WHEEL, -1);
+        assert(syntra_gui_window_active(&runtime.windows)->app_scroll_offset == 1U);
+        send_event(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_WHEEL, -5);
+        assert(syntra_gui_window_active(&runtime.windows)->app_scroll_offset == 2U);
+        send_event(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_WHEEL, 1);
+        assert(syntra_gui_window_active(&runtime.windows)->app_scroll_offset == 1U);
+        send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+        assert(syntra_gui_window_active(&runtime.windows)->app_selection == 1U);
+        send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+        framebuffer.pixels = pixels;
+        framebuffer.width = 320U;
+        framebuffer.height = 240U;
+        framebuffer.stride_pixels = 320U;
+        assert(syntra_gui_runtime_render(&runtime, &framebuffer) ==
+               SYNTRA_STATUS_OK);
+        assert(pixels[40U * 320U + 10U] == 0xFF54D6E8U);
+        assert(pixels[86U * 320U + 241U] == 0xFF54D6E8U);
+    }
+
     /* Compact task switcher renders slots and restores minimized windows. */
     assert(syntra_gui_runtime_init(&runtime, 320U, 240U) ==
            SYNTRA_STATUS_OK);
@@ -180,29 +203,6 @@ int main(void)
         assert(syntra_gui_window_active(&runtime.windows)->minimized == 0U);
         send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
         assert(runtime.windows.count == 2U);
-    }
-
-    /* Hover tracks the window under the pointer without focusing it. */
-    {
-        uint32_t files_id = syntra_gui_window_active(&runtime.windows)->id;
-        assert(runtime.hover_target_id == files_id);
-        send_event(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_WHEEL, -1);
-        assert(syntra_gui_window_active(&runtime.windows)->app_scroll_offset == 1U);
-        send_event(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_WHEEL, -5);
-        assert(syntra_gui_window_active(&runtime.windows)->app_scroll_offset == 2U);
-        send_event(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_WHEEL, 1);
-        assert(syntra_gui_window_active(&runtime.windows)->app_scroll_offset == 1U);
-        send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
-        assert(syntra_gui_window_active(&runtime.windows)->app_selection == 1U);
-        send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
-        framebuffer.pixels = pixels;
-        framebuffer.width = 320U;
-        framebuffer.height = 240U;
-        framebuffer.stride_pixels = 320U;
-        assert(syntra_gui_runtime_render(&runtime, &framebuffer) ==
-               SYNTRA_STATUS_OK);
-        assert(pixels[40U * 320U + 10U] == 0xFF54D6E8U);
-        assert(pixels[86U * 320U + 241U] == 0xFF54D6E8U);
     }
 
     /* A covered launcher must not intercept clicks from the front app. */
