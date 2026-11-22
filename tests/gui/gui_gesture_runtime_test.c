@@ -2,7 +2,6 @@
 #include <stdio.h>
 
 #include "gui_runtime.h"
-#include "../input/input.h"
 
 static void event_at(syntra_gui_runtime_t *runtime,
                      uint16_t type, uint16_t code, int32_t value,
