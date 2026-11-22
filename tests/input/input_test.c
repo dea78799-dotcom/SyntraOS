@@ -58,6 +58,24 @@ static void test_buttons_and_keyboard(void)
     assert(!syntra_input_key_down(&state, 30U));
 }
 
+static void test_touchscreen_contact_button(void)
+{
+    syntra_input_state_t state;
+    syntra_input_event_t event = {
+        SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_TOUCH, 1
+    };
+
+    assert(syntra_input_init(&state, 320U, 240U) == SYNTRA_STATUS_OK);
+    assert(syntra_input_process(&state, &event) == SYNTRA_STATUS_OK);
+    assert((state.buttons & SYNTRA_INPUT_BUTTON_LEFT) != 0U);
+    assert(syntra_input_key_down(&state, SYNTRA_INPUT_BTN_TOUCH));
+
+    event.value = 0;
+    assert(syntra_input_process(&state, &event) == SYNTRA_STATUS_OK);
+    assert((state.buttons & SYNTRA_INPUT_BUTTON_LEFT) == 0U);
+    assert(!syntra_input_key_down(&state, SYNTRA_INPUT_BTN_TOUCH));
+}
+
 static void test_absolute_pointer_mapping(void)
 {
     syntra_input_state_t state;
@@ -113,6 +131,7 @@ int main(void)
 
     test_relative_pointer_and_clamping();
     test_buttons_and_keyboard();
+    test_touchscreen_contact_button();
     test_absolute_pointer_mapping();
     test_wheel_sync_and_rejection();
 
