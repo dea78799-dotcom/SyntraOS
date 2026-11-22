@@ -33,7 +33,7 @@ static int point_on_close_control(
 
     close_x = window->x + window->width - CLOSE_SIZE - CLOSE_RIGHT_MARGIN;
     return point_inside(
-        x, y, close_x,
+        x, y, close_x - 2U,
         window->y + CLOSE_TOP_OFFSET,
         TOUCH_CONTROL_WIDTH, TOUCH_CONTROL_HEIGHT);
 }
