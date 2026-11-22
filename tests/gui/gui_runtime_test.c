@@ -302,7 +302,7 @@ int main(void)
     framebuffer.stride_pixels = 640U;
     assert(syntra_gui_runtime_render(&runtime, &framebuffer) ==
            SYNTRA_STATUS_OK);
-    assert(pixels[(size_t)447U * 640U + 150U] == 0xFF54D6E8U);
+    assert(pixels[(size_t)447U * 640U + 340U] == 0xFF54D6E8U);
     /* Invalid dimensions must be rejected rather than creating partial state. */
     assert(syntra_gui_runtime_init(&runtime, 200U, 100U) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
