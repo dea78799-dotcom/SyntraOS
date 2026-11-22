@@ -25,6 +25,7 @@ add_library(syntra_gui STATIC
     kernel/gui/window_interaction.c
     kernel/gui/gui_runtime.c
     kernel/gui/gesture.c
+    kernel/gui/uptime_panel.c
     kernel/input/input.c
 )
 target_include_directories(syntra_gui PUBLIC
