@@ -1,7 +1,5 @@
 #include "kernel_va_registry.h"
 
-#include <limits.h>
-
 typedef struct
 {
     uint8_t active;
@@ -220,7 +218,7 @@ syntra_status_t syntra_arm64_kernel_va_release(
         }
     }
 
-    return SYNTRA_STATUS_NOT_IMPLEMENTED;
+    return SYNTRA_STATUS_INVALID_ARGUMENT;
 }
 
 syntra_status_t syntra_arm64_kernel_va_registry_validate(void)
@@ -246,16 +244,27 @@ syntra_status_t syntra_arm64_kernel_va_registry_validate(void)
         guard_size = (uint64_t)current->guard_pages *
             SYNTRA_ARM64_KERNEL_VA_PAGE_SIZE;
 
+        uint64_t rounded_requested;
+
+        if (current->requested_size > UINT64_MAX -
+            (SYNTRA_ARM64_KERNEL_VA_PAGE_SIZE - 1U))
+            return SYNTRA_STATUS_ERROR;
+        rounded_requested = (current->requested_size +
+            (SYNTRA_ARM64_KERNEL_VA_PAGE_SIZE - 1U)) &
+            ~(SYNTRA_ARM64_KERNEL_VA_PAGE_SIZE - 1U);
+
         if (current->allocation_id == 0U || current->owner == 0U ||
             current->requested_size == 0U ||
             current->usable_size == 0U ||
+            current->usable_size != rounded_requested ||
             (current->reservation_base &
                 (SYNTRA_ARM64_KERNEL_VA_PAGE_SIZE - 1U)) != 0U ||
             (current->usable_base &
                 (SYNTRA_ARM64_KERNEL_VA_PAGE_SIZE - 1U)) != 0U ||
             (current->usable_size &
                 (SYNTRA_ARM64_KERNEL_VA_PAGE_SIZE - 1U)) != 0U ||
-            current->usable_size < current->requested_size ||
+            guard_size > UINT64_MAX - current->usable_size ||
+            current->reservation_base > UINT64_MAX - guard_size ||
             current->usable_base != current->reservation_base + guard_size ||
             current->reservation_size != guard_size + current->usable_size ||
             current->reservation_base < SYNTRA_ARM64_KERNEL_VA_BASE ||
