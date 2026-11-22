@@ -69,14 +69,14 @@ int main(void)
     /* Launcher Files tile focuses the existing Files window. */
     assert(syntra_gui_runtime_init(&runtime, 640U, 480U) ==
            SYNTRA_STATUS_OK);
-    move_pointer(&runtime, -80, -140); /* center -> launcher Files tile */
+    move_pointer(&runtime, -78, -148); /* center -> Files tile center */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(syntra_gui_window_active(&runtime.windows)->app_type ==
            SYNTRA_GUI_APP_FILES);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
 
     /* Settings tile also focuses its existing window without duplication. */
-    move_pointer(&runtime, 120, 0);
+    move_pointer(&runtime, 126, 12); /* Files -> Settings tile center */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(syntra_gui_window_active(&runtime.windows)->app_type ==
            SYNTRA_GUI_APP_SETTINGS);
@@ -116,7 +116,7 @@ int main(void)
     assert(syntra_gui_window_active(&runtime.windows)->app_type ==
            SYNTRA_GUI_APP_LAUNCHER);
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
-    move_pointer(&runtime, 65, -145); /* compact launcher Files tile */
+    move_pointer(&runtime, 67, -145); /* compact Files tile center */
     send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
     assert(runtime.windows.count == 2U);
     assert(syntra_gui_window_active(&runtime.windows)->app_type ==
