@@ -36,6 +36,8 @@ static uint8_t ramfb_config[SYNTRA_RAMFB_CONFIG_SIZE]
     __attribute__((aligned(16)));
 static uint32_t ramfb_pixels[SYNTRA_RAMFB_WIDTH * SYNTRA_RAMFB_HEIGHT]
     __attribute__((aligned(4096)));
+static syntra_gui_runtime_t ramfb_gui_runtime;
+static int ramfb_gui_runtime_ready;
 
 static uint16_t read_be16(const uint8_t *p)
 {
@@ -282,8 +284,12 @@ syntra_status_t syntra_ramfb_init(uintptr_t fw_cfg_base, size_t fw_cfg_size)
     framebuffer.height = SYNTRA_RAMFB_HEIGHT;
     framebuffer.stride_pixels = SYNTRA_RAMFB_WIDTH;
 
-    status = syntra_desktop_render_gui_v5(&framebuffer);
+    status = syntra_gui_runtime_init(
+        &ramfb_gui_runtime, SYNTRA_RAMFB_WIDTH, SYNTRA_RAMFB_HEIGHT);
     if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_gui_runtime_render(&ramfb_gui_runtime, &framebuffer);
+    if (status != SYNTRA_STATUS_OK) return status;
+    ramfb_gui_runtime_ready = 1;
 
     status = syntra_ramfb_encode_config(
         ramfb_config, (uint64_t)(uintptr_t)ramfb_pixels,
