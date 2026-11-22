@@ -80,6 +80,9 @@ int main(void)
            SYNTRA_STATUS_INVALID_ARGUMENT);
     assert(manager.count == 1U);
     assert(syntra_gui_window_active(&manager)->id == front_id);
+    set_pointer(&input, 639U, 479U, 0U);
+    assert(syntra_gui_window_interaction_process(
+        &interaction, &manager, &input) == SYNTRA_STATUS_OK);
 
     /* Direct titlebar controls maximize, restore and minimize windows. */
     {
