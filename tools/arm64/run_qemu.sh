@@ -24,7 +24,18 @@ command -v python3 >/dev/null 2>&1 || {
 
 TMP_DIR="$(mktemp -d)"
 LOG_FILE="$TMP_DIR/serial.log"
+TRACE_FILE="$TMP_DIR/qemu-trace.log"
+TRACE_EVENTS_FILE="$TMP_DIR/trace-events"
 QMP_SOCKET="$TMP_DIR/qmp.sock"
+
+cat > "$TRACE_EVENTS_FILE" <<'TRACE_EVENTS'
+input_event_key_qcode
+input_event_sync
+virtio_input_queue_full
+virtio_queue_notify
+virtio_notify
+virtio_mmio_queue_write
+TRACE_EVENTS
 QEMU_PID=""
 
 cleanup() {
@@ -34,6 +45,10 @@ cleanup() {
     fi
     if [[ -f "$LOG_FILE" ]]; then
         cat "$LOG_FILE"
+    fi
+    if [[ -f "$TRACE_FILE" ]]; then
+        echo "=== QEMU trace ==="
+        cat "$TRACE_FILE"
     fi
     rm -rf "$TMP_DIR"
 }
@@ -51,6 +66,7 @@ timeout --signal=TERM --kill-after=2 "${TIMEOUT_SECONDS}s" "$QEMU_BIN" \
     -display none \
     -serial "file:$LOG_FILE" \
     -qmp "unix:$QMP_SOCKET,server=on,wait=off" \
+    -trace "events=$TRACE_EVENTS_FILE,file=$TRACE_FILE" \
     -no-reboot \
     -no-shutdown &
 QEMU_PID=$!
@@ -107,7 +123,12 @@ def send_key(down):
         }
     }
     stream.write((json.dumps(payload) + "\r\n").encode())
-    print("QMP key", "down" if down else "up", stream.readline().decode().strip())
+    response = json.loads(stream.readline())
+    print("QMP key", "down" if down else "up", json.dumps(response))
+    if "error" in response:
+        raise RuntimeError("QMP input-send-event failed: " + json.dumps(response["error"]))
+    if "return" not in response:
+        raise RuntimeError("QMP input-send-event returned an unexpected response")
 
 send_key(True)
 time.sleep(0.2)
