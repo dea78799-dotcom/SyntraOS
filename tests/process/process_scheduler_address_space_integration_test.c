@@ -277,8 +277,8 @@ int main(void)
     assert(process_get(1U)->state == PROCESS_TERMINATED);
     assert(process_get(1U)->address_space == &process_a_space);
     assert(process_get(2U)->state == PROCESS_RUNNING);
-    assert(process_get_address_space_for_thread(11U) == NULL);
-    assert(process_get_address_space_for_thread(12U) == NULL);
+    assert(process_get_address_space_for_thread(11U) == &process_a_space);
+    assert(process_get_address_space_for_thread(12U) == &process_a_space);
     assert(mmu.ttbr0 == process_b_space.page_table.root_physical_address);
     assert(process_reclaim_terminated(2U) ==
         SYNTRA_STATUS_PERMISSION_DENIED);
@@ -288,6 +288,8 @@ int main(void)
     assert(scheduler_get_thread(12U) == NULL);
     assert(process_get_id_for_thread(11U) == 0U);
     assert(process_get_id_for_thread(12U) == 0U);
+    assert(process_get_address_space_for_thread(11U) == NULL);
+    assert(process_get_address_space_for_thread(12U) == NULL);
     assert(process_validate() == SYNTRA_STATUS_OK);
 
     assert(scheduler_terminate_current() == SYNTRA_STATUS_OK);
