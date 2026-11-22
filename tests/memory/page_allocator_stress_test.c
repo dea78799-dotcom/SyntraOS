@@ -12,6 +12,7 @@ int main(void)
 {
     uintptr_t pages[STRESS_PAGE_COUNT];
     syntra_page_owner_t owner;
+    syntra_page_allocator_stats_t stats;
 
     assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
     assert(syntra_memory_region_add(
@@ -22,6 +23,12 @@ int main(void)
     assert(syntra_page_allocator_total_count() == STRESS_PAGE_COUNT);
     assert(syntra_page_allocator_free_count() == STRESS_PAGE_COUNT);
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_get_stats(&stats) == SYNTRA_STATUS_OK);
+    assert(stats.valid == 1);
+    assert(stats.total_pages == STRESS_PAGE_COUNT);
+    assert(stats.free_pages == STRESS_PAGE_COUNT);
+    assert(stats.allocated_pages == 0U);
+    assert(stats.owner_pages[SYNTRA_PAGE_OWNER_PROCESS] == 0U);
 
     for (unsigned int cycle = 0U; cycle < STRESS_CYCLES; ++cycle)
     {
@@ -43,6 +50,10 @@ int main(void)
         }
 
         assert(syntra_page_allocator_free_count() == 0U);
+        assert(syntra_page_allocator_get_stats(&stats) == SYNTRA_STATUS_OK);
+        assert(stats.free_pages == 0U);
+        assert(stats.allocated_pages == STRESS_PAGE_COUNT);
+        assert(stats.owner_pages[SYNTRA_PAGE_OWNER_PROCESS] == STRESS_PAGE_COUNT);
         assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
         {
             uintptr_t exhausted = 0U;
@@ -61,6 +72,10 @@ int main(void)
 
         assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
         assert(syntra_page_allocator_free_count() == STRESS_PAGE_COUNT);
+        assert(syntra_page_allocator_get_stats(&stats) == SYNTRA_STATUS_OK);
+        assert(stats.free_pages == STRESS_PAGE_COUNT);
+        assert(stats.allocated_pages == 0U);
+        assert(stats.owner_pages[SYNTRA_PAGE_OWNER_PROCESS] == 0U);
     }
 
     /* Verify contiguous allocation and owner checks after repeated churn. */
@@ -77,6 +92,9 @@ int main(void)
         assert(syntra_page_free_owned(run, SYNTRA_PAGE_OWNER_PROCESS)
                == SYNTRA_STATUS_PERMISSION_DENIED);
         assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+        assert(syntra_page_allocator_get_stats(&stats) == SYNTRA_STATUS_OK);
+        assert(stats.owner_pages[SYNTRA_PAGE_OWNER_DRIVER] == 8U);
+        assert(stats.allocated_pages == 8U);
         for (unsigned int i = 0U; i < 8U; ++i)
             assert(syntra_page_free_owned(
                 run + (uintptr_t)i * SYNTRA_PAGE_SIZE,
@@ -85,6 +103,10 @@ int main(void)
 
     assert(syntra_page_allocator_free_count() == STRESS_PAGE_COUNT);
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_get_stats(&stats) == SYNTRA_STATUS_OK);
+    assert(stats.free_pages == STRESS_PAGE_COUNT);
+    assert(stats.allocated_pages == 0U);
+    assert(stats.owner_pages[SYNTRA_PAGE_OWNER_DRIVER] == 0U);
     puts("Page allocator stress test: PASS");
     return 0;
 }
