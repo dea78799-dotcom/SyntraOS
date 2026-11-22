@@ -66,6 +66,23 @@ int main(void)
     assert(runtime.redraw_count > redraw_before);
     assert(pixels[0] != 0U);
 
+    /* Launcher Files tile focuses the existing Files window. */
+    assert(syntra_gui_runtime_init(&runtime, 640U, 480U) ==
+           SYNTRA_STATUS_OK);
+    move_pointer(&runtime, -80, -140); /* center -> launcher Files tile */
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(syntra_gui_window_active(&runtime.windows)->app_type ==
+           SYNTRA_GUI_APP_FILES);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+
+    /* Settings tile also focuses its existing window without duplication. */
+    move_pointer(&runtime, 120, 0);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1);
+    assert(syntra_gui_window_active(&runtime.windows)->app_type ==
+           SYNTRA_GUI_APP_SETTINGS);
+    assert(runtime.windows.count == 3U);
+    send_event(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0);
+
     /* Invalid dimensions must be rejected rather than creating partial state. */
     assert(syntra_gui_runtime_init(&runtime, 200U, 100U) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
