@@ -73,7 +73,11 @@ a general-purpose kernel heap or per-process allocation accounting.
   supports single-page unmapping with empty L2/L3 table reclamation, and releases
   remaining page-table and mapped-process pages on destruction. A bounded
   64-object registry rejects attempts to alias one PROCESS page into multiple
-  address spaces.
+  address spaces. Address spaces can inherit read-only L1 descriptors for
+  kernel mappings; those subtrees remain borrowed and are not reclaimed by the
+  user address-space destructor. EL0 mappings are restricted to the upper half
+  of the 39-bit TTBR0 range (256–512 GiB), keeping them separate from the
+  current low identity-mapped kernel and device region.
 - Address-space isolation tests currently use the software page-table walker.
   These roots are not safe to load into TTBR0_EL1 yet: they do not inherit the
   kernel's required identity mappings, and no TLB shootdown or active-root
@@ -96,7 +100,10 @@ it is not evidence of physical-device support.
   higher-half layout and dynamic virtual address allocator are not implemented.
 - Address-space objects exist, but they are not yet attached to process objects
   or activated by a context switch through TTBR0_EL1. Their roots currently
-  contain user mappings only and must not replace the active kernel root.
+  can inherit the current low identity-mapped kernel root entries, but must not
+  replace the active root until TTBR0 switching, TLB invalidation, and active-root
+  lifetime rules are implemented. The reserved upper-half user VA range is a
+  V1 convention, not yet a process ABI.
 - Shared-page reference counting, copy-on-write, demand paging, swapping, and
   memory-mapped file support are not implemented. The V1 registry and its
   single-core ownership checks are not SMP-safe.

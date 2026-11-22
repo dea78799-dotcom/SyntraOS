@@ -8,6 +8,9 @@
 
 #define SYNTRA_ARM64_ADDRESS_SPACE_MAX_MAPPINGS 256U
 #define SYNTRA_ARM64_ADDRESS_SPACE_MAX_INSTANCES 64U
+#define SYNTRA_ARM64_USER_VA_BASE (1ULL << 38U)
+#define SYNTRA_ARM64_USER_VA_LIMIT (1ULL << SYNTRA_ARM64_MMU_VA_BITS)
+#define SYNTRA_ARM64_ADDRESS_SPACE_ROOT_BITMAP_WORDS 8U
 
 typedef uint64_t *(*syntra_arm64_address_space_resolve_fn)(
     uint64_t physical_address, void *context);
@@ -32,6 +35,9 @@ typedef struct
     syntra_arm64_address_space_resolve_fn resolve;
     void *resolve_context;
     size_t mapping_count;
+    uint8_t kernel_mappings_inherited;
+    uint64_t borrowed_root_entries[
+        SYNTRA_ARM64_ADDRESS_SPACE_ROOT_BITMAP_WORDS];
     syntra_arm64_address_space_mapping_t mappings[
         SYNTRA_ARM64_ADDRESS_SPACE_MAX_MAPPINGS];
 } syntra_arm64_address_space_t;
@@ -48,7 +54,12 @@ syntra_status_t syntra_arm64_address_space_create(
     syntra_arm64_address_space_resolve_fn resolve,
     void *resolve_context);
 
-/* Maps one owned PROCESS page into EL0 at a 4-KiB-aligned virtual address. */
+/* Copy kernel L1 entries into this inactive root; shared subtrees stay borrowed. */
+syntra_status_t syntra_arm64_address_space_inherit_kernel_mappings(
+    syntra_arm64_address_space_t *space,
+    uint64_t kernel_root_physical_address);
+
+/* Maps one owned PROCESS page into the reserved upper TTBR0 user range. */
 syntra_status_t syntra_arm64_address_space_map_user_page(
     syntra_arm64_address_space_t *space,
     uint64_t virtual_address,

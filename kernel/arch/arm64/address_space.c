@@ -166,6 +166,69 @@ syntra_status_t syntra_arm64_address_space_create(
     return SYNTRA_STATUS_OK;
 }
 
+static int root_entry_is_borrowed(
+    const syntra_arm64_address_space_t *space, size_t index)
+{
+    return (space->borrowed_root_entries[index / 64U] &
+        (1ULL << (index % 64U))) != 0ULL;
+}
+
+static void root_entry_mark_borrowed(
+    syntra_arm64_address_space_t *space, size_t index)
+{
+    space->borrowed_root_entries[index / 64U] |=
+        1ULL << (index % 64U);
+}
+
+syntra_status_t syntra_arm64_address_space_inherit_kernel_mappings(
+    syntra_arm64_address_space_t *space,
+    uint64_t kernel_root_physical_address)
+{
+    uint64_t *root, *kernel_root;
+
+    if (space == NULL || !space->initialized ||
+        !address_space_is_registered(space) ||
+        space->kernel_mappings_inherited != 0U ||
+        space->mapping_count != 0U ||
+        kernel_root_physical_address == 0ULL ||
+        kernel_root_physical_address ==
+            space->page_table.root_physical_address)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    if (page_owner_is(kernel_root_physical_address,
+            SYNTRA_PAGE_OWNER_PAGE_TABLE) != SYNTRA_STATUS_OK)
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+
+    root = resolve_page_table_page(
+        space->page_table.root_physical_address, space);
+    kernel_root = resolve_page_table_page(kernel_root_physical_address, space);
+    if (root == NULL || kernel_root == NULL)
+        return SYNTRA_STATUS_ERROR;
+
+    /* The upper half of the 39-bit TTBR0 range is reserved for EL0. */
+    for (size_t i = 128U; i < SYNTRA_ARM64_MMU_TABLE_ENTRIES; ++i)
+        if (kernel_root[i] != 0ULL)
+            return SYNTRA_STATUS_ERROR;
+
+    for (size_t i = 0U; i < 128U; ++i)
+    {
+        if (root[i] != 0ULL)
+            return SYNTRA_STATUS_ERROR;
+        if (kernel_root[i] != 0ULL)
+        {
+            uint64_t descriptor = kernel_root[i];
+            if ((descriptor & DESC_VALID) == 0ULL ||
+                (descriptor & ~(DESC_ADDR | 3ULL)) != 0ULL)
+                return SYNTRA_STATUS_ERROR;
+            root[i] = descriptor;
+            root_entry_mark_borrowed(space, i);
+        }
+    }
+
+    space->kernel_mappings_inherited = 1U;
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_arm64_address_space_map_user_page(
     syntra_arm64_address_space_t *space,
     uint64_t virtual_address,
@@ -177,6 +240,8 @@ syntra_status_t syntra_arm64_address_space_map_user_page(
 
     if (space == NULL || !space->initialized ||
         !address_space_is_registered(space) ||
+        virtual_address < SYNTRA_ARM64_USER_VA_BASE ||
+        virtual_address >= SYNTRA_ARM64_USER_VA_LIMIT ||
         (virtual_address & (SYNTRA_ARM64_MMU_PAGE_SIZE - 1ULL)) != 0ULL ||
         space->mapping_count >= SYNTRA_ARM64_ADDRESS_SPACE_MAX_MAPPINGS)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
@@ -232,6 +297,9 @@ syntra_status_t syntra_arm64_address_space_unmap_user_page(
     syntra_status_t status;
 
     if (space == NULL || !space->initialized ||
+        !address_space_is_registered(space) ||
+        virtual_address < SYNTRA_ARM64_USER_VA_BASE ||
+        virtual_address >= SYNTRA_ARM64_USER_VA_LIMIT ||
         (virtual_address & (SYNTRA_ARM64_MMU_PAGE_SIZE - 1ULL)) != 0ULL)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
@@ -324,7 +392,8 @@ syntra_status_t syntra_arm64_address_space_translate(
     uint64_t virtual_address,
     syntra_arm64_mmu_translation_t *translation)
 {
-    if (space == NULL || !space->initialized || translation == NULL)
+    if (space == NULL || !space->initialized ||
+        !address_space_is_registered(space) || translation == NULL)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
     return syntra_arm64_mmu_walk(
@@ -450,6 +519,8 @@ static syntra_status_t release_table_tree(
         for (size_t i = 0U; i < SYNTRA_ARM64_MMU_TABLE_ENTRIES; ++i)
         {
             uint64_t descriptor = table[i];
+            if (level == 1U && root_entry_is_borrowed(space, i))
+                continue;
             syntra_status_t status;
 
             if ((descriptor & DESC_VALID) == 0ULL ||
@@ -508,6 +579,9 @@ syntra_status_t syntra_arm64_address_space_destroy(
     space->address_space_id = 0U;
     space->page_table.root_physical_address = 0ULL;
     space->mapping_count = 0U;
+    space->kernel_mappings_inherited = 0U;
+    for (size_t i = 0U; i < SYNTRA_ARM64_ADDRESS_SPACE_ROOT_BITMAP_WORDS; ++i)
+        space->borrowed_root_entries[i] = 0ULL;
     address_space_unregister(space);
     space->resolve = NULL;
     space->resolve_context = NULL;
