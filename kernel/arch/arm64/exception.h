@@ -215,6 +215,9 @@ syntra_arm64_exception_get_last_info(void);
 
 unsigned int syntra_arm64_exception_user_thread_exit_count(void);
 unsigned int syntra_arm64_exception_user_thread_fault_count(void);
+/* Dedicated snapshot of the most recent EL0 user-thread fault (IRQ-proof). */
+const syntra_arm64_exception_info_t *
+syntra_arm64_exception_get_last_user_thread_fault(void);
 int syntra_arm64_exception_has_last_context(void);
 
 #endif
