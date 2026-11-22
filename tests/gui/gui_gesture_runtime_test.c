@@ -36,6 +36,21 @@ int main(void)
     assert(runtime.last_gesture.action == SYNTRA_GESTURE_CONTEXT_REQUEST);
     assert(runtime.context_menu_visible == 1U);
 
+    /* Window context menu can minimize its target without destroying it. */
+    {
+        uint32_t target = runtime.context_menu_target;
+        const syntra_gui_window_t *window = NULL;
+        assert(target != UINT32_MAX && target != 0U);
+        event_at(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_X, 10, 2060U);
+        event_at(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_Y, 29, 2061U);
+        event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 1, 2062U);
+        assert(runtime.context_menu_visible == 0U);
+        assert(syntra_gui_window_get(&runtime.windows, target, &window) ==
+               SYNTRA_STATUS_OK);
+        assert(window->minimized == 1U);
+        event_at(&runtime, SYNTRA_INPUT_EV_KEY, SYNTRA_INPUT_BTN_LEFT, 0, 2070U);
+    }
+
     /* The open context menu consumes and dismisses an outside primary click. */
     event_at(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_X, 180, 2100U);
     event_at(&runtime, SYNTRA_INPUT_EV_REL, SYNTRA_INPUT_REL_Y, 160, 2101U);
