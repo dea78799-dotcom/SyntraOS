@@ -8,7 +8,7 @@
 #define CLOSE_RIGHT_MARGIN 5U
 #define CLOSE_TOP_OFFSET 4U
 #define CONTROL_GAP 5U
-#define CONTROLS_MIN_WIDTH 78U
+#define CONTROLS_MIN_WIDTH 120U
 
 static int point_inside(
     uint32_t x, uint32_t y,
