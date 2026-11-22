@@ -34,6 +34,7 @@ input_event_sync
 virtio_input_queue_full
 virtio_queue_notify
 virtio_notify
+virtio_mmio_guest_page
 virtio_mmio_queue_write
 TRACE_EVENTS
 QEMU_PID=""
