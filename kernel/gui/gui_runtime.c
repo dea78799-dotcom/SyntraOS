@@ -298,7 +298,8 @@ static syntra_status_t handle_app_surface_click(
     syntra_gui_window_t *window;
     uint32_t left, top, inner_width, inner_height, row;
     if (runtime->windows.count == 0U) return SYNTRA_STATUS_OK;
-    window = &runtime->windows.windows[runtime->windows.count - 1U];
+    window = (syntra_gui_window_t *)syntra_gui_window_active(&runtime->windows);
+    if (window == NULL) return SYNTRA_STATUS_OK;
     left = window->x + 4U;
     top = window->y + 24U;
     inner_width = window->width > 8U ? window->width - 8U : 0U;
