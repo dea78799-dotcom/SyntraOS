@@ -479,8 +479,16 @@ syntra_arm64_exception_handle_and_select(
             (void)scheduler_rollback_context_switch(current->thread_id, 0U);
             return context;
         }
-        if (activate_thread_address_space(next->thread_id) != SYNTRA_STATUS_OK)
+        status = activate_thread_address_space(next->thread_id);
+        if (status != SYNTRA_STATUS_OK)
         {
+            syntra_exception_uart_puts("Scheduler address-space activation failed: previous=");
+            syntra_exception_uart_hex(current->thread_id);
+            syntra_exception_uart_puts(" next=");
+            syntra_exception_uart_hex(next->thread_id);
+            syntra_exception_uart_puts(" status=");
+            syntra_exception_uart_hex((uint64_t)(int64_t)status);
+            syntra_exception_uart_puts("\\n");
             (void)scheduler_rollback_context_switch(
                 current->thread_id, next->thread_id);
             return context;
