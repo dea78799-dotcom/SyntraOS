@@ -213,6 +213,7 @@ syntra_arm64_exception_get_last_context(void);
 const syntra_arm64_exception_info_t *
 syntra_arm64_exception_get_last_info(void);
 
+unsigned int syntra_arm64_exception_user_thread_exit_count(void);
 int syntra_arm64_exception_has_last_context(void);
 
 #endif

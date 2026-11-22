@@ -64,6 +64,16 @@ syntra_arm64_el0_return_trampoline:
     ret
 .size syntra_arm64_el0_return_trampoline, . - syntra_arm64_el0_return_trampoline
 
+.align 4
+.global syntra_arm64_el0_thread_exit_trampoline
+.type syntra_arm64_el0_thread_exit_trampoline, %function
+syntra_arm64_el0_thread_exit_trampoline:
+    bl syntra_arm64_thread_exit
+.Lel0_thread_exit_halt:
+    wfe
+    b .Lel0_thread_exit_halt
+.size syntra_arm64_el0_thread_exit_trampoline, . - syntra_arm64_el0_thread_exit_trampoline
+
 .section .bss
 .align 3
 .global syntra_el0_saved_kernel_sp

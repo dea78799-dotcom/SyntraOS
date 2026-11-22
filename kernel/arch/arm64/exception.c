@@ -18,6 +18,7 @@ extern void syntra_arm64_exception_uart_put_hex(uint64_t value);
 extern char __user_text_start[];
 extern void syntra_arm64_user_fault_halt(void);
 extern void syntra_arm64_el0_return_trampoline(void);
+extern void syntra_arm64_el0_thread_exit_trampoline(void);
 
 static void syntra_exception_uart_hex(uint64_t value)
 {
@@ -34,6 +35,7 @@ extern void syntra_arm64_exception_uart_put_hex(uint64_t value) __attribute__((w
 extern char __user_text_start[] __attribute__((weak));
 extern void syntra_arm64_user_fault_halt(void) __attribute__((weak));
 extern void syntra_arm64_el0_return_trampoline(void) __attribute__((weak));
+extern void syntra_arm64_el0_thread_exit_trampoline(void) __attribute__((weak));
 
 static void syntra_exception_uart_hex(uint64_t value)
 {
@@ -62,6 +64,7 @@ static void syntra_exception_uart_puts(const char *message)
 static syntra_arm64_exception_context_t last_exception_context;
 static syntra_arm64_exception_info_t last_exception_info;
 static int last_exception_valid;
+static unsigned int user_thread_exit_count;
 
 syntra_status_t syntra_arm64_exception_decode(
     uint64_t esr,
@@ -206,8 +209,28 @@ syntra_status_t syntra_arm64_exception_handle(
                     )
             {
                 syntra_exception_uart_puts("EL0 exit SVC: returning to EL1\n");
-                mutable_context->elr_el1 =
-                    (uint64_t)(uintptr_t)syntra_arm64_el0_return_trampoline;
+                syntra_thread_t *current_thread = scheduler_get_current();
+                if (current_thread != NULL &&
+                    current_thread->is_user_thread != 0U)
+                {
+#if !defined(SYNTRA_ARM64_FREESTANDING_IMAGE)
+                    if (syntra_arm64_el0_thread_exit_trampoline == NULL)
+                        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+#endif
+                    mutable_context->elr_el1 =
+                        (uint64_t)(uintptr_t)
+                            syntra_arm64_el0_thread_exit_trampoline;
+                    user_thread_exit_count++;
+                }
+                else
+                {
+#if !defined(SYNTRA_ARM64_FREESTANDING_IMAGE)
+                    if (syntra_arm64_el0_return_trampoline == NULL)
+                        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+#endif
+                    mutable_context->elr_el1 =
+                        (uint64_t)(uintptr_t)syntra_arm64_el0_return_trampoline;
+                }
                 mutable_context->spsr_el1 = 0x3C5ULL;
                 mutable_context->reserved = SYNTRA_ARM64_EXCEPTION_RETURN_MAGIC;
             }
@@ -284,6 +307,11 @@ syntra_arm64_exception_get_last_info(void)
     }
 
     return &last_exception_info;
+}
+
+unsigned int syntra_arm64_exception_user_thread_exit_count(void)
+{
+    return user_thread_exit_count;
 }
 
 int syntra_arm64_exception_has_last_context(void)
