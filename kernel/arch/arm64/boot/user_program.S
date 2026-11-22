@@ -39,7 +39,9 @@ syntra_arm64_user_write_code_fault:
 .type syntra_arm64_user_write_private_data, %function
 /* x0 contains this process's private data-page VA. */
 syntra_arm64_user_write_private_data:
-    mov x1, x0
+    mov x19, x0
+    svc #0x44
+    mov x1, x19
     ldr x2, [x1]
     add x2, x2, #1
     str x2, [x1]
