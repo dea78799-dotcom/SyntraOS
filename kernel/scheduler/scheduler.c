@@ -538,7 +538,6 @@ syntra_status_t scheduler_validate(void)
         ++observed_count;
 
         if (thread->state < THREAD_READY ||
-            thread->state < THREAD_READY ||
             thread->state > THREAD_TERMINATED)
         {
             return SYNTRA_STATUS_ERROR;
@@ -600,8 +599,8 @@ syntra_status_t scheduler_validate(void)
     if (observed_count != thread_count || running_count > 1U ||
         (current_slot < 0 && running_count != 0U) ||
         (current_slot >= 0 &&
-            (unsigned int)current_slot >= thread_slot_count ||
-             threads[(unsigned int)current_slot].thread_id == 0U))
+            ((unsigned int)current_slot >= thread_slot_count ||
+             threads[(unsigned int)current_slot].thread_id == 0U)))
     {
         return SYNTRA_STATUS_ERROR;
     }
