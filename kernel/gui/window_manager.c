@@ -55,6 +55,7 @@ syntra_status_t syntra_gui_window_manager_init(
         manager->windows[index].height = 0U;
         manager->windows[index].app_type = SYNTRA_GUI_APP_GENERIC;
         manager->windows[index].app_selection = 0U;
+        manager->windows[index].app_scroll_offset = 0U;
     }
 
     return SYNTRA_STATUS_OK;
@@ -92,6 +93,7 @@ syntra_status_t syntra_gui_window_open_app(
     window->height = height;
     window->app_type = app_type;
     window->app_selection = 0U;
+    window->app_scroll_offset = 0U;
 
     *window_id = manager->next_id;
     manager->next_id++;
@@ -135,6 +137,7 @@ syntra_status_t syntra_gui_window_close(
     manager->windows[manager->count].height = 0U;
     manager->windows[manager->count].app_type = SYNTRA_GUI_APP_GENERIC;
     manager->windows[manager->count].app_selection = 0U;
+    manager->windows[manager->count].app_scroll_offset = 0U;
     return SYNTRA_STATUS_OK;
 }
 
