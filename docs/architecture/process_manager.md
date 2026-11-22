@@ -15,6 +15,8 @@ not yet a complete isolated user-process implementation.
 - Fixed capacity of 64 process records and up to 32 thread IDs per process.
 - Non-zero process IDs and duplicate-ID rejection.
 - A scheduler thread may be attached to only one process.
+- A user thread cannot be attached unless the target process already owns a
+  validated address space; process validation preserves this invariant.
 - Process state is derived from scheduler thread state with the precedence
   RUNNING, READY, BLOCKED, then TERMINATED.
 - A process may take ownership of one validated ARM64 address-space object.
@@ -58,8 +60,10 @@ tracker is single-core only; SMP coordination and remote TLB shootdown remain ab
   process/thread creation.
 - Thread stack ownership transfer and stack reclamation.
 
-The thread association is still metadata ownership; it does not create or
-schedule a thread, switch address spaces, or reclaim scheduler stacks.
+Thread association remains metadata ownership: it does not create or schedule
+threads or reclaim scheduler stacks. On ARM64, the exception-return scheduler
+bridge selects the associated process address space before restoring a
+scheduled thread's context.
 
 ## 5. Required integration sequence
 
