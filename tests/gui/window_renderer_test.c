@@ -73,6 +73,19 @@ int main(void)
     assert(pixels[(size_t)75U * STRIDE + 313U] == 0xFF54D6E8U);
     assert(pixels[(size_t)249U * STRIDE + 49U] == 0xFF54D6E8U);
 
+    /* Selection highlight remains continuous behind opaque text rendering. */
+    manager.windows[0].app_selection = 2U; /* DOWNLOADS */
+    assert(syntra_gui_render_windows(&framebuffer, &manager) == SYNTRA_STATUS_OK);
+    assert(pixels[(size_t)292U * STRIDE + 106U] == 0xFF25466FU);
+
+    /* Very narrow Files windows must not underflow list highlight widths. */
+    assert(syntra_gui_window_manager_init(&manager, WIDTH, HEIGHT) ==
+           SYNTRA_STATUS_OK);
+    assert(syntra_gui_window_open_app(
+        &manager, 20U, 20U, 50U, 80U,
+        SYNTRA_GUI_APP_FILES, &files_id) == SYNTRA_STATUS_OK);
+    assert(syntra_gui_render_windows(&framebuffer, &manager) == SYNTRA_STATUS_OK);
+
     manager.windows[0].app_type = (syntra_gui_app_type_t)99;
     assert(syntra_gui_render_windows(&framebuffer, &manager) ==
            SYNTRA_STATUS_INVALID_ARGUMENT);
