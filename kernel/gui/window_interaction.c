@@ -6,7 +6,9 @@
 #define TITLE_HEIGHT 20U
 #define CLOSE_SIZE 12U
 #define CLOSE_RIGHT_MARGIN 5U
-#define CLOSE_TOP_OFFSET 4U
+#define CLOSE_TOP_OFFSET 2U
+#define TOUCH_CONTROL_WIDTH 17U
+#define TOUCH_CONTROL_HEIGHT 18U
 #define CONTROL_GAP 5U
 #define CONTROLS_MIN_WIDTH 120U
 
@@ -33,7 +35,7 @@ static int point_on_close_control(
     return point_inside(
         x, y, close_x,
         window->y + CLOSE_TOP_OFFSET,
-        CLOSE_SIZE, CLOSE_SIZE);
+        TOUCH_CONTROL_WIDTH, TOUCH_CONTROL_HEIGHT);
 }
 
 static int point_on_maximize_control(
@@ -44,8 +46,9 @@ static int point_on_maximize_control(
         return 0;
     control_x = window->x + window->width - CLOSE_SIZE -
                 CLOSE_RIGHT_MARGIN - CONTROL_GAP - CLOSE_SIZE;
-    return point_inside(x, y, control_x, window->y + CLOSE_TOP_OFFSET,
-                        CLOSE_SIZE, CLOSE_SIZE);
+    return point_inside(x, y, control_x - 2U,
+                        window->y + CLOSE_TOP_OFFSET,
+                        TOUCH_CONTROL_WIDTH, TOUCH_CONTROL_HEIGHT);
 }
 
 static int point_on_minimize_control(
@@ -56,8 +59,9 @@ static int point_on_minimize_control(
         return 0;
     control_x = window->x + window->width - CLOSE_SIZE -
                 CLOSE_RIGHT_MARGIN - 2U * (CONTROL_GAP + CLOSE_SIZE);
-    return point_inside(x, y, control_x, window->y + CLOSE_TOP_OFFSET,
-                        CLOSE_SIZE, CLOSE_SIZE);
+    return point_inside(x, y, control_x - 2U,
+                        window->y + CLOSE_TOP_OFFSET,
+                        TOUCH_CONTROL_WIDTH, TOUCH_CONTROL_HEIGHT);
 }
 static int point_on_title_bar(
     const syntra_gui_window_t *window,
