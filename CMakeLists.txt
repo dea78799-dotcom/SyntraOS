@@ -270,6 +270,14 @@ add_executable(process_test
 target_link_libraries(process_test PRIVATE syntra_kernel)
 add_test(NAME ProcessTest COMMAND process_test)
 
+# Process table reclamation and bounded-slot reuse regression test
+add_executable(process_lifecycle_reuse_test
+    tests/process/process_lifecycle_reuse_test.c
+)
+target_link_libraries(process_lifecycle_reuse_test PRIVATE syntra_kernel)
+add_test(NAME ProcessLifecycleSafeReclamationTest
+    COMMAND process_lifecycle_reuse_test)
+
 # Process and ARM64 address-space ownership integration test
 add_executable(process_address_space_test
     tests/process/process_address_space_test.c
