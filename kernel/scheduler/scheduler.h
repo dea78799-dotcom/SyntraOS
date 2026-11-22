@@ -88,8 +88,9 @@ syntra_thread_t *scheduler_get_current(void);
 
 /*
  * Roll back a context selection when architecture activation fails.
- * previous_thread_id may name a blocked bootstrap thread; selected_thread_id
- * is zero only when the scheduler found no runnable context.
+ * previous_thread_id may name a blocked bootstrap thread, or be zero when
+ * the interrupted thread has already exited. selected_thread_id is zero only
+ * when the scheduler found no runnable context.
  */
 syntra_status_t scheduler_rollback_context_switch(
     unsigned int previous_thread_id,
