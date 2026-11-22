@@ -144,7 +144,6 @@ static syntra_thread_t *schedule_and_activate(
     assert(mmu->ttbr0 == expected_space->page_table.root_physical_address);
 
     assert(process_refresh_all_states() == SYNTRA_STATUS_OK);
-    assert(process_reap_terminated() == SYNTRA_STATUS_OK);
     assert(process_validate() == SYNTRA_STATUS_OK);
     return selected;
 }
@@ -272,15 +271,25 @@ int main(void)
     assert(process_get(1U)->address_space == &process_a_space);
     assert(process_validate() == SYNTRA_STATUS_OK);
 
-    /* B is selected before A is reaped, so A's active root is never freed. */
+    /* B is selected before A is reclaimed; A's inactive root can now be freed. */
     selected = schedule_and_activate(21U, &process_b_space, &mmu);
     assert(selected->thread_id == 21U);
     assert(process_get(1U)->state == PROCESS_TERMINATED);
-    assert(process_get(1U)->address_space == NULL);
+    assert(process_get(1U)->address_space == &process_a_space);
     assert(process_get(2U)->state == PROCESS_RUNNING);
+    assert(process_get_address_space_for_thread(11U) == &process_a_space);
+    assert(process_get_address_space_for_thread(12U) == &process_a_space);
+    assert(mmu.ttbr0 == process_b_space.page_table.root_physical_address);
+    assert(process_reclaim_terminated(2U) ==
+        SYNTRA_STATUS_PERMISSION_DENIED);
+    assert(process_reclaim_terminated(1U) == SYNTRA_STATUS_OK);
+    assert(process_get(1U) == NULL);
+    assert(scheduler_get_thread(11U) == NULL);
+    assert(scheduler_get_thread(12U) == NULL);
+    assert(process_get_id_for_thread(11U) == 0U);
+    assert(process_get_id_for_thread(12U) == 0U);
     assert(process_get_address_space_for_thread(11U) == NULL);
     assert(process_get_address_space_for_thread(12U) == NULL);
-    assert(mmu.ttbr0 == process_b_space.page_table.root_physical_address);
     assert(process_validate() == SYNTRA_STATUS_OK);
 
     assert(scheduler_terminate_current() == SYNTRA_STATUS_OK);
@@ -292,15 +301,22 @@ int main(void)
 
     /* No runnable thread: move to kernel TTBR0 before reaping Process B. */
     assert(scheduler_schedule_next_with_context() == NULL);
+    /* All TCBs are terminated, but the process root is still active. */
+    assert(process_reclaim_terminated(2U) ==
+        SYNTRA_STATUS_PERMISSION_DENIED);
+    assert(process_get(2U) != NULL);
     assert(syntra_arm64_address_space_activate_kernel_root() ==
         SYNTRA_STATUS_OK);
     assert(mmu.ttbr0 == kernel_root);
     assert(process_refresh_all_states() == SYNTRA_STATUS_OK);
-    assert(process_reap_terminated() == SYNTRA_STATUS_OK);
-    assert(process_get(2U)->state == PROCESS_TERMINATED);
-    assert(process_get(2U)->address_space == NULL);
-    assert(process_get_address_space_for_thread(21U) == NULL);
-    assert(process_get_address_space_for_thread(22U) == NULL);
+    assert(process_reclaim_terminated(2U) == SYNTRA_STATUS_OK);
+    assert(process_get(2U) == NULL);
+    assert(scheduler_get_thread(21U) == NULL);
+    assert(scheduler_get_thread(22U) == NULL);
+    assert(process_get_id_for_thread(21U) == 0U);
+    assert(process_get_id_for_thread(22U) == 0U);
+    assert(scheduler_get_thread_count() == 0U);
+    assert(process_get_count() == 0U);
     assert(process_validate() == SYNTRA_STATUS_OK);
 
     assert(syntra_page_allocator_get_stats(&stats) == SYNTRA_STATUS_OK);

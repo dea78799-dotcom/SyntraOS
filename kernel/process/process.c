@@ -416,6 +416,73 @@ syntra_status_t process_release_terminated(unsigned int process_id)
     return SYNTRA_STATUS_OK;
 }
 
+/*
+ * Complete explicit reclamation after process exit. This is a sleepable
+ * kernel-management path, never an IRQ/exception callback.
+ */
+syntra_status_t process_reclaim_terminated(unsigned int process_id)
+{
+    syntra_process_t *process = process_get(process_id);
+    syntra_thread_t *current;
+
+    if (process == NULL)
+        return process_initialized
+            ? SYNTRA_STATUS_INVALID_ARGUMENT : SYNTRA_STATUS_ERROR;
+
+    current = scheduler_get_current();
+    for (unsigned int i = 0U; i < process->thread_count; ++i)
+    {
+        unsigned int thread_id = process->thread_ids[i];
+        syntra_thread_t *thread = scheduler_get_thread(thread_id);
+
+        if (thread_id == 0U || thread == NULL)
+            return SYNTRA_STATUS_ERROR;
+        if (current != NULL && current->thread_id == thread_id)
+            return SYNTRA_STATUS_PERMISSION_DENIED;
+        if (thread->state != THREAD_TERMINATED)
+            return SYNTRA_STATUS_PERMISSION_DENIED;
+    }
+
+    /*
+     * This destroys the owned Address Space only after all threads exited.
+     * The destructor independently rejects an active TTBR0 root.
+     */
+    {
+        syntra_status_t status = process_terminate(process_id);
+        if (status != SYNTRA_STATUS_OK)
+            return status;
+    }
+
+    /*
+     * Drop Process Manager references before clearing Scheduler TCBs. The
+     * preflight above makes each subsequent reaper call deterministic on the
+     * current single-core scheduler; caller-owned stack buffers stay external.
+     */
+    {
+        unsigned int thread_ids[SYNTRA_MAX_PROCESS_THREADS];
+        unsigned int thread_count = process->thread_count;
+
+        for (unsigned int i = 0U; i < thread_count; ++i)
+            thread_ids[i] = process->thread_ids[i];
+
+        {
+            syntra_status_t status = process_release_terminated(process_id);
+            if (status != SYNTRA_STATUS_OK)
+                return status;
+        }
+
+        for (unsigned int i = 0U; i < thread_count; ++i)
+        {
+            syntra_status_t status =
+                scheduler_reap_terminated(thread_ids[i]);
+            if (status != SYNTRA_STATUS_OK)
+                return status;
+        }
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t process_validate(void)
 {
     if (!process_initialized || process_count > SYNTRA_MAX_PROCESSES ||

@@ -31,6 +31,8 @@ not yet a general-purpose process loader or complete process environment.
 - Process termination refuses to proceed while any attached thread is not
   terminated. After all threads have stopped and the root is inactive, it
   destroys the owned address space and clears the process pointer.
+- Explicit process reclamation destroys an inactive address space, releases
+  the Process Manager record, and only then reaps terminated Scheduler TCBs.
 - Process validation checks address-space validity, uniqueness, thread
   ownership, and scheduler invariants.
 
@@ -63,11 +65,20 @@ stable address for the duration of ownership. A process cannot attach a second
 address space, and a single address-space object cannot be shared between
 process records.
 
-process_terminate() is the teardown path. It requires every associated
-scheduler thread to be TERMINATED before it destroys the address space. The
-address-space destructor releases process-owned pages and private page-table
-pages while preserving borrowed kernel page-table subtrees. Destruction rejects
-the locally active root.
+process_terminate() is the address-space teardown path. It requires every
+associated scheduler thread to be TERMINATED before it destroys the address
+space. The address-space destructor releases process-owned pages and private
+page-table pages while preserving borrowed kernel page-table subtrees.
+Destruction rejects the locally active root.
+
+process_reclaim_terminated() is the complete explicit lifecycle operation. It
+preflights all attached TCBs, rejects a current or non-terminated thread,
+destroys the inactive address space, releases the Process Manager record, and
+then calls scheduler_reap_terminated() for each thread ID. Scheduler reaping
+clears TCB metadata but does not free caller-owned kernel or user stack buffers;
+the stack owner may reuse those buffers only after successful reclamation. This
+operation must run from a kernel-management path, never from IRQ/exception
+context. The caller must serialize the operation against scheduler mutation,\nincluding IRQ-driven context switches. The single-core design is not yet safe\nagainst concurrent SMP mutation.
 
 TTBR0 activation performs a local full EL1/EL0 TLB invalidation. Active-root
 tracking and TLB invalidation are single-core V1 mechanisms; SMP coordination
@@ -101,6 +112,7 @@ generic Process Manager.
    already covered by the QEMU smoke test.
 4. Add process resource cleanup and transactional creation rollback.
 5. Add SMP-safe active-root tracking and remote TLB shootdown before SMP use.
+6. Define stack allocation ownership and add explicit stack-buffer reclamation.\n6. Define stack allocation ownership and add explicit stack-buffer reclamation.
 
 ## 7. Version status
 
