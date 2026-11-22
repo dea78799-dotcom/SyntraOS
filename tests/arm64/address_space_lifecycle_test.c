@@ -9,6 +9,7 @@
 #define TEST_RAM_BASE 0x10000000ULL
 #define TEST_RAM_PAGES 16U
 #define TEST_USER_VA (SYNTRA_ARM64_USER_VA_BASE)
+#define TEST_KERNEL_VA 0x40000000ULL
 
 static uint64_t table_storage[TEST_RAM_PAGES][SYNTRA_ARM64_MMU_TABLE_ENTRIES];
 
@@ -25,6 +26,21 @@ static uint64_t *resolve_page(uint64_t physical_address, void *context)
         (physical_address - TEST_RAM_BASE) / SYNTRA_PAGE_SIZE];
 }
 
+static syntra_status_t allocate_table_page(void *context, uint64_t *physical_address)
+{
+    uintptr_t page;
+    syntra_status_t status;
+    (void)context;
+
+    if (physical_address == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    status = syntra_page_alloc_owned(&page, SYNTRA_PAGE_OWNER_PAGE_TABLE);
+    if (status == SYNTRA_STATUS_OK)
+        *physical_address = (uint64_t)page;
+    return status;
+}
+
 static void assert_owner_count(
     syntra_page_owner_t owner, size_t expected)
 {
@@ -37,11 +53,12 @@ static void assert_owner_count(
 int main(void)
 {
     syntra_arm64_address_space_t space = {0};
+    syntra_arm64_page_table_t kernel_table = {0};
     syntra_arm64_mmu_translation_t translation;
-    syntra_page_allocator_stats_t before, after_unmap;
-    syntra_page_allocator_stats_t after;
-    uintptr_t kernel_root;
+    syntra_page_allocator_stats_t before, after_unmap, after;
     uintptr_t process_page_a, process_page_b;
+    uint64_t kernel_root, kernel_l2, kernel_l3;
+    uint64_t *kernel_root_entries, *kernel_l2_entries;
     size_t initial_free;
 
     assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
@@ -54,19 +71,42 @@ int main(void)
     initial_free = before.free_pages;
     assert(initial_free == TEST_RAM_PAGES);
 
-    /* Build an empty kernel root to exercise borrowed-root ownership safely. */
-    assert(syntra_page_alloc_owned(
-        &kernel_root, SYNTRA_PAGE_OWNER_PAGE_TABLE) == SYNTRA_STATUS_OK);
-    assert(resolve_page((uint64_t)kernel_root, NULL) != NULL);
+    /*
+     * Create a real kernel subtree. The address space must borrow this root
+     * entry and must not release the shared L2/L3 pages when it is destroyed.
+     */
+    assert(syntra_arm64_page_table_init(
+        &kernel_table, allocate_table_page, resolve_page, NULL) ==
+        SYNTRA_STATUS_OK);
+    kernel_root = kernel_table.root_physical_address;
+    assert(syntra_arm64_page_table_map(
+        &kernel_table, TEST_KERNEL_VA, TEST_RAM_BASE, SYNTRA_PAGE_SIZE,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+
+    kernel_root_entries = resolve_page(kernel_root, NULL);
+    assert(kernel_root_entries != NULL);
+    kernel_l2 = kernel_root_entries[1] & SYNTRA_ARM64_MMU_PA_MASK;
+    kernel_l2_entries = resolve_page(kernel_l2, NULL);
+    assert(kernel_l2_entries != NULL);
+    kernel_l3 = kernel_l2_entries[0] & SYNTRA_ARM64_MMU_PA_MASK;
+    assert(resolve_page(kernel_l3, NULL) != NULL);
 
     assert(syntra_arm64_address_space_create(
         &space, 7U, resolve_page, NULL) == SYNTRA_STATUS_OK);
     assert(space.initialized == 1U);
     assert(space.address_space_id == 7U);
-    assert(space.page_table.root_physical_address != (uint64_t)kernel_root);
+    assert(space.page_table.root_physical_address != kernel_root);
     assert(syntra_arm64_address_space_inherit_kernel_mappings(
-        &space, (uint64_t)kernel_root) == SYNTRA_STATUS_OK);
+        &space, kernel_root) == SYNTRA_STATUS_OK);
     assert(space.kernel_mappings_inherited == 1U);
+
+    /* Borrowed kernel mapping remains visible but is not EL0-accessible. */
+    assert(syntra_arm64_address_space_translate(
+        &space, TEST_KERNEL_VA, &translation) == SYNTRA_STATUS_OK);
+    assert(translation.physical_address == TEST_RAM_BASE);
+    assert(translation.user_read == 0U);
+    assert(translation.user_write == 0U);
 
     assert(syntra_page_alloc_owned(
         &process_page_a, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
@@ -125,21 +165,36 @@ int main(void)
         SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_get_stats(&after_unmap) == SYNTRA_STATUS_OK);
     assert(after_unmap.owner_pages[SYNTRA_PAGE_OWNER_PROCESS] == 0U);
-    /* Only the private root and borrowed kernel root should remain. */
-    assert(after_unmap.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] == 2U);
+    /* Kernel root+L2+L3 and private address-space root remain allocated. */
+    assert(after_unmap.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] == 4U);
 
-    /* Destroy releases the private root but never frees the borrowed root. */
+    /* Destroy releases the private root, but preserves the borrowed subtree. */
     assert(syntra_arm64_address_space_destroy(&space) == SYNTRA_STATUS_OK);
     assert(space.initialized == 0U);
     assert(space.mapping_count == 0U);
     assert(space.page_table.root_physical_address == 0ULL);
 
     assert(syntra_page_allocator_get_stats(&after) == SYNTRA_STATUS_OK);
-    assert(after.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] == 1U);
+    assert(after.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] == 3U);
     assert(after.owner_pages[SYNTRA_PAGE_OWNER_PROCESS] == 0U);
+    assert(kernel_root_entries[1] != 0ULL);
+    assert((kernel_root_entries[1] & SYNTRA_ARM64_MMU_PA_MASK) == kernel_l2);
+    assert(kernel_l2_entries[0] != 0ULL);
+    assert((kernel_l2_entries[0] & SYNTRA_ARM64_MMU_PA_MASK) == kernel_l3);
+    assert(syntra_arm64_mmu_walk(
+        kernel_root, TEST_KERNEL_VA, resolve_page, NULL, &translation) ==
+        SYNTRA_STATUS_OK);
+    assert(translation.physical_address == TEST_RAM_BASE);
+    assert_owner_count(SYNTRA_PAGE_OWNER_PAGE_TABLE, 3U);
 
+    /* Release the kernel-owned subtree explicitly after the borrower is gone. */
     assert(syntra_page_free_owned(
-        kernel_root, SYNTRA_PAGE_OWNER_PAGE_TABLE) == SYNTRA_STATUS_OK);
+        (uintptr_t)kernel_l3, SYNTRA_PAGE_OWNER_PAGE_TABLE) == SYNTRA_STATUS_OK);
+    assert(syntra_page_free_owned(
+        (uintptr_t)kernel_l2, SYNTRA_PAGE_OWNER_PAGE_TABLE) == SYNTRA_STATUS_OK);
+    assert(syntra_page_free_owned(
+        (uintptr_t)kernel_root, SYNTRA_PAGE_OWNER_PAGE_TABLE) == SYNTRA_STATUS_OK);
+
     assert(syntra_page_allocator_get_stats(&after) == SYNTRA_STATUS_OK);
     assert(after.free_pages == initial_free);
     assert(after.allocated_pages == 0U);
