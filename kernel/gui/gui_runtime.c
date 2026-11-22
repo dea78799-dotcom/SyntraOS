@@ -146,10 +146,20 @@ static syntra_status_t render_compact_switcher(
             syntra_gui_window_active(&runtime->windows) == window;
         uint32_t color = window->minimized != 0U ? 0xFF263D66U :
             (active ? 0xFF25466FU : 0xFF1A2948U);
-        const char *label = "WIN";
-        if (window->app_type == SYNTRA_GUI_APP_FILES) label = "FILES";
-        else if (window->app_type == SYNTRA_GUI_APP_SETTINGS) label = "SET";
-        else if (window->app_type == SYNTRA_GUI_APP_LAUNCHER) label = "HOME";
+        const char *label = "APP";
+        if (slot_width >= 40U)
+        {
+            if (window->app_type == SYNTRA_GUI_APP_FILES) label = "FILES";
+            else if (window->app_type == SYNTRA_GUI_APP_SETTINGS) label = "SET";
+            else if (window->app_type == SYNTRA_GUI_APP_LAUNCHER) label = "HOME";
+            else label = "WINDOW";
+        }
+        else
+        {
+            if (window->app_type == SYNTRA_GUI_APP_FILES) label = "FIL";
+            else if (window->app_type == SYNTRA_GUI_APP_SETTINGS) label = "SET";
+            else if (window->app_type == SYNTRA_GUI_APP_LAUNCHER) label = "HOM";
+        }
 
         status = syntra_framebuffer_fill_rect(
             framebuffer, x, y, slot_width, COMPACT_SWITCHER_HEIGHT, color);
