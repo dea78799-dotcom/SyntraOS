@@ -321,7 +321,7 @@ static void test_rejects_unimplemented_dynamic_reserved_memory(void)
         (size_t)0x1000U) == SYNTRA_STATUS_NOT_IMPLEMENTED);
 }
 
-static void test_rejects_no_map_until_mapping_metadata_exists(void)
+static void test_discovers_no_map_reservation(void)
 {
     syntra_fdt_t fdt;
     size_t blob_size = build_memory_map_fdt(0, 0, 1);
@@ -330,7 +330,9 @@ static void test_rejects_no_map_until_mapping_metadata_exists(void)
     assert(syntra_arm64_memory_map_discover(
         &fdt,
         (uintptr_t)0x40008000U,
-        (size_t)0x1000U) == SYNTRA_STATUS_NOT_IMPLEMENTED);
+        (size_t)0x1000U) == SYNTRA_STATUS_OK);
+    assert_region(
+        (uintptr_t)0x50005000U, SYNTRA_MEMORY_REGION_NOMAP);
 }
 
 static void test_rejects_conflicting_no_map_and_reusable(void)
@@ -362,7 +364,7 @@ int main(void)
     test_fdt_memory_and_reservation_discovery();
     test_rejects_nonempty_reserved_memory_ranges();
     test_rejects_unimplemented_dynamic_reserved_memory();
-    test_rejects_no_map_until_mapping_metadata_exists();
+    test_discovers_no_map_reservation();
     test_rejects_conflicting_no_map_and_reusable();
     test_rejects_nonempty_reusable_boolean();
     puts("ARM64 FDT memory map tests passed");
