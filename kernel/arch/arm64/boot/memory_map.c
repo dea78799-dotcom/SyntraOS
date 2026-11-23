@@ -127,6 +127,44 @@ static int property_string_equals(
     return index < size && data[index] == 0U && expected[index] == '\0';
 }
 
+static int property_string_is_fail_status(
+    const uint8_t *data,
+    uint32_t size
+)
+{
+    uint32_t index;
+
+    if (data == NULL || size < 5U ||
+        data[0] != (uint8_t)'f' ||
+        data[1] != (uint8_t)'a' ||
+        data[2] != (uint8_t)'i' ||
+        data[3] != (uint8_t)'l')
+    {
+        return 0;
+    }
+
+    if (size == 5U)
+    {
+        return data[4] == 0U;
+    }
+
+    if (size < 7U || data[4] != (uint8_t)'-' || data[5] == 0U)
+    {
+        return 0;
+    }
+
+    /* A fail-sss status must contain a non-empty suffix and one final NUL. */
+    for (index = 5U; index < size; ++index)
+    {
+        if (data[index] == 0U)
+        {
+            return index == size - 1U;
+        }
+    }
+
+    return 0;
+}
+
 static int node_is_disabled(
     const syntra_fdt_t *fdt,
     const syntra_fdt_node_t *node
@@ -142,7 +180,7 @@ static int node_is_disabled(
     }
 
     return property_string_equals(data, size, "disabled") ||
-           property_string_equals(data, size, "fail");
+           property_string_is_fail_status(data, size);
 }
 
 static int node_is_memory(
