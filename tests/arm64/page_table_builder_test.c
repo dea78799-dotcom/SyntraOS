@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include "page_table_builder.h"
 
-#define TABLES 8U
+#define TABLES 160U
 #define BASE_PA 0x1000ULL
 static uint64_t storage[TABLES][512];
 static unsigned int used;
@@ -618,6 +618,68 @@ static void test_partial_overlap_preflight(void)
         SYNTRA_ARM64_MMU_MEMORY_NORMAL, SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_ERROR);
 }
 
+static void test_mapping_journal_capacity_exhaustion(void)
+{
+    syntra_arm64_page_table_t pt;
+    syntra_arm64_mmu_translation_t translation;
+    const uint64_t map_va = 0x40001000ULL;
+    const uint64_t map_pa = 0x80001000ULL;
+    const uint64_t map_size = 64ULL * SYNTRA_ARM64_MMU_BLOCK_SIZE;
+    const unsigned int journal_capacity = 64U;
+
+    reset();
+    released = 0U;
+    release_attempts = 0U;
+    assert(syntra_arm64_page_table_init_ex(
+        &pt, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+
+    /*
+     * This page-only range needs one L2 table plus 65 L3 tables. The bounded journal
+     * can retain only 64 new-table records, so preparation must fail before
+     * publishing any leaf and reclaim every table it did attach.
+     */
+    assert(syntra_arm64_page_table_map_user(
+        &pt, map_va, map_pa, map_size,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
+        SYNTRA_STATUS_OUT_OF_MEMORY);
+
+    assert(used == journal_capacity + 1U); /* root + 64 attached tables */
+    assert(release_attempts == journal_capacity);
+    assert(released == journal_capacity);
+    assert(storage[0][(map_va >> 30U) & 0x1ffU] == 0ULL);
+    assert(syntra_arm64_mmu_walk(pt.root_physical_address, map_va,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_ERROR);
+    assert(syntra_arm64_mmu_walk(
+        pt.root_physical_address,
+        map_va + map_size - SYNTRA_ARM64_MMU_PAGE_SIZE,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_ERROR);
+
+    /*
+     * Retry a small prefix: the original oversized range inherently exceeds
+     * journal capacity even when empty, but its first pages must remain usable.
+     */
+    const uint64_t retry_size = 2ULL * SYNTRA_ARM64_MMU_PAGE_SIZE;
+    assert(syntra_arm64_page_table_map_user(
+        &pt, map_va, map_pa, retry_size,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_verify_user(
+        &pt, map_va, map_pa, retry_size,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_mmu_walk(pt.root_physical_address, map_va,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_OK);
+    assert(translation.physical_address == map_pa);
+    assert(syntra_arm64_mmu_walk(
+        pt.root_physical_address,
+        map_va + retry_size - SYNTRA_ARM64_MMU_PAGE_SIZE,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_OK);
+    assert(translation.physical_address ==
+        map_pa + retry_size - SYNTRA_ARM64_MMU_PAGE_SIZE);
+}
+
 int main(void)
 {
     test_init_releases_invalid_allocator_result();
@@ -625,6 +687,7 @@ int main(void)
     test_build_and_walk_verify();
     test_map_rolls_back_on_allocation_failure();
     test_map_preallocates_before_publishing_any_leaf();
+    test_mapping_journal_capacity_exhaustion();
     test_rollback_preserves_hierarchy_when_release_fails();
     test_user_map_rolls_back_on_allocation_failure();
     test_user_map_preallocates_before_publishing_any_leaf();
