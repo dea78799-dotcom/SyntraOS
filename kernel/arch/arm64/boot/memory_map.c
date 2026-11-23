@@ -207,9 +207,11 @@ static syntra_status_t add_node_reg(
 }
 
 /*
- * Reservations outside discovered RAM (for example reserved MMIO) do not
- * enter the RAM allocator map. A range already covered by a reservation is
- * accepted; partial overlap is rejected rather than silently misclassified.
+ * Only intersections with discovered RAM enter the allocator map; portions
+ * outside RAM (for example reserved MMIO) are ignored. Existing non-RAM
+ * reservations are skipped, while each RAM intersection is carved out
+ * independently. A reservation may therefore span RAM, gaps, and
+ * previously-reserved regions without reclassifying those existing regions.
  */
 static syntra_status_t reserve_ram_range(
     uintptr_t base,
