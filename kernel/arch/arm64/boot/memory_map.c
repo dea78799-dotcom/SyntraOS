@@ -751,6 +751,17 @@ static syntra_status_t discover_reserved_memory_nodes(
         : status;
 }
 
+static syntra_status_t discard_incomplete_memory_map(
+    syntra_status_t failure_status
+)
+{
+    syntra_status_t reset_status = syntra_memory_regions_init();
+
+    return reset_status == SYNTRA_STATUS_OK
+        ? failure_status
+        : reset_status;
+}
+
 syntra_status_t syntra_arm64_memory_map_discover(
     const syntra_fdt_t *fdt,
     uintptr_t dtb_address,
@@ -772,25 +783,33 @@ syntra_status_t syntra_arm64_memory_map_discover(
     }
 
     status = discover_memory_nodes(fdt);
-    if (status != SYNTRA_STATUS_OK || syntra_memory_region_count() == 0U)
+    if (status != SYNTRA_STATUS_OK)
     {
-        return status == SYNTRA_STATUS_OK
-            ? SYNTRA_STATUS_ERROR
-            : status;
+        return discard_incomplete_memory_map(status);
+    }
+    if (syntra_memory_region_count() == 0U)
+    {
+        return discard_incomplete_memory_map(SYNTRA_STATUS_ERROR);
     }
 
     status = apply_header_reservations(fdt);
     if (status != SYNTRA_STATUS_OK)
     {
-        return status;
+        return discard_incomplete_memory_map(status);
     }
 
     status = discover_reserved_memory_nodes(fdt);
     if (status != SYNTRA_STATUS_OK)
     {
-        return status;
+        return discard_incomplete_memory_map(status);
     }
 
-    return reserve_ram_range(
+    status = reserve_ram_range(
         dtb_address, dtb_size, SYNTRA_MEMORY_REGION_DTB);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        return discard_incomplete_memory_map(status);
+    }
+
+    return SYNTRA_STATUS_OK;
 }
