@@ -335,6 +335,7 @@ static void test_rejects_nonempty_reserved_memory_ranges(void)
         &fdt,
         (uintptr_t)0x40008000U,
         (size_t)0x1000U) == SYNTRA_STATUS_ERROR);
+    assert(syntra_memory_region_count() == 0U);
 }
 
 static void test_rejects_unimplemented_dynamic_reserved_memory(void)
@@ -347,6 +348,7 @@ static void test_rejects_unimplemented_dynamic_reserved_memory(void)
         &fdt,
         (uintptr_t)0x40008000U,
         (size_t)0x1000U) == SYNTRA_STATUS_NOT_IMPLEMENTED);
+    assert(syntra_memory_region_count() == 0U);
 }
 
 static void test_discovers_no_map_reservation(void)
@@ -373,6 +375,7 @@ static void test_rejects_conflicting_no_map_and_reusable(void)
         &fdt,
         (uintptr_t)0x40008000U,
         (size_t)0x1000U) == SYNTRA_STATUS_ERROR);
+    assert(syntra_memory_region_count() == 0U);
 }
 
 static void test_rejects_nonempty_reusable_boolean(void)
@@ -385,6 +388,7 @@ static void test_rejects_nonempty_reusable_boolean(void)
         &fdt,
         (uintptr_t)0x40008000U,
         (size_t)0x1000U) == SYNTRA_STATUS_ERROR);
+    assert(syntra_memory_region_count() == 0U);
 }
 
 static void test_rejects_reserved_memory_cell_mismatch(void)
@@ -405,6 +409,7 @@ static void test_rejects_reserved_memory_cell_mismatch(void)
             &fdt,
             (uintptr_t)0x40008000U,
             (size_t)0x1000U) == SYNTRA_STATUS_ERROR);
+        assert(syntra_memory_region_count() == 0U);
     }
 }
 
