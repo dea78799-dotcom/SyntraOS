@@ -113,6 +113,11 @@ int main(void)
     first_root[200U] = 1ULL;
     assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_ERROR);
     first_root[200U] = 0ULL;
+    first.borrowed_root_entries[256U / 64U] |=
+        1ULL << (256U % 64U);
+    assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_ERROR);
+    first.borrowed_root_entries[256U / 64U] &=
+        ~(1ULL << (256U % 64U));
     assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
 
     /* Low addresses are reserved for inherited kernel mappings. */
