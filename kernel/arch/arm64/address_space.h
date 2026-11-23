@@ -93,7 +93,16 @@ syntra_status_t syntra_arm64_address_space_map_user_page(
     syntra_arm64_mmu_access_t access,
     int executable);
 
-/* Remove a mapping and release its exclusively owned PROCESS page. */
+/*
+ * Remove a mapping and release its exclusively owned PROCESS page.
+ *
+ * The mapping and PROCESS frame are detached/released before empty private
+ * L3/L2 tables are reclaimed. If a table-page release then fails, this
+ * function returns that error even though the user mapping is already gone
+ * and mapping_count has been decremented. The still-owned empty table remains
+ * reachable; retry address_space_destroy() to finish reclaiming it. Retrying
+ * this unmap for the same VA is not valid because the mapping is already gone.
+ */
 syntra_status_t syntra_arm64_address_space_unmap_user_page(
     syntra_arm64_address_space_t *space,
     uint64_t virtual_address);
