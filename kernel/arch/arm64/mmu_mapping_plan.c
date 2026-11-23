@@ -148,7 +148,7 @@ static syntra_status_t validate_no_map_exclusions(
                 &plan->mappings[mapping_index];
             uint64_t mapping_end;
 
-            if (!range_end(mapping->virtual_address,
+            if (!range_end(mapping->physical_address,
                            mapping->size, &mapping_end))
             {
                 return SYNTRA_STATUS_ERROR;
