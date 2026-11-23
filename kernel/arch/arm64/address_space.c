@@ -833,19 +833,19 @@ syntra_status_t syntra_arm64_address_space_destroy(
     }
 
     /*
-     * Reclaim mappings from the end and commit each successful release to
-     * mapping_count. If a later free fails, destroy can safely be retried
-     * without attempting to free an already-released process frame again.
+     * Reuse the checked unmap path so each process leaf is detached before
+     * its backing frame is freed. The unmap path commits mapping_count only
+     * after the frame release succeeds and preserves table links if table
+     * reclamation fails, making a later destroy attempt safe.
      */
     while (space->mapping_count != 0U)
     {
         size_t last = space->mapping_count - 1U;
-        status = syntra_page_free_owned(
-            (uintptr_t)space->mappings[last].physical_address,
-            SYNTRA_PAGE_OWNER_PROCESS);
+        uint64_t virtual_address = space->mappings[last].virtual_address;
+        status = syntra_arm64_address_space_unmap_user_page(
+            space, virtual_address);
         if (status != SYNTRA_STATUS_OK)
             return status;
-        space->mapping_count = last;
     }
 
     /*
