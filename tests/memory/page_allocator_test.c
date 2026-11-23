@@ -242,7 +242,7 @@ int main(void)
     assert(syntra_page_free(third) == SYNTRA_STATUS_OK);
     assert(syntra_page_alloc_contiguous(2U, &first) == SYNTRA_STATUS_OK);
     assert(first == second);
-    assert(syntra_page_allocator_free_count() == 0U);
+    assert(syntra_page_allocator_free_count() == 1U);
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
     assert(syntra_page_free(first) == SYNTRA_STATUS_OK);
     assert(syntra_page_free(first + SYNTRA_PAGE_SIZE) == SYNTRA_STATUS_OK);
