@@ -320,6 +320,65 @@ static void test_user_map_preallocates_before_publishing_any_leaf(void)
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
 }
 
+static void test_user_map_preserves_hierarchy_when_release_fails(void)
+{
+    syntra_arm64_page_table_t pt;
+    syntra_arm64_mmu_translation_t translation;
+    uint64_t *root;
+    uint64_t next_l1_descriptor;
+
+    reset();
+    released = 0U;
+    release_attempts = 0U;
+    assert(syntra_arm64_page_table_init_ex(
+        &pt, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+
+    /* Seed the final L1 slot so the first requested page already has tables. */
+    assert(syntra_arm64_page_table_map_user(
+        &pt, 0x7fffe000ULL, 0x8fffe000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+
+    /*
+     * The range crosses an L1 boundary. Permit allocation of the next L2
+     * table, fail its L3 allocation, and then fail release of that L2 page.
+     * Rollback must restore the root descriptor so the owned page stays
+     * reachable and can be reused by a later retry.
+     */
+    allocation_limit = used + 1U;
+    fail_release = 1;
+    assert(syntra_arm64_page_table_map_user(
+        &pt, 0x7ffff000ULL, 0x8ffff000ULL, 0x2000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
+        SYNTRA_STATUS_OUT_OF_MEMORY);
+
+    root = resolve_cb(pt.root_physical_address, NULL);
+    assert(root != NULL);
+    next_l1_descriptor = root[(0x80000000ULL >> 30U) & 0x1ffU];
+    assert(next_l1_descriptor != 0ULL);
+    assert((next_l1_descriptor & 3ULL) == 3ULL);
+    assert(resolve_cb(next_l1_descriptor & 0x0000fffffffff000ULL, NULL) != NULL);
+    assert(release_attempts == 1U);
+    assert(released == 0U);
+
+    /* Neither requested leaf may have been published by the failed setup. */
+    assert(syntra_arm64_mmu_walk(pt.root_physical_address, 0x7ffff000ULL,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_ERROR);
+    assert(syntra_arm64_mmu_walk(pt.root_physical_address, 0x80000000ULL,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_ERROR);
+
+    /* Re-enable reclamation/allocation and prove the retained hierarchy retries. */
+    fail_release = 0;
+    allocation_limit = TABLES;
+    assert(syntra_arm64_page_table_map_user(
+        &pt, 0x7ffff000ULL, 0x8ffff000ULL, 0x2000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_verify_user(
+        &pt, 0x7ffff000ULL, 0x8ffff000ULL, 0x2000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+}
+
 static void test_user_page_mappings(void)
 {
     syntra_arm64_page_table_t pt;
@@ -514,6 +573,7 @@ int main(void)
     test_rollback_preserves_hierarchy_when_release_fails();
     test_user_map_rolls_back_on_allocation_failure();
     test_user_map_preallocates_before_publishing_any_leaf();
+    test_user_map_preserves_hierarchy_when_release_fails();
     test_user_page_mappings();
     test_block_mapping();
     test_block_page_conflict();
