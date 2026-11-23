@@ -199,6 +199,50 @@ static void test_rollback_preserves_hierarchy_when_release_fails(void)
         &translation) == SYNTRA_STATUS_OK);
 }
 
+static void test_map_preallocates_before_publishing_any_leaf(void)
+{
+    syntra_arm64_page_table_t pt;
+    syntra_arm64_mmu_translation_t translation;
+
+    reset();
+    released = 0U;
+    release_attempts = 0U;
+    assert(syntra_arm64_page_table_init_ex(
+        &pt, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+
+    /* Seed the first 2-MiB region so its first leaf already has a table. */
+    assert(syntra_arm64_page_table_map(
+        &pt, 0x40000000ULL, 0x80000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(used == 3U);
+
+    /*
+     * First requested page fits in the existing L3 table. The second page
+     * crosses a 2-MiB boundary and needs another L3 table; force that
+     * allocation to fail. Phase one must fail before publishing page one.
+     */
+    allocation_limit = used;
+    assert(syntra_arm64_page_table_map(
+        &pt, 0x401ff000ULL, 0x801ff000ULL, 0x2000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
+        SYNTRA_STATUS_OUT_OF_MEMORY);
+
+    assert(syntra_arm64_mmu_walk(pt.root_physical_address, 0x401ff000ULL,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_ERROR);
+    assert(syntra_arm64_mmu_walk(pt.root_physical_address, 0x40200000ULL,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_ERROR);
+
+    allocation_limit = TABLES;
+    assert(syntra_arm64_page_table_map(
+        &pt, 0x401ff000ULL, 0x801ff000ULL, 0x2000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+}
+
 static void test_user_map_rolls_back_on_allocation_failure(void)
 {
     syntra_arm64_page_table_t pt;
@@ -423,6 +467,7 @@ int main(void)
     test_init_reclaims_unresolvable_root();
     test_build_and_walk_verify();
     test_map_rolls_back_on_allocation_failure();
+    test_map_preallocates_before_publishing_any_leaf();
     test_rollback_preserves_hierarchy_when_release_fails();
     test_user_map_rolls_back_on_allocation_failure();
     test_user_page_mappings();
