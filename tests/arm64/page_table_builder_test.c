@@ -12,6 +12,11 @@ static unsigned int release_attempts;
 static unsigned int allocation_limit = TABLES;
 static int fail_release;
 
+typedef struct
+{
+    uint64_t fail_physical_address;
+} resolve_failure_context_t;
+
 static syntra_status_t alloc_cb(void *ctx, uint64_t *pa)
 {
     (void)ctx;
@@ -59,6 +64,15 @@ static syntra_status_t alloc_invalid_pa_cb(void *ctx, uint64_t *pa)
     if (pa == NULL) return SYNTRA_STATUS_INVALID_ARGUMENT;
     *pa = BASE_PA + 1ULL; /* allocator contract violation: unaligned PA */
     return SYNTRA_STATUS_OK;
+}
+
+static uint64_t *resolve_fail_pa_cb(uint64_t pa, void *ctx)
+{
+    const resolve_failure_context_t *failure =
+        (const resolve_failure_context_t *)ctx;
+    if (failure != NULL && pa == failure->fail_physical_address)
+        return NULL;
+    return resolve_cb(pa, NULL);
 }
 
 static uint64_t *resolve_fail_cb(uint64_t pa, void *ctx)
@@ -320,6 +334,47 @@ static void test_user_map_preallocates_before_publishing_any_leaf(void)
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
 }
 
+static void test_user_map_reclaims_tables_when_child_resolve_fails(void)
+{
+    syntra_arm64_page_table_t pt;
+    syntra_arm64_mmu_translation_t translation;
+    resolve_failure_context_t failure;
+
+    reset();
+    released = 0U;
+    release_attempts = 0U;
+    failure.fail_physical_address = BASE_PA + 2ULL * 4096ULL;
+
+    assert(syntra_arm64_page_table_init_ex(
+        &pt, alloc_cb, release_cb, resolve_fail_pa_cb, &failure) ==
+        SYNTRA_STATUS_OK);
+
+    /*
+     * Root and L2 resolve normally. L3 allocation succeeds, but resolving
+     * its physical page fails. The L3 page must be released immediately and
+     * the already-attached L2 page must be removed by transaction rollback.
+     */
+    assert(syntra_arm64_page_table_map_user(
+        &pt, 0x54000000ULL, 0x84000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_ERROR);
+    assert(used == 3U);
+    assert(release_attempts == 2U);
+    assert(released == 2U);
+    assert(storage[0][(0x54000000ULL >> 30U) & 0x1ffU] == 0ULL);
+    assert(syntra_arm64_mmu_walk(pt.root_physical_address, 0x54000000ULL,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_ERROR);
+
+    /* Once the resolver recovers, the same VA can be mapped successfully. */
+    failure.fail_physical_address = 0ULL;
+    assert(syntra_arm64_page_table_map_user(
+        &pt, 0x54000000ULL, 0x84000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_verify_user(
+        &pt, 0x54000000ULL, 0x84000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+}
+
 static void test_user_map_preserves_hierarchy_when_release_fails(void)
 {
     syntra_arm64_page_table_t pt;
@@ -573,6 +628,7 @@ int main(void)
     test_rollback_preserves_hierarchy_when_release_fails();
     test_user_map_rolls_back_on_allocation_failure();
     test_user_map_preallocates_before_publishing_any_leaf();
+    test_user_map_reclaims_tables_when_child_resolve_fails();
     test_user_map_preserves_hierarchy_when_release_fails();
     test_user_page_mappings();
     test_block_mapping();
