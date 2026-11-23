@@ -103,17 +103,24 @@ int main(void)
         const uint64_t last_user_page =
             SYNTRA_ARM64_USER_VA_LIMIT - SYNTRA_ARM64_MMU_PAGE_SIZE;
 
-        assert(syntra_page_alloc_owned(
-            &boundary_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
-        assert(syntra_arm64_address_space_map_user_page(
-            &first, SYNTRA_ARM64_USER_VA_LIMIT, boundary_page,
-            SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
-            SYNTRA_STATUS_INVALID_ARGUMENT);
-        assert(syntra_page_get_owner(
-            boundary_page, &boundary_owner) == SYNTRA_STATUS_OK);
-        assert(boundary_owner == SYNTRA_PAGE_OWNER_PROCESS);
-        assert(syntra_page_free_owned(
-            boundary_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+        {
+            const size_t mapping_count_before = first.mapping_count;
+            assert(syntra_page_alloc_owned(
+                &boundary_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+            assert(syntra_arm64_address_space_map_user_page(
+                &first, SYNTRA_ARM64_USER_VA_LIMIT, boundary_page,
+                SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
+                SYNTRA_STATUS_INVALID_ARGUMENT);
+            assert(first.mapping_count == mapping_count_before);
+            assert(syntra_page_get_owner(
+                boundary_page, &boundary_owner) == SYNTRA_STATUS_OK);
+            assert(boundary_owner == SYNTRA_PAGE_OWNER_PROCESS);
+            assert(syntra_arm64_address_space_validate(&first) ==
+                SYNTRA_STATUS_OK);
+            assert(syntra_page_free_owned(
+                boundary_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+            assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+        }
 
         assert(syntra_page_alloc_owned(
             &boundary_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
