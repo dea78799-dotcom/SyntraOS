@@ -608,12 +608,15 @@ static void test_block_page_conflict(void)
 static void test_partial_overlap_preflight(void)
 {
     syntra_arm64_page_table_t pt;
+    unsigned int allocations_before_overlap;
     reset();
     assert(syntra_arm64_page_table_init_ex(&pt, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_page_table_map(&pt, 0x50002000ULL, 0x60002000ULL, 0x1000ULL,
         SYNTRA_ARM64_MMU_MEMORY_NORMAL, SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    allocations_before_overlap = used;
     assert(syntra_arm64_page_table_map(&pt, 0x50001000ULL, 0x70001000ULL, 0x2000ULL,
         SYNTRA_ARM64_MMU_MEMORY_NORMAL, SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_ERROR);
+    assert(used == allocations_before_overlap);
     assert(syntra_arm64_page_table_verify(&pt, 0x50001000ULL, 0x70001000ULL, 0x1000ULL,
         SYNTRA_ARM64_MMU_MEMORY_NORMAL, SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_ERROR);
 }
