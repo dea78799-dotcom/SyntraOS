@@ -489,11 +489,57 @@ static void test_memory_map_capacity_failure_rolls_back(void)
     second_memory_size = (size_t)0x8000U;
 }
 
+static void test_header_reservation_capacity_failure_rolls_back(void)
+{
+    syntra_fdt_t fdt;
+    size_t blob_size;
+
+    /*
+     * 2 built-in nodes + 30 extras fill all 32 slots. The header reservation
+     * splits the first RAM region into three pieces and must fail atomically.
+     */
+    extra_memory_node_count = 30U;
+    blob_size = build_memory_map_fdt(0, 0, 0, 0);
+
+    assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_memory_map_discover(
+        &fdt,
+        (uintptr_t)0x40008000U,
+        (size_t)0x1000U) == SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(syntra_memory_region_count() == 0U);
+
+    extra_memory_node_count = 0U;
+}
+
+static void test_reserved_memory_capacity_failure_rolls_back(void)
+{
+    syntra_fdt_t fdt;
+    size_t blob_size;
+
+    /*
+     * 2 built-in nodes + 27 extras leave 3 slots. The header reservation
+     * consumes 2; the reusable carve then needs 2 more and must fail.
+     */
+    extra_memory_node_count = 27U;
+    blob_size = build_memory_map_fdt(0, 0, 0, 0);
+
+    assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_memory_map_discover(
+        &fdt,
+        (uintptr_t)0x40008000U,
+        (size_t)0x1000U) == SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(syntra_memory_region_count() == 0U);
+
+    extra_memory_node_count = 0U;
+}
+
 int main(void)
 {
     test_fdt_memory_and_reservation_discovery();
     test_memory_nodes_reject_overlapping_ranges();
     test_memory_map_capacity_failure_rolls_back();
+    test_header_reservation_capacity_failure_rolls_back();
+    test_reserved_memory_capacity_failure_rolls_back();
     test_rejects_nonempty_reserved_memory_ranges();
     test_rejects_reserved_memory_cell_mismatch();
     test_rejects_unimplemented_dynamic_reserved_memory();
