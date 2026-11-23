@@ -92,7 +92,7 @@ static void append_reg(uintptr_t base, size_t size)
 static size_t build_memory_map_fdt(void)
 {
     static const char strings[] =
-        "#address-cells\0#size-cells\0reg\0reusable\0";
+        "#address-cells\0#size-cells\0reg\0reusable\0status\0";
     const size_t reserve_offset = 40U;
     const size_t structure_offset = 72U;
     size_t strings_offset;
@@ -117,6 +117,20 @@ static size_t build_memory_map_fdt(void)
 
     append_node("memory@40000000");
     append_reg((uintptr_t)0x40000000U, (size_t)0x10000U);
+    append_end_node();
+
+    /* A second enabled RAM node must be included in the discovered map. */
+    append_node("memory@50000000");
+    append_reg((uintptr_t)0x50000000U, (size_t)0x8000U);
+    append_end_node();
+
+    /* Disabled memory nodes must not become allocator RAM. */
+    append_node("memory@60000000");
+    append_reg((uintptr_t)0x60000000U, (size_t)0x8000U);
+    {
+        static const uint8_t disabled_status[] = "disabled";
+        append_property(39U, disabled_status, sizeof(disabled_status));
+    }
     append_end_node();
 
     append_node("reserved-memory");
@@ -179,7 +193,7 @@ static void test_fdt_memory_and_reservation_discovery(void)
         (uintptr_t)0x40008000U,
         (size_t)0x1000U) == SYNTRA_STATUS_OK);
 
-    assert(syntra_memory_region_count() == 7U);
+    assert(syntra_memory_region_count() == 8U);
     assert_region((uintptr_t)0x40001000U, SYNTRA_MEMORY_REGION_RAM);
     assert_region((uintptr_t)0x40002000U, SYNTRA_MEMORY_REGION_RESERVED);
     assert_region((uintptr_t)0x40003000U, SYNTRA_MEMORY_REGION_RAM);
@@ -187,6 +201,12 @@ static void test_fdt_memory_and_reservation_discovery(void)
     assert_region((uintptr_t)0x40005000U, SYNTRA_MEMORY_REGION_RAM);
     assert_region((uintptr_t)0x40008000U, SYNTRA_MEMORY_REGION_DTB);
     assert_region((uintptr_t)0x40009000U, SYNTRA_MEMORY_REGION_RAM);
+    assert_region((uintptr_t)0x50001000U, SYNTRA_MEMORY_REGION_RAM);
+    {
+        syntra_memory_region_t disabled_region;
+        assert(syntra_memory_region_find(
+            (uintptr_t)0x60001000U, &disabled_region) != SYNTRA_STATUS_OK);
+    }
 }
 
 int main(void)
