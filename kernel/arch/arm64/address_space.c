@@ -132,6 +132,18 @@ static syntra_status_t allocate_page_table_page(
     return SYNTRA_STATUS_OK;
 }
 
+static syntra_status_t release_page_table_page(
+    void *context, uint64_t physical_address)
+{
+    (void)context;
+
+    if (physical_address > (uint64_t)UINTPTR_MAX)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    return syntra_page_free_owned(
+        (uintptr_t)physical_address, SYNTRA_PAGE_OWNER_PAGE_TABLE);
+}
+
 static uint64_t *resolve_page_table_page(
     uint64_t physical_address, void *context)
 {
@@ -193,9 +205,10 @@ syntra_status_t syntra_arm64_address_space_create(
     space->page_table.resolve = resolve_page_table_page;
     space->page_table.context = space;
 
-    status = syntra_arm64_page_table_init(
+    status = syntra_arm64_page_table_init_ex(
         &space->page_table,
         allocate_page_table_page,
+        release_page_table_page,
         resolve_page_table_page,
         space);
     if (status != SYNTRA_STATUS_OK)
@@ -305,7 +318,7 @@ static syntra_status_t rollback_empty_user_tables(
 {
     uint16_t indices[4];
     uint64_t *root, *level2, *level3;
-    uint64_t descriptor, level2_pa, level3_pa;
+    uint64_t descriptor, root_descriptor, level2_pa, level3_pa;
     syntra_status_t status;
 
     status = syntra_arm64_mmu_get_table_indices(virtual_address, indices);
@@ -317,7 +330,8 @@ static syntra_status_t rollback_empty_user_tables(
     if (root == NULL)
         return SYNTRA_STATUS_ERROR;
 
-    descriptor = root[indices[0]];
+    root_descriptor = root[indices[0]];
+    descriptor = root_descriptor;
     if ((descriptor & (DESC_VALID | DESC_TYPE)) !=
         (DESC_VALID | DESC_TYPE))
         return SYNTRA_STATUS_OK;
@@ -347,15 +361,22 @@ static syntra_status_t rollback_empty_user_tables(
             status = syntra_page_free_owned(
                 (uintptr_t)level3_pa, SYNTRA_PAGE_OWNER_PAGE_TABLE);
             if (status != SYNTRA_STATUS_OK)
+            {
+                /* Keep the still-owned child reachable for a later retry. */
+                level2[indices[1]] = descriptor;
                 return status;
+            }
         }
     }
 
     if (table_is_empty(level2))
     {
         root[indices[0]] = 0ULL;
-        return syntra_page_free_owned(
+        status = syntra_page_free_owned(
             (uintptr_t)level2_pa, SYNTRA_PAGE_OWNER_PAGE_TABLE);
+        if (status != SYNTRA_STATUS_OK)
+            root[indices[0]] = root_descriptor;
+        return status;
     }
 
     return SYNTRA_STATUS_OK;
@@ -429,7 +450,8 @@ syntra_status_t syntra_arm64_address_space_unmap_user_page(
 {
     uint16_t indices[4];
     uint64_t *root, *level2, *level3;
-    uint64_t descriptor, level2_pa, level3_pa, process_pa;
+    uint64_t descriptor, root_descriptor, level2_descriptor;
+    uint64_t level2_pa, level3_pa, process_pa, leaf_descriptor;
     size_t mapping_index;
     syntra_status_t status;
 
@@ -461,7 +483,8 @@ syntra_status_t syntra_arm64_address_space_unmap_user_page(
     if (root == NULL)
         return SYNTRA_STATUS_ERROR;
 
-    descriptor = root[indices[0]];
+    root_descriptor = root[indices[0]];
+    descriptor = root_descriptor;
     if ((descriptor & (DESC_VALID | DESC_TYPE)) !=
         (DESC_VALID | DESC_TYPE) ||
         (descriptor & ~(DESC_ADDR | 3ULL)) != 0ULL)
@@ -474,7 +497,8 @@ syntra_status_t syntra_arm64_address_space_unmap_user_page(
     if (level2 == NULL)
         return SYNTRA_STATUS_ERROR;
 
-    descriptor = level2[indices[1]];
+    level2_descriptor = level2[indices[1]];
+    descriptor = level2_descriptor;
     if ((descriptor & (DESC_VALID | DESC_TYPE)) !=
         (DESC_VALID | DESC_TYPE) ||
         (descriptor & ~(DESC_ADDR | 3ULL)) != 0ULL)
@@ -487,17 +511,35 @@ syntra_status_t syntra_arm64_address_space_unmap_user_page(
     if (level3 == NULL)
         return SYNTRA_STATUS_ERROR;
 
-    descriptor = level3[indices[2]];
-    if ((descriptor & (DESC_VALID | DESC_TYPE)) !=
+    leaf_descriptor = level3[indices[2]];
+    if ((leaf_descriptor & (DESC_VALID | DESC_TYPE)) !=
         (DESC_VALID | DESC_TYPE) ||
-        (descriptor & DESC_ADDR) != process_pa)
+        (leaf_descriptor & DESC_ADDR) != process_pa)
         return SYNTRA_STATUS_ERROR;
+
+    /*
+     * Do not reclaim a frame if its live descriptor no longer matches the
+     * access and execute permissions recorded in the address-space registry.
+     */
+    status = syntra_arm64_page_table_verify_user(
+        &space->page_table,
+        virtual_address,
+        process_pa,
+        SYNTRA_ARM64_MMU_PAGE_SIZE,
+        space->mappings[mapping_index].access,
+        (int)space->mappings[mapping_index].executable);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
 
     level3[indices[2]] = 0ULL;
     status = syntra_page_free_owned(
         (uintptr_t)process_pa, SYNTRA_PAGE_OWNER_PROCESS);
     if (status != SYNTRA_STATUS_OK)
+    {
+        /* Restore the mapping if its backing frame could not be reclaimed. */
+        level3[indices[2]] = leaf_descriptor;
         return status;
+    }
 
     for (size_t i = mapping_index + 1U; i < space->mapping_count; ++i)
         space->mappings[i - 1U] = space->mappings[i];
@@ -509,7 +551,11 @@ syntra_status_t syntra_arm64_address_space_unmap_user_page(
         status = syntra_page_free_owned(
             (uintptr_t)level3_pa, SYNTRA_PAGE_OWNER_PAGE_TABLE);
         if (status != SYNTRA_STATUS_OK)
+        {
+            /* The L3 page is still owned; preserve its parent descriptor. */
+            level2[indices[1]] = level2_descriptor;
             return status;
+        }
 
         if (table_is_empty(level2))
         {
@@ -517,7 +563,11 @@ syntra_status_t syntra_arm64_address_space_unmap_user_page(
             status = syntra_page_free_owned(
                 (uintptr_t)level2_pa, SYNTRA_PAGE_OWNER_PAGE_TABLE);
             if (status != SYNTRA_STATUS_OK)
+            {
+                /* Keep the empty L2 table reachable if reclamation fails. */
+                root[indices[0]] = root_descriptor;
                 return status;
+            }
         }
     }
 
@@ -541,6 +591,9 @@ syntra_status_t syntra_arm64_address_space_translate(
         translation);
 }
 
+static syntra_status_t validate_address_space_root_layout(
+    syntra_arm64_address_space_t *space);
+
 syntra_status_t syntra_arm64_address_space_validate(
     syntra_arm64_address_space_t *space)
 {
@@ -557,6 +610,10 @@ syntra_status_t syntra_arm64_address_space_validate(
     status = page_owner_is(
         space->page_table.root_physical_address,
         SYNTRA_PAGE_OWNER_PAGE_TABLE);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    status = validate_address_space_root_layout(space);
     if (status != SYNTRA_STATUS_OK)
         return status;
 
@@ -641,6 +698,137 @@ static syntra_status_t validate_table_tree(
     return SYNTRA_STATUS_OK;
 }
 
+static syntra_status_t validate_user_table_tree(
+    syntra_arm64_address_space_t *space,
+    uint64_t table_physical_address,
+    unsigned int level,
+    uint64_t virtual_base)
+{
+    uint64_t *table;
+    syntra_status_t status;
+
+    status = page_owner_is(
+        table_physical_address, SYNTRA_PAGE_OWNER_PAGE_TABLE);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    table = resolve_page_table_page(table_physical_address, space);
+    if (table == NULL)
+        return SYNTRA_STATUS_ERROR;
+
+    for (size_t i = (level == 1U ? 256U : 0U);
+         i < SYNTRA_ARM64_MMU_TABLE_ENTRIES; ++i)
+    {
+        uint64_t descriptor = table[i];
+        uint64_t entry_va;
+        uint64_t child_pa;
+
+        if (descriptor == 0ULL)
+            continue;
+        if ((descriptor & DESC_VALID) == 0ULL)
+            return SYNTRA_STATUS_ERROR;
+
+        entry_va = virtual_base +
+            ((uint64_t)i << (level == 1U ? 30U :
+                             (level == 2U ? 21U : 12U)));
+
+        if (level == 3U)
+        {
+            if ((descriptor & DESC_TYPE) == 0ULL)
+                return SYNTRA_STATUS_ERROR;
+
+            for (size_t mapping_index = 0U;
+                 mapping_index < space->mapping_count; ++mapping_index)
+            {
+                const syntra_arm64_address_space_mapping_t *mapping =
+                    &space->mappings[mapping_index];
+                if (mapping->virtual_address == entry_va &&
+                    mapping->physical_address == (descriptor & DESC_ADDR))
+                    break;
+                if (mapping_index + 1U == space->mapping_count)
+                    return SYNTRA_STATUS_ERROR;
+            }
+            if (space->mapping_count == 0U)
+                return SYNTRA_STATUS_ERROR;
+            continue;
+        }
+
+        if ((descriptor & DESC_TYPE) == 0ULL ||
+            (descriptor & ~(DESC_ADDR | 3ULL)) != 0ULL)
+            return SYNTRA_STATUS_ERROR;
+
+        child_pa = descriptor & DESC_ADDR;
+        status = validate_user_table_tree(
+            space, child_pa, level + 1U, entry_va);
+        if (status != SYNTRA_STATUS_OK)
+            return status;
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
+static syntra_status_t validate_address_space_root_layout(
+    syntra_arm64_address_space_t *space)
+{
+    uint64_t *root, *kernel_root;
+    syntra_status_t status;
+
+    status = page_owner_is(
+        space->kernel_root_physical_address,
+        SYNTRA_PAGE_OWNER_PAGE_TABLE);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    root = resolve_page_table_page(
+        space->page_table.root_physical_address, space);
+    kernel_root = resolve_page_table_page(
+        space->kernel_root_physical_address, space);
+    if (root == NULL || kernel_root == NULL)
+        return SYNTRA_STATUS_ERROR;
+
+    /*
+     * Entries 0..127 are borrowed from the kernel root and must remain
+     * byte-for-byte identical. The bitmap must describe exactly those
+     * non-empty borrowed entries so destruction never frees shared tables.
+     */
+    for (size_t i = 0U; i < 128U; ++i)
+    {
+        int expected_borrowed = kernel_root[i] != 0ULL;
+        if (root[i] != kernel_root[i] ||
+            root_entry_is_borrowed(space, i) != expected_borrowed)
+            return SYNTRA_STATUS_ERROR;
+    }
+
+    /*
+     * No root entry outside the inherited kernel window may be marked
+     * borrowed. In particular, user L1 entries must remain privately owned.
+     */
+    for (size_t i = 128U; i < SYNTRA_ARM64_MMU_TABLE_ENTRIES; ++i)
+        if (root_entry_is_borrowed(space, i))
+            return SYNTRA_STATUS_ERROR;
+
+    /* Entries 128..255 are the reserved gap before the EL0 user range. */
+    for (size_t i = 128U; i < 256U; ++i)
+        if (root[i] != 0ULL)
+            return SYNTRA_STATUS_ERROR;
+
+    /*
+     * Audit every reachable table page, including private user tables and
+     * borrowed kernel subtrees, before the address space is activated.
+     */
+    status = validate_table_tree(
+        space, space->page_table.root_physical_address, 1U);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    /*
+     * User tables may contain only private 4-KiB page mappings recorded in
+     * the mapping registry. Reject block descriptors and untracked leaves.
+     */
+    return validate_user_table_tree(
+        space, space->page_table.root_physical_address, 1U, 0ULL);
+}
+
 static syntra_status_t release_table_tree(
     syntra_arm64_address_space_t *space,
     uint64_t table_physical_address,
@@ -669,6 +857,12 @@ static syntra_status_t release_table_tree(
                 space, descriptor & DESC_ADDR, level + 1U);
             if (status != SYNTRA_STATUS_OK)
                 return status;
+
+            /*
+             * The child is now released. Clear its parent link immediately so
+             * a later failure leaves a valid, retryable partial tree.
+             */
+            table[i] = 0ULL;
         }
     }
 
@@ -794,6 +988,15 @@ syntra_status_t syntra_arm64_address_space_destroy(
     if (status != SYNTRA_STATUS_OK)
         return status;
 
+    /*
+     * Validate the complete private user tree before freeing any process
+     * frame. This rejects unregistered leaves and descriptor/registry
+     * mismatches without partially destroying an inconsistent address space.
+     */
+    status = syntra_arm64_address_space_validate(space);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
     for (size_t i = 0U; i < space->mapping_count; ++i)
     {
         status = page_owner_is(
@@ -803,15 +1006,27 @@ syntra_status_t syntra_arm64_address_space_destroy(
             return status;
     }
 
-    for (size_t i = 0U; i < space->mapping_count; ++i)
+    /*
+     * Reuse the checked unmap path so each process leaf is detached before
+     * its backing frame is freed. The unmap path commits mapping_count only
+     * after the frame release succeeds and preserves table links if table
+     * reclamation fails, making a later destroy attempt safe.
+     */
+    while (space->mapping_count != 0U)
     {
-        status = syntra_page_free_owned(
-            (uintptr_t)space->mappings[i].physical_address,
-            SYNTRA_PAGE_OWNER_PROCESS);
+        size_t last = space->mapping_count - 1U;
+        uint64_t virtual_address = space->mappings[last].virtual_address;
+        status = syntra_arm64_address_space_unmap_user_page(
+            space, virtual_address);
         if (status != SYNTRA_STATUS_OK)
             return status;
     }
 
+    /*
+     * release_table_tree clears each parent descriptor after freeing its
+     * child. A failure therefore leaves the remaining tree reachable and
+     * permits a subsequent destroy attempt.
+     */
     status = release_table_tree(space, root, 1U);
     if (status != SYNTRA_STATUS_OK)
         return status;

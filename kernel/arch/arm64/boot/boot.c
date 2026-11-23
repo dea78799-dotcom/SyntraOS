@@ -961,6 +961,16 @@ static syntra_status_t syntra_boot_page_table_allocate(
     return status;
 }
 
+static syntra_status_t syntra_boot_page_table_release(
+    void *context, uint64_t physical_address)
+{
+    (void)context;
+    if (physical_address > (uint64_t)UINTPTR_MAX)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    return syntra_page_free_owned(
+        (uintptr_t)physical_address, SYNTRA_PAGE_OWNER_PAGE_TABLE);
+}
+
 static uint64_t *syntra_boot_page_table_resolve(
     uint64_t physical_address, void *context)
 {
@@ -1976,8 +1986,9 @@ static syntra_status_t syntra_arm64_boot_mmu_mapping_audit(void)
         return status;
     }
 
-    status = syntra_arm64_page_table_init(
+    status = syntra_arm64_page_table_init_ex(
         &page_table, syntra_boot_page_table_allocate,
+        syntra_boot_page_table_release,
         syntra_boot_page_table_resolve, NULL);
     if (status != SYNTRA_STATUS_OK) return status;
 

@@ -39,17 +39,65 @@ static uint64_t *resolve_page(uint64_t physical_address, void *context)
         (physical_address - TEST_RAM_BASE) / SYNTRA_PAGE_SIZE];
 }
 
+typedef struct
+{
+    unsigned int calls;
+    unsigned int fail_on_call;
+} resolve_failure_context_t;
+
+static uint64_t *resolve_page_with_failure(
+    uint64_t physical_address, void *context)
+{
+    resolve_failure_context_t *failure =
+        (resolve_failure_context_t *)context;
+
+    if (failure == NULL)
+        return NULL;
+    failure->calls++;
+    if (failure->calls == failure->fail_on_call)
+        return NULL;
+    return resolve_page(physical_address, NULL);
+}
+
+static void test_address_space_create_releases_unresolvable_root(void)
+{
+    syntra_arm64_address_space_t failed_space = {0};
+    resolve_failure_context_t failure = {0U, 2U};
+    const size_t free_before = syntra_page_allocator_free_count();
+
+    /*
+     * The address-space allocator's preflight resolve succeeds on call one.
+     * The page-table builder's own resolve fails on call two, so init_ex
+     * must return the newly allocated PAGE_TABLE frame through its callback.
+     */
+    assert(syntra_arm64_address_space_create(
+        &failed_space, 99U, resolve_page_with_failure, &failure) ==
+        SYNTRA_STATUS_ERROR);
+    assert(failure.calls == 2U);
+    assert(failed_space.initialized == 0U);
+    assert(failed_space.page_table.root_physical_address == 0ULL);
+    assert(syntra_page_allocator_free_count() == free_before);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+}
+
 int main(void)
 {
     syntra_arm64_address_space_t first = {0};
     syntra_arm64_address_space_t second = {0};
     syntra_arm64_page_table_t kernel_table = {0};
     uint64_t *kernel_root, *kernel_l2, *kernel_l3;
+    uint64_t *first_root;
+    uint64_t saved_kernel_entry;
     uint16_t kernel_indices[4];
+    uint16_t user_indices[4];
+    uint64_t *first_l2, *first_l3;
+    uint64_t rogue_descriptor;
+    uintptr_t rogue_process_page;
     uintptr_t kernel_data_page;
     syntra_arm64_mmu_translation_t translation;
     uintptr_t first_process_page;
     uintptr_t second_process_page;
+    uintptr_t extra_process_pages[3];
     size_t initial_free;
 
     assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
@@ -60,6 +108,8 @@ int main(void)
     assert(syntra_page_allocator_init() == SYNTRA_STATUS_OK);
     initial_free = syntra_page_allocator_free_count();
     assert(initial_free == TEST_RAM_PAGES);
+
+    test_address_space_create_releases_unresolvable_root();
 
     assert(syntra_page_alloc_owned(
         &kernel_data_page, SYNTRA_PAGE_OWNER_KERNEL) == SYNTRA_STATUS_OK);
@@ -85,6 +135,53 @@ int main(void)
         &first, kernel_table.root_physical_address) ==
         SYNTRA_STATUS_INVALID_ARGUMENT);
 
+    /*
+     * User VA boundary: the final 4-KiB page is valid, while the exact
+     * exclusive upper bound (512 GiB) must be rejected without consuming
+     * the caller-owned PROCESS page.
+     */
+    {
+        uintptr_t boundary_page;
+        syntra_page_owner_t boundary_owner = SYNTRA_PAGE_OWNER_NONE;
+        const uint64_t last_user_page =
+            SYNTRA_ARM64_USER_VA_LIMIT - SYNTRA_ARM64_MMU_PAGE_SIZE;
+
+        {
+            const size_t mapping_count_before = first.mapping_count;
+            assert(syntra_page_alloc_owned(
+                &boundary_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+            assert(syntra_arm64_address_space_map_user_page(
+                &first, SYNTRA_ARM64_USER_VA_LIMIT, boundary_page,
+                SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
+                SYNTRA_STATUS_INVALID_ARGUMENT);
+            assert(first.mapping_count == mapping_count_before);
+            assert(syntra_page_get_owner(
+                boundary_page, &boundary_owner) == SYNTRA_STATUS_OK);
+            assert(boundary_owner == SYNTRA_PAGE_OWNER_PROCESS);
+            assert(syntra_arm64_address_space_validate(&first) ==
+                SYNTRA_STATUS_OK);
+            assert(syntra_page_free_owned(
+                boundary_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+            assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+        }
+
+        assert(syntra_page_alloc_owned(
+            &boundary_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+        assert(syntra_arm64_address_space_map_user_page(
+            &first, last_user_page, boundary_page,
+            SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+        assert(syntra_arm64_address_space_translate(
+            &first, last_user_page, &translation) == SYNTRA_STATUS_OK);
+        assert(translation.physical_address == boundary_page);
+        assert(translation.user_read && translation.user_write);
+        assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
+        assert(syntra_arm64_address_space_unmap_user_page(
+            &first, last_user_page) == SYNTRA_STATUS_OK);
+        assert(syntra_arm64_address_space_translate(
+            &first, last_user_page, &translation) == SYNTRA_STATUS_ERROR);
+        assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+    }
+
     /* Both roots see the kernel mapping, but retain separate user roots. */
     assert(syntra_arm64_address_space_translate(
         &first, 0x10000034ULL, &translation) == SYNTRA_STATUS_OK);
@@ -94,6 +191,28 @@ int main(void)
         &second, 0x10000034ULL, &translation) == SYNTRA_STATUS_OK);
     assert(translation.physical_address == kernel_data_page + 0x34ULL);
     assert(!translation.user_read);
+
+    /*
+     * Validation must detect a modified borrowed kernel entry and any
+     * accidental mapping in the reserved 128..256 GiB root gap.
+     */
+    assert(syntra_arm64_mmu_get_table_indices(
+        0x10000000ULL, kernel_indices) == SYNTRA_STATUS_OK);
+    first_root = resolve_page(first.page_table.root_physical_address, NULL);
+    assert(first_root != NULL);
+    saved_kernel_entry = first_root[kernel_indices[0]];
+    first_root[kernel_indices[0]] = 0ULL;
+    assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_ERROR);
+    first_root[kernel_indices[0]] = saved_kernel_entry;
+    first_root[200U] = 1ULL;
+    assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_ERROR);
+    first_root[200U] = 0ULL;
+    first.borrowed_root_entries[256U / 64U] |=
+        1ULL << (256U % 64U);
+    assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_ERROR);
+    first.borrowed_root_entries[256U / 64U] &=
+        ~(1ULL << (256U % 64U));
+    assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
 
     /* Low addresses are reserved for inherited kernel mappings. */
     assert(syntra_page_alloc_owned(
@@ -120,6 +239,71 @@ int main(void)
     assert(syntra_arm64_address_space_map_user_page(
         &second, 0x4000000000ULL, second_process_page,
         SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 0) == SYNTRA_STATUS_OK);
+
+    /*
+     * The validator must reject a valid-looking but unregistered user leaf,
+     * as well as a block descriptor in the private user root window.
+     */
+    assert(syntra_page_alloc_owned(
+        &rogue_process_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_mmu_get_table_indices(
+        0x4000001000ULL, user_indices) == SYNTRA_STATUS_OK);
+    first_root = resolve_page(first.page_table.root_physical_address, NULL);
+    assert(first_root != NULL);
+    first_l2 = resolve_page(first_root[user_indices[0]] &
+        SYNTRA_ARM64_MMU_PA_MASK, NULL);
+    assert(first_l2 != NULL);
+    first_l3 = resolve_page(first_l2[user_indices[1]] &
+        SYNTRA_ARM64_MMU_PA_MASK, NULL);
+    assert(first_l3 != NULL);
+    assert(syntra_arm64_mmu_make_user_page_descriptor(
+        rogue_process_page, SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0,
+        &rogue_descriptor) == SYNTRA_STATUS_OK);
+    first_l3[user_indices[2]] = rogue_descriptor;
+    assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_ERROR);
+    /*
+     * Destruction must reject the unregistered leaf before reclaiming the
+     * registered process mapping or releasing any page-table hierarchy.
+     */
+    assert(syntra_arm64_address_space_destroy(&first) == SYNTRA_STATUS_ERROR);
+    assert(first.mapping_count == 1U && first.initialized != 0U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+    first_l3[user_indices[2]] = 0ULL;
+    assert(syntra_page_free_owned(
+        rogue_process_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+    saved_kernel_entry = first_root[256U];
+    first_root[256U] = 1ULL;
+    assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_ERROR);
+    first_root[256U] = saved_kernel_entry;
+    assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
+
+    /*
+     * Unmap must refuse to free a PROCESS frame if the live PTE permissions
+     * differ from the mapping registry, leaving ownership and count intact.
+     */
+    {
+        uint16_t first_mapping_indices[4];
+        uint64_t *mapping_l3;
+        uint64_t saved_leaf;
+        syntra_page_owner_t process_owner = SYNTRA_PAGE_OWNER_NONE;
+        const size_t saved_mapping_count = first.mapping_count;
+
+        assert(syntra_arm64_mmu_get_table_indices(
+            0x4000000000ULL, first_mapping_indices) == SYNTRA_STATUS_OK);
+        mapping_l3 = resolve_page(first_l2[first_mapping_indices[1]] &
+            SYNTRA_ARM64_MMU_PA_MASK, NULL);
+        assert(mapping_l3 != NULL);
+        saved_leaf = mapping_l3[first_mapping_indices[2]];
+        mapping_l3[first_mapping_indices[2]] ^= (1ULL << 7U);
+        assert(syntra_arm64_address_space_unmap_user_page(
+            &first, 0x4000000000ULL) == SYNTRA_STATUS_ERROR);
+        assert(first.mapping_count == saved_mapping_count);
+        assert(syntra_page_get_owner(
+            first_process_page, &process_owner) == SYNTRA_STATUS_OK);
+        assert(process_owner == SYNTRA_PAGE_OWNER_PROCESS);
+        mapping_l3[first_mapping_indices[2]] = saved_leaf;
+        assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
+    }
 
     assert(syntra_arm64_address_space_translate(
         &first, 0x4000000034ULL, &translation) == SYNTRA_STATUS_OK);
@@ -215,9 +399,52 @@ int main(void)
     assert(syntra_arm64_address_space_map_user_page(
         &first, 0x4000000000ULL, first_process_page,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+
+    /*
+     * Populate two additional L2 slots. Destroy must walk and reclaim all
+     * mappings, including multiple L3 tables under the same private L2.
+     */
+    assert(syntra_page_alloc_owned(
+        &extra_process_pages[0], SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+    assert(syntra_page_alloc_owned(
+        &extra_process_pages[1], SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_address_space_map_user_page(
+        &first, 0x4000200000ULL, extra_process_pages[0],
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_address_space_map_user_page(
+        &first, 0x4000400000ULL, extra_process_pages[1],
+        SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 0) == SYNTRA_STATUS_OK);
+
+    /*
+     * Exercise complete private-branch pruning: this mapping is the only
+     * leaf in its L2 slot, so unmap must release both its L3 and L2 tables.
+     * Re-map the same VA to prove the pruned hierarchy can be rebuilt.
+     */
+    assert(syntra_page_alloc_owned(
+        &extra_process_pages[2], SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_address_space_map_user_page(
+        &first, 0x4000600000ULL, extra_process_pages[2],
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_address_space_unmap_user_page(
+        &first, 0x4000600000ULL) == SYNTRA_STATUS_OK);
+    assert(first.mapping_count == 4U);
+    assert(syntra_arm64_address_space_translate(
+        &first, 0x4000600000ULL, &translation) == SYNTRA_STATUS_ERROR);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+
+    assert(syntra_page_alloc_owned(
+        &extra_process_pages[2], SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_address_space_map_user_page(
+        &first, 0x4000600000ULL, extra_process_pages[2],
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(first.mapping_count == 5U);
     assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
 
     assert(syntra_arm64_address_space_destroy(&first) == SYNTRA_STATUS_OK);
+    assert(first.mapping_count == 0U);
+    assert(first.initialized == 0U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
     assert(syntra_arm64_address_space_destroy(&second) == SYNTRA_STATUS_OK);
 
     /* Address-space destruction must not free the borrowed kernel subtree. */

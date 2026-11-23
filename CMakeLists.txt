@@ -50,6 +50,7 @@ add_library(syntra_kernel STATIC
     kernel/arch/arm64/page_table_builder.c
     kernel/arch/arm64/address_space.c
     kernel/arch/arm64/mmu_mapping_plan.c
+    kernel/arch/arm64/kernel_va_registry.c
     kernel/arch/arm64/context.c
 
     kernel/scheduler/scheduler.c
@@ -678,6 +679,18 @@ target_include_directories(arm64_mmu_mapping_plan_test PRIVATE
     kernel/core
 )
 add_test(NAME ARM64MMUMappingPlanTest COMMAND arm64_mmu_mapping_plan_test)
+
+# ARM64 bounded kernel VA reservation registry tests
+add_executable(arm64_kernel_va_registry_test
+    tests/arm64/kernel_va_registry_test.c
+    kernel/arch/arm64/kernel_va_registry.c
+)
+target_include_directories(arm64_kernel_va_registry_test PRIVATE
+    kernel/arch/arm64
+    kernel/core
+)
+add_test(NAME ARM64KernelVARegistryTest
+    COMMAND arm64_kernel_va_registry_test)
 
 # ARM64 MMU descriptor construction tests
 add_executable(mmu_descriptor_test
