@@ -10,6 +10,7 @@ int main(void)
     uintptr_t first;
     uintptr_t second;
     uintptr_t third;
+    uintptr_t fourth;
 
     assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
     assert(syntra_memory_region_add(
@@ -215,6 +216,38 @@ int main(void)
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
     assert(syntra_page_free(first) == SYNTRA_STATUS_OK);
     assert(syntra_page_free(first + SYNTRA_PAGE_SIZE) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+
+    /* Fragmented free pages: a failed contiguous request must not mutate metadata. */
+    assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_add(
+        (uintptr_t)0x50000000U, (size_t)(4U * SYNTRA_PAGE_SIZE),
+        SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_init() == SYNTRA_STATUS_OK);
+    assert(syntra_page_alloc(&first) == SYNTRA_STATUS_OK);
+    assert(syntra_page_alloc(&second) == SYNTRA_STATUS_OK);
+    assert(syntra_page_alloc(&third) == SYNTRA_STATUS_OK);
+    assert(syntra_page_alloc(&fourth) == SYNTRA_STATUS_OK);
+    assert(first == (uintptr_t)0x50000000U);
+    assert(second == first + SYNTRA_PAGE_SIZE);
+    assert(third == second + SYNTRA_PAGE_SIZE);
+    assert(fourth == third + SYNTRA_PAGE_SIZE);
+    assert(syntra_page_free(second) == SYNTRA_STATUS_OK);
+    assert(syntra_page_free(fourth) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_free_count() == 2U);
+    assert(syntra_page_alloc_contiguous(2U, &first) ==
+           SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(syntra_page_allocator_free_count() == 2U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+    assert(syntra_page_free(third) == SYNTRA_STATUS_OK);
+    assert(syntra_page_alloc_contiguous(2U, &first) == SYNTRA_STATUS_OK);
+    assert(first == second);
+    assert(syntra_page_allocator_free_count() == 1U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+    assert(syntra_page_free(first) == SYNTRA_STATUS_OK);
+    assert(syntra_page_free(first + SYNTRA_PAGE_SIZE) == SYNTRA_STATUS_OK);
+    assert(syntra_page_free((uintptr_t)0x50000000U) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_free_count() == 4U);
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
 
     puts("Physical Page Allocator V1 tests passed.");
