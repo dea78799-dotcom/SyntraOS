@@ -50,7 +50,7 @@ int main(void)
     syntra_arm64_mmu_translation_t translation;
     uintptr_t first_process_page;
     uintptr_t second_process_page;
-    uintptr_t extra_process_pages[2];
+    uintptr_t extra_process_pages[3];
     size_t initial_free;
 
     assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
@@ -231,7 +231,30 @@ int main(void)
     assert(syntra_arm64_address_space_map_user_page(
         &first, 0x4000400000ULL, extra_process_pages[1],
         SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 0) == SYNTRA_STATUS_OK);
+
+    /*
+     * Exercise complete private-branch pruning: this mapping is the only
+     * leaf in its L2 slot, so unmap must release both its L3 and L2 tables.
+     * Re-map the same VA to prove the pruned hierarchy can be rebuilt.
+     */
+    assert(syntra_page_alloc_owned(
+        &extra_process_pages[2], SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_address_space_map_user_page(
+        &first, 0x4000600000ULL, extra_process_pages[2],
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_address_space_unmap_user_page(
+        &first, 0x4000600000ULL) == SYNTRA_STATUS_OK);
     assert(first.mapping_count == 4U);
+    assert(syntra_arm64_address_space_translate(
+        &first, 0x4000600000ULL, &translation) == SYNTRA_STATUS_ERROR);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+
+    assert(syntra_page_alloc_owned(
+        &extra_process_pages[2], SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_address_space_map_user_page(
+        &first, 0x4000600000ULL, extra_process_pages[2],
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(first.mapping_count == 5U);
     assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
 
