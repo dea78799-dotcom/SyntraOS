@@ -147,6 +147,25 @@ int main(void)
     assert(syntra_page_allocator_free_count() == 4U);
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
 
+    /* A contiguous run ending exactly at the 4 GiB limit remains allocatable. */
+    assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_add(
+        (uintptr_t)0xFFFFC000ULL, (size_t)(4U * SYNTRA_PAGE_SIZE),
+        SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_init() == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_total_count() == 4U);
+    assert(syntra_page_alloc_contiguous(4U, &first) == SYNTRA_STATUS_OK);
+    assert(first == (uintptr_t)0xFFFFC000ULL);
+    assert(syntra_page_allocator_free_count() == 0U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+    for (unsigned int i = 0U; i < 4U; ++i)
+    {
+        assert(syntra_page_free(first + (uintptr_t)i * SYNTRA_PAGE_SIZE) ==
+               SYNTRA_STATUS_OK);
+    }
+    assert(syntra_page_allocator_free_count() == 4U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+
     /* Boundary policy: clip RAM crossing 4 GiB and ignore high-only RAM. */
     assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
     assert(syntra_memory_region_add(

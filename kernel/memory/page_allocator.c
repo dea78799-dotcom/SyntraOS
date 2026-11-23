@@ -350,7 +350,6 @@ static syntra_status_t page_alloc_contiguous_unlocked(
     syntra_page_owner_t owner)
 {
     size_t index;
-    size_t end_exclusive;
 
     if (!initialized || physical_address == NULL || page_count == 0U ||
         page_count > SYNTRA_PAGE_COUNT ||
@@ -360,14 +359,12 @@ static syntra_status_t page_alloc_contiguous_unlocked(
     if (free_pages < page_count)
         return SYNTRA_STATUS_OUT_OF_MEMORY;
 
-    end_exclusive = SYNTRA_PAGE_COUNT - page_count + 1U;
+    /* The helper receives the exclusive physical scan limit, not the last
+     * candidate-start limit; it accounts for page_count itself. */
     if (!find_free_contiguous_range(
-            allocation_cursor, end_exclusive, page_count, &index) &&
+            allocation_cursor, SYNTRA_PAGE_COUNT, page_count, &index) &&
         !find_free_contiguous_range(
-            0U,
-            allocation_cursor < end_exclusive
-                ? allocation_cursor : end_exclusive,
-            page_count, &index))
+            0U, allocation_cursor, page_count, &index))
         return SYNTRA_STATUS_OUT_OF_MEMORY;
 
     {
