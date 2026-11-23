@@ -166,6 +166,8 @@ static size_t build_memory_map_fdt(void)
         static const uint8_t failed_status[] = "fail";
         append_property(40U, failed_status, sizeof(failed_status));
     }
+    append_end_node();
+
     /* A fail-sss reserved-memory child must also be skipped. */
     append_node("failed-hardware@50004000");
     append_reg((uintptr_t)0x50004000U, (size_t)0x1000U);
