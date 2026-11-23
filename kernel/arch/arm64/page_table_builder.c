@@ -265,6 +265,63 @@ static syntra_status_t page_is_unmapped(
         ? SYNTRA_STATUS_OK : SYNTRA_STATUS_ERROR;
 }
 
+/*
+ * Phase one: allocate every intermediate table needed by the range without
+ * publishing any leaf mapping. If allocation fails, the caller can roll back
+ * the complete set of newly attached tables while no requested page is mapped.
+ */
+static syntra_status_t prepare_mapping_tables(
+    syntra_arm64_page_table_t *builder,
+    uint64_t va,
+    uint64_t pa,
+    uint64_t size,
+    int page_only,
+    syntra_pt_txn_t *transaction)
+{
+    uint64_t end = va + size;
+
+    while (va < end)
+    {
+        uint16_t indices[4];
+        uint64_t *l1, *l2, *l3;
+        syntra_status_t status;
+        uint64_t remaining = end - va;
+        int use_block = page_only == 0 &&
+            (va & (SYNTRA_ARM64_MMU_BLOCK_SIZE - 1ULL)) == 0ULL &&
+            (pa & (SYNTRA_ARM64_MMU_BLOCK_SIZE - 1ULL)) == 0ULL &&
+            remaining >= SYNTRA_ARM64_MMU_BLOCK_SIZE;
+
+        status = syntra_arm64_mmu_get_table_indices(va, indices);
+        if (status != SYNTRA_STATUS_OK)
+            return status;
+
+        l1 = get_table(builder, builder->root_physical_address);
+        if (l1 == NULL)
+            return SYNTRA_STATUS_ERROR;
+
+        status = ensure_child(builder, l1, indices[0], &l2, transaction);
+        if (status != SYNTRA_STATUS_OK)
+            return status;
+
+        if (!use_block)
+        {
+            status = ensure_child(builder, l2, indices[1], &l3, transaction);
+            if (status != SYNTRA_STATUS_OK)
+                return status;
+            (void)l3;
+            va += SYNTRA_ARM64_MMU_PAGE_SIZE;
+            pa += SYNTRA_ARM64_MMU_PAGE_SIZE;
+        }
+        else
+        {
+            va += SYNTRA_ARM64_MMU_BLOCK_SIZE;
+            pa += SYNTRA_ARM64_MMU_BLOCK_SIZE;
+        }
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t syntra_arm64_page_table_map(
     syntra_arm64_page_table_t *table,
     uint64_t va,
@@ -324,6 +381,16 @@ syntra_status_t syntra_arm64_page_table_map(
             }
         }
     }
+    {
+        syntra_status_t prepare_status = prepare_mapping_tables(
+            table, va, pa, size, 0, &transaction);
+        if (prepare_status != SYNTRA_STATUS_OK)
+        {
+            rollback_transaction(table, &transaction);
+            return prepare_status;
+        }
+    }
+
     while (va < end)
     {
         uint16_t indices[4];
@@ -425,6 +492,16 @@ syntra_status_t syntra_arm64_page_table_map_user(
     {
         syntra_status_t status = page_is_unmapped(table, check_va);
         if (status != SYNTRA_STATUS_OK) return status;
+    }
+
+    {
+        syntra_status_t prepare_status = prepare_mapping_tables(
+            table, va, pa, size, 1, &transaction);
+        if (prepare_status != SYNTRA_STATUS_OK)
+        {
+            rollback_transaction(table, &transaction);
+            return prepare_status;
+        }
     }
 
     while (va < end)
