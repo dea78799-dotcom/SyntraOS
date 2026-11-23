@@ -9,7 +9,7 @@ static int initialized;
 static int region_type_valid(syntra_memory_region_type_t type)
 {
     return type >= SYNTRA_MEMORY_REGION_RAM &&
-           type <= SYNTRA_MEMORY_REGION_RECLAIMABLE;
+           type <= SYNTRA_MEMORY_REGION_NOMAP;
 }
 
 static int ranges_overlap(
