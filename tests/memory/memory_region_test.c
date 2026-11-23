@@ -61,6 +61,38 @@ int main(void)
     assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
     assert(syntra_memory_region_count() == 0U);
 
+    /*
+     * A reservation that would split RAM must fail atomically when the
+     * registry has no capacity for the additional region descriptors.
+     */
+    assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_add(
+        (uintptr_t)0x10000000U, (size_t)(3U * 4096U),
+        SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
+    for (unsigned int i = 1U; i < SYNTRA_MEMORY_REGION_MAX; ++i)
+    {
+        assert(syntra_memory_region_add(
+            (uintptr_t)0x20000000U + (uintptr_t)i * 0x2000U,
+            (size_t)4096U, SYNTRA_MEMORY_REGION_RESERVED) == SYNTRA_STATUS_OK);
+    }
+    assert(syntra_memory_region_count() == SYNTRA_MEMORY_REGION_MAX);
+    assert(syntra_memory_region_reserve(
+        (uintptr_t)0x10001000U, (size_t)4096U,
+        SYNTRA_MEMORY_REGION_DTB) == SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(syntra_memory_region_count() == SYNTRA_MEMORY_REGION_MAX);
+
+    assert(syntra_memory_region_find(
+        (uintptr_t)0x10000000U, &region) == SYNTRA_STATUS_OK);
+    assert(region.type == SYNTRA_MEMORY_REGION_RAM);
+    assert(region.base == (uintptr_t)0x10000000U);
+    assert(region.size == (size_t)(3U * 4096U));
+    assert(syntra_memory_region_find(
+        (uintptr_t)0x10001000U, &region) == SYNTRA_STATUS_OK);
+    assert(region.type == SYNTRA_MEMORY_REGION_RAM);
+    assert(syntra_memory_region_find(
+        (uintptr_t)0x2003E000U, &region) == SYNTRA_STATUS_OK);
+    assert(region.type == SYNTRA_MEMORY_REGION_RESERVED);
+
     puts("Memory Region Manager tests passed.");
     return 0;
 }
