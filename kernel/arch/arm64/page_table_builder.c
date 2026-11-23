@@ -29,18 +29,35 @@ static void rollback_transaction(
     while (transaction->count != 0U)
     {
         syntra_pt_txn_entry_t *entry =
-            &transaction->entries[--transaction->count];
+            &transaction->entries[transaction->count - 1U];
+
         /*
-         * Without a release hook, leave the empty hierarchy attached so a
-         * higher-level owner (for example address_space.c) can reclaim it.
-         * Detaching it here would hide the pages from that owner's cleanup.
+         * Without a release hook, keep the hierarchy attached so its owner
+         * can discover and reclaim every allocated page.
          */
-        if (builder->release != NULL &&
-            entry->parent[entry->index] == entry->descriptor)
+        if (builder->release == NULL)
         {
-            entry->parent[entry->index] = 0ULL;
-            (void)builder->release(builder->context, entry->child_pa);
+            --transaction->count;
+            continue;
         }
+
+        /*
+         * Release can fail (for example, an ownership mismatch). In that
+         * case restore the descriptor and stop: its ancestors must remain
+         * attached too, otherwise the still-live child becomes unreachable.
+         */
+        if (entry->parent[entry->index] != entry->descriptor)
+            return;
+
+        entry->parent[entry->index] = 0ULL;
+        if (builder->release(builder->context, entry->child_pa) !=
+            SYNTRA_STATUS_OK)
+        {
+            entry->parent[entry->index] = entry->descriptor;
+            return;
+        }
+
+        --transaction->count;
     }
 }
 
