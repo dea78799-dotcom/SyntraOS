@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include "page_table_builder.h"
 
-#define TABLES 80U
+#define TABLES 160U
 #define BASE_PA 0x1000ULL
 static uint64_t storage[TABLES][512];
 static unsigned int used;
@@ -655,6 +655,25 @@ static void test_mapping_journal_capacity_exhaustion(void)
         map_va + map_size - SYNTRA_ARM64_MMU_PAGE_SIZE,
         (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
         &translation) == SYNTRA_STATUS_ERROR);
+
+    /* A failed transaction must leave the same VA range available for retry. */
+    assert(syntra_arm64_page_table_map_user(
+        &pt, map_va, map_pa, map_size,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_verify_user(
+        &pt, map_va, map_pa, map_size,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_mmu_walk(pt.root_physical_address, map_va,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_OK);
+    assert(translation.physical_address == map_pa);
+    assert(syntra_arm64_mmu_walk(
+        pt.root_physical_address,
+        map_va + map_size - SYNTRA_ARM64_MMU_PAGE_SIZE,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_OK);
+    assert(translation.physical_address ==
+        map_pa + map_size - SYNTRA_ARM64_MMU_PAGE_SIZE);
 }
 
 int main(void)
