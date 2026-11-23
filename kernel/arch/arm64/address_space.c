@@ -692,6 +692,12 @@ static syntra_status_t release_table_tree(
                 space, descriptor & DESC_ADDR, level + 1U);
             if (status != SYNTRA_STATUS_OK)
                 return status;
+
+            /*
+             * The child is now released. Clear its parent link immediately so
+             * a later failure leaves a valid, retryable partial tree.
+             */
+            table[i] = 0ULL;
         }
     }
 
@@ -826,15 +832,27 @@ syntra_status_t syntra_arm64_address_space_destroy(
             return status;
     }
 
-    for (size_t i = 0U; i < space->mapping_count; ++i)
+    /*
+     * Reclaim mappings from the end and commit each successful release to
+     * mapping_count. If a later free fails, destroy can safely be retried
+     * without attempting to free an already-released process frame again.
+     */
+    while (space->mapping_count != 0U)
     {
+        size_t last = space->mapping_count - 1U;
         status = syntra_page_free_owned(
-            (uintptr_t)space->mappings[i].physical_address,
+            (uintptr_t)space->mappings[last].physical_address,
             SYNTRA_PAGE_OWNER_PROCESS);
         if (status != SYNTRA_STATUS_OK)
             return status;
+        space->mapping_count = last;
     }
 
+    /*
+     * release_table_tree clears each parent descriptor after freeing its
+     * child. A failure therefore leaves the remaining tree reachable and
+     * permits a subsequent destroy attempt.
+     */
     status = release_table_tree(space, root, 1U);
     if (status != SYNTRA_STATUS_OK)
         return status;
