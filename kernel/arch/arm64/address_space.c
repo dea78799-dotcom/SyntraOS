@@ -132,6 +132,18 @@ static syntra_status_t allocate_page_table_page(
     return SYNTRA_STATUS_OK;
 }
 
+static syntra_status_t release_page_table_page(
+    void *context, uint64_t physical_address)
+{
+    (void)context;
+
+    if (physical_address > (uint64_t)UINTPTR_MAX)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    return syntra_page_free_owned(
+        (uintptr_t)physical_address, SYNTRA_PAGE_OWNER_PAGE_TABLE);
+}
+
 static uint64_t *resolve_page_table_page(
     uint64_t physical_address, void *context)
 {
@@ -193,9 +205,10 @@ syntra_status_t syntra_arm64_address_space_create(
     space->page_table.resolve = resolve_page_table_page;
     space->page_table.context = space;
 
-    status = syntra_arm64_page_table_init(
+    status = syntra_arm64_page_table_init_ex(
         &space->page_table,
         allocate_page_table_page,
+        release_page_table_page,
         resolve_page_table_page,
         space);
     if (status != SYNTRA_STATUS_OK)
