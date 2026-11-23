@@ -671,6 +671,76 @@ static syntra_status_t validate_table_tree(
     return SYNTRA_STATUS_OK;
 }
 
+static syntra_status_t validate_user_table_tree(
+    syntra_arm64_address_space_t *space,
+    uint64_t table_physical_address,
+    unsigned int level,
+    uint64_t virtual_base)
+{
+    uint64_t *table;
+    syntra_status_t status;
+
+    status = page_owner_is(
+        table_physical_address, SYNTRA_PAGE_OWNER_PAGE_TABLE);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    table = resolve_page_table_page(table_physical_address, space);
+    if (table == NULL)
+        return SYNTRA_STATUS_ERROR;
+
+    for (size_t i = (level == 1U ? 256U : 0U);
+         i < SYNTRA_ARM64_MMU_TABLE_ENTRIES; ++i)
+    {
+        uint64_t descriptor = table[i];
+        uint64_t entry_va;
+        uint64_t child_pa;
+
+        if (descriptor == 0ULL)
+            continue;
+        if ((descriptor & DESC_VALID) == 0ULL)
+            return SYNTRA_STATUS_ERROR;
+
+        entry_va = virtual_base +
+            ((uint64_t)i << (level == 1U ? 30U :
+                             (level == 2U ? 21U : 12U)));
+
+        if (level == 3U)
+        {
+            if ((descriptor & DESC_TYPE) == 0ULL ||
+                (descriptor & ~(DESC_ADDR | 3ULL | (0xFFFULL << 2U))) != 0ULL)
+                return SYNTRA_STATUS_ERROR;
+
+            for (size_t mapping_index = 0U;
+                 mapping_index < space->mapping_count; ++mapping_index)
+            {
+                const syntra_arm64_address_space_mapping_t *mapping =
+                    &space->mappings[mapping_index];
+                if (mapping->virtual_address == entry_va &&
+                    mapping->physical_address == (descriptor & DESC_ADDR))
+                    break;
+                if (mapping_index + 1U == space->mapping_count)
+                    return SYNTRA_STATUS_ERROR;
+            }
+            if (space->mapping_count == 0U)
+                return SYNTRA_STATUS_ERROR;
+            continue;
+        }
+
+        if ((descriptor & DESC_TYPE) == 0ULL ||
+            (descriptor & ~(DESC_ADDR | 3ULL)) != 0ULL)
+            return SYNTRA_STATUS_ERROR;
+
+        child_pa = descriptor & DESC_ADDR;
+        status = validate_user_table_tree(
+            space, child_pa, level + 1U, entry_va);
+        if (status != SYNTRA_STATUS_OK)
+            return status;
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
 static syntra_status_t validate_address_space_root_layout(
     syntra_arm64_address_space_t *space)
 {
@@ -720,8 +790,17 @@ static syntra_status_t validate_address_space_root_layout(
      * Audit every reachable table page, including private user tables and
      * borrowed kernel subtrees, before the address space is activated.
      */
-    return validate_table_tree(
+    status = validate_table_tree(
         space, space->page_table.root_physical_address, 1U);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    /*
+     * User tables may contain only private 4-KiB page mappings recorded in
+     * the mapping registry. Reject block descriptors and untracked leaves.
+     */
+    return validate_user_table_tree(
+        space, space->page_table.root_physical_address, 1U, 0ULL);
 }
 
 static syntra_status_t release_table_tree(
