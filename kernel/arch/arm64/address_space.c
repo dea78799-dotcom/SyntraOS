@@ -703,6 +703,14 @@ static syntra_status_t validate_address_space_root_layout(
             return SYNTRA_STATUS_ERROR;
     }
 
+    /*
+     * No root entry outside the inherited kernel window may be marked
+     * borrowed. In particular, user L1 entries must remain privately owned.
+     */
+    for (size_t i = 128U; i < SYNTRA_ARM64_MMU_TABLE_ENTRIES; ++i)
+        if (root_entry_is_borrowed(space, i))
+            return SYNTRA_STATUS_ERROR;
+
     /* Entries 128..255 are the reserved gap before the EL0 user range. */
     for (size_t i = 128U; i < 256U; ++i)
         if (root[i] != 0ULL)
