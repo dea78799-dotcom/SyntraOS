@@ -362,7 +362,7 @@ static void test_multi_tuple_memory_node_discovery(void)
     assert(region.type == SYNTRA_MEMORY_REGION_RAM);
 
     /*
-     * The first tuple is valid, but the second overlaps the other RAM node.
+     * The first tuple is valid, but the second overlaps the first tuple's RAM extent.
      * Discovery must reject the map and roll back the already-added tuple.
      */
     memory_second_reg_base = (uintptr_t)0x40008000U;
