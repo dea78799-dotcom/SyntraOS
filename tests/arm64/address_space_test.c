@@ -45,6 +45,8 @@ int main(void)
     syntra_arm64_address_space_t second = {0};
     syntra_arm64_page_table_t kernel_table = {0};
     uint64_t *kernel_root, *kernel_l2, *kernel_l3;
+    uint64_t *first_root;
+    uint64_t saved_kernel_entry;
     uint16_t kernel_indices[4];
     uintptr_t kernel_data_page;
     syntra_arm64_mmu_translation_t translation;
@@ -95,6 +97,23 @@ int main(void)
         &second, 0x10000034ULL, &translation) == SYNTRA_STATUS_OK);
     assert(translation.physical_address == kernel_data_page + 0x34ULL);
     assert(!translation.user_read);
+
+    /*
+     * Validation must detect a modified borrowed kernel entry and any
+     * accidental mapping in the reserved 128..256 GiB root gap.
+     */
+    assert(syntra_arm64_mmu_get_table_indices(
+        0x10000000ULL, kernel_indices) == SYNTRA_STATUS_OK);
+    first_root = resolve_page(first.page_table.root_physical_address, NULL);
+    assert(first_root != NULL);
+    saved_kernel_entry = first_root[kernel_indices[0]];
+    first_root[kernel_indices[0]] = 0ULL;
+    assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_ERROR);
+    first_root[kernel_indices[0]] = saved_kernel_entry;
+    first_root[200U] = 1ULL;
+    assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_ERROR);
+    first_root[200U] = 0ULL;
+    assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
 
     /* Low addresses are reserved for inherited kernel mappings. */
     assert(syntra_page_alloc_owned(
