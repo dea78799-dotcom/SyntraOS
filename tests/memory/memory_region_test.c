@@ -93,6 +93,58 @@ int main(void)
         (uintptr_t)0x2003E000U, &region) == SYNTRA_STATUS_OK);
     assert(region.type == SYNTRA_MEMORY_REGION_RESERVED);
 
+    /* Reservation at the left edge keeps only the trailing RAM fragment. */
+    assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_add(
+        (uintptr_t)0x30000000U, (size_t)(3U * 4096U),
+        SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_reserve(
+        (uintptr_t)0x30000000U, (size_t)4096U,
+        SYNTRA_MEMORY_REGION_DTB) == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_count() == 2U);
+    assert(syntra_memory_region_find(
+        (uintptr_t)0x30000000U, &region) == SYNTRA_STATUS_OK);
+    assert(region.type == SYNTRA_MEMORY_REGION_DTB);
+    assert(region.size == (size_t)4096U);
+    assert(syntra_memory_region_find(
+        (uintptr_t)0x30001000U, &region) == SYNTRA_STATUS_OK);
+    assert(region.type == SYNTRA_MEMORY_REGION_RAM);
+    assert(region.base == (uintptr_t)0x30001000U);
+    assert(region.size == (size_t)(2U * 4096U));
+
+    /* Reservation at the right edge keeps only the leading RAM fragment. */
+    assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_add(
+        (uintptr_t)0x40000000U, (size_t)(3U * 4096U),
+        SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_reserve(
+        (uintptr_t)0x40002000U, (size_t)4096U,
+        SYNTRA_MEMORY_REGION_RESERVED) == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_count() == 2U);
+    assert(syntra_memory_region_find(
+        (uintptr_t)0x40001000U, &region) == SYNTRA_STATUS_OK);
+    assert(region.type == SYNTRA_MEMORY_REGION_RAM);
+    assert(region.size == (size_t)(2U * 4096U));
+    assert(syntra_memory_region_find(
+        (uintptr_t)0x40002000U, &region) == SYNTRA_STATUS_OK);
+    assert(region.type == SYNTRA_MEMORY_REGION_RESERVED);
+    assert(region.size == (size_t)4096U);
+
+    /* Reserving the entire RAM descriptor replaces it without a split. */
+    assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_add(
+        (uintptr_t)0x50000000U, (size_t)(3U * 4096U),
+        SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_reserve(
+        (uintptr_t)0x50000000U, (size_t)(3U * 4096U),
+        SYNTRA_MEMORY_REGION_DTB) == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_count() == 1U);
+    assert(syntra_memory_region_find(
+        (uintptr_t)0x50002FFFU, &region) == SYNTRA_STATUS_OK);
+    assert(region.type == SYNTRA_MEMORY_REGION_DTB);
+    assert(region.base == (uintptr_t)0x50000000U);
+    assert(region.size == (size_t)(3U * 4096U));
+
     puts("Memory Region Manager tests passed.");
     return 0;
 }
