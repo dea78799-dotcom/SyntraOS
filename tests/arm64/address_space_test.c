@@ -214,6 +214,32 @@ int main(void)
         ~(1ULL << (256U % 64U));
     assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
 
+    /*
+     * Invalid EL0 permission flags must not consume the caller's PROCESS page
+     * or append a mapping record. The lower-level page-table builder validates
+     * these flags too, but the address-space API must preserve ownership.
+     */
+    {
+        uintptr_t invalid_attribute_page;
+        syntra_page_owner_t invalid_owner = SYNTRA_PAGE_OWNER_NONE;
+        const size_t mappings_before = first.mapping_count;
+
+        assert(syntra_page_alloc_owned(
+            &invalid_attribute_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+        assert(syntra_arm64_address_space_map_user_page(
+            &first, 0x4000000000ULL, invalid_attribute_page,
+            SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 2) ==
+            SYNTRA_STATUS_INVALID_ARGUMENT);
+        assert(first.mapping_count == mappings_before);
+        assert(syntra_page_get_owner(
+            invalid_attribute_page, &invalid_owner) == SYNTRA_STATUS_OK);
+        assert(invalid_owner == SYNTRA_PAGE_OWNER_PROCESS);
+        assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
+        assert(syntra_page_free_owned(
+            invalid_attribute_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+        assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+    }
+
     /* Low addresses are reserved for inherited kernel mappings. */
     assert(syntra_page_alloc_owned(
         &first_process_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
