@@ -622,8 +622,8 @@ static void test_mapping_journal_capacity_exhaustion(void)
 {
     syntra_arm64_page_table_t pt;
     syntra_arm64_mmu_translation_t translation;
-    const uint64_t map_va = 0x40000000ULL;
-    const uint64_t map_pa = 0x80000000ULL;
+    const uint64_t map_va = 0x40001000ULL;
+    const uint64_t map_pa = 0x80001000ULL;
     const uint64_t map_size = 64ULL * SYNTRA_ARM64_MMU_BLOCK_SIZE;
     const unsigned int journal_capacity = 64U;
 
