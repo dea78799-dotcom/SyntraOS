@@ -242,6 +242,7 @@ int main(void)
         uint16_t first_mapping_indices[4];
         uint64_t *mapping_l3;
         uint64_t saved_leaf;
+        syntra_page_owner_t process_owner = SYNTRA_PAGE_OWNER_NONE;
         const size_t saved_mapping_count = first.mapping_count;
 
         assert(syntra_arm64_mmu_get_table_indices(
@@ -255,7 +256,8 @@ int main(void)
             &first, 0x4000000000ULL) == SYNTRA_STATUS_ERROR);
         assert(first.mapping_count == saved_mapping_count);
         assert(syntra_page_get_owner(
-            first_process_page, NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
+            first_process_page, &process_owner) == SYNTRA_STATUS_OK);
+        assert(process_owner == SYNTRA_PAGE_OWNER_PROCESS);
         mapping_l3[first_mapping_indices[2]] = saved_leaf;
         assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
     }
