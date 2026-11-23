@@ -99,6 +99,7 @@ int main(void)
      */
     {
         uintptr_t boundary_page;
+        syntra_page_owner_t boundary_owner = SYNTRA_PAGE_OWNER_NONE;
         const uint64_t last_user_page =
             SYNTRA_ARM64_USER_VA_LIMIT - SYNTRA_ARM64_MMU_PAGE_SIZE;
 
@@ -109,8 +110,8 @@ int main(void)
             SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
             SYNTRA_STATUS_INVALID_ARGUMENT);
         assert(syntra_page_get_owner(
-            boundary_page, NULL) == SYNTRA_STATUS_INVALID_ARGUMENT ||
-            syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+            boundary_page, &boundary_owner) == SYNTRA_STATUS_OK);
+        assert(boundary_owner == SYNTRA_PAGE_OWNER_PROCESS);
         assert(syntra_page_free_owned(
             boundary_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
 
