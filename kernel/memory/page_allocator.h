@@ -32,6 +32,8 @@ typedef struct
  * V1 uses a static bitmap for the first 4 GiB of physical address space.
  * RAM ranges crossing 4 GiB are clipped; ranges wholly above it are ignored.
  * Only complete 4 KiB pages inside SYNTRA_MEMORY_REGION_RAM are eligible.
+ * Physical page zero is permanently reserved because zero is used as an
+ * invalid/sentinel root address by the page-table interfaces.
  */
 syntra_status_t syntra_page_allocator_init(void);
 /* Full bitmap/summary/accounting audit; intended for diagnostics and tests. */

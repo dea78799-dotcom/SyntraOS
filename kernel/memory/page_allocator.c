@@ -243,6 +243,15 @@ syntra_status_t syntra_page_allocator_init(void)
         {
             size_t page_index = (size_t)(address / (uintptr_t)SYNTRA_PAGE_SIZE);
 
+            /*
+             * Physical address zero is the null/sentinel root value across
+             * the page-table APIs, so it must never be returned as a frame.
+             */
+            if (page_index == 0U)
+            {
+                continue;
+            }
+
             if (!bitmap_test(free_bitmap, page_index))
             {
                 free_page_set(page_index);
