@@ -504,6 +504,20 @@ syntra_status_t syntra_arm64_address_space_unmap_user_page(
         (leaf_descriptor & DESC_ADDR) != process_pa)
         return SYNTRA_STATUS_ERROR;
 
+    /*
+     * Do not reclaim a frame if its live descriptor no longer matches the
+     * access and execute permissions recorded in the address-space registry.
+     */
+    status = syntra_arm64_page_table_verify_user(
+        &space->page_table,
+        virtual_address,
+        process_pa,
+        SYNTRA_ARM64_MMU_PAGE_SIZE,
+        space->mappings[mapping_index].access,
+        (int)space->mappings[mapping_index].executable);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
     level3[indices[2]] = 0ULL;
     status = syntra_page_free_owned(
         (uintptr_t)process_pa, SYNTRA_PAGE_OWNER_PROCESS);
@@ -958,6 +972,15 @@ syntra_status_t syntra_arm64_address_space_destroy(
 
     root = space->page_table.root_physical_address;
     status = validate_table_tree(space, root, 1U);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    /*
+     * Validate the complete private user tree before freeing any process
+     * frame. This rejects unregistered leaves and descriptor/registry
+     * mismatches without partially destroying an inconsistent address space.
+     */
+    status = syntra_arm64_address_space_validate(space);
     if (status != SYNTRA_STATUS_OK)
         return status;
 
