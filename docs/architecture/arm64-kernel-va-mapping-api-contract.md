@@ -1,6 +1,6 @@
 # ARM64 Kernel VA Mapping API Contract
 
-Status: design contract; no mapping implementation or MMU activation.
+Status: design contract; kernel-stack mapping API and MMU activation are not implemented.
 
 ## 1. Scope
 
@@ -47,18 +47,27 @@ Mapping is all-or-nothing. A failure must not leave any leaf descriptor from
 the requested range installed and must not consume or release the caller's
 physical pages.
 
-The current page-table builder preflights existing leaf conflicts, but its
-allocation callback has no matching release callback. It can allocate
-intermediate tables while constructing a range, so an allocation/resolve/
-descriptor failure after construction begins may leave empty intermediate
-tables behind. A simple loop around the existing map API is therefore not a
-sufficient transactional implementation.
+The page-table builder now provides:
+- A paired allocate/release/resolve initialization path through
+  `syntra_arm64_page_table_init_ex()`; the legacy initializer remains for
+  compatibility and has no release callback.
+- Two-phase mapping preparation: all required intermediate tables are
+  prepared before any leaf descriptor is published.
+- A bounded journal for newly created intermediate tables. Preparation failure
+  rolls back attached tables in reverse order when a release callback exists.
+- If a release callback fails, the descriptor is restored and rollback stops,
+  preserving the still-owned table and its ancestor links for retry or
+  higher-level cleanup.
 
-Before adding the kernel mapping API, the page-table builder must gain a
-well-defined table-page reclamation contract (allocate/release/resolve), or
-implement a two-phase plan that allocates and validates every required table
-page before publishing any parent descriptor. Rollback must restore all
-parent and leaf descriptors and release only newly allocated table pages.
+This closes the previously documented partial-leaf publication risk for
+intermediate-table allocation failures. It is not a concurrency-safe SMP
+transaction, and the journal is bounded. Callers that require reliable
+reclamation must use `init_ex()` with an owner-aware release callback.
+
+The future kernel mapping layer must still validate the exact reservation,
+physical-page ownership, mapping attributes, and guard-page boundaries before
+calling the builder. It must not treat successful table preparation as proof
+that backing pages are owned correctly.
 
 ## 5. Transactional unmap requirement
 
@@ -70,6 +79,10 @@ After preflight, it may clear leaves and reclaim empty L3/L2 tables. It must
 never reclaim a table containing unrelated mappings or borrowed kernel-root
 entries. Physical stack pages are released by the stack allocator only after
 the mapping layer confirms unmap and required TLB maintenance.
+
+The generic page-table builder still has no generic unmap API. The existing
+address-space user-page unmap is a separate EL0 lifecycle operation and must
+not be reused as a kernel-stack unmap implementation.
 
 ## 6. TLB and active-root rules
 
@@ -89,20 +102,35 @@ Host tests must cover:
 - Exact reservation token and owner validation.
 - Misaligned, overflowed, short, and oversized backing ranges.
 - Existing mapping conflict with no descriptor mutation.
-- Allocation failure at every intermediate-table allocation point.
-- Resolver and descriptor-construction failures.
-- Full rollback of parent descriptors and newly allocated tables.
+- Allocation failure at each intermediate-table preparation point.
+- Resolver failure and invalid allocator-result cleanup.
+- Rollback of newly attached tables, including release-callback failure.
 - Unmap preflight failure with no partial clear.
 - Reclaim only empty tables; preserve neighboring mappings.
 - Stale/double unmap rejection.
 
+The page-table builder currently has host regression coverage for several
+allocation-failure, preparation rollback, retry, and release-failure cases.
+The remaining kernel-stack-specific tests above are prerequisites for stack
+mapping integration.
+
 QEMU testing must later prove actual translation behavior and guard-page faults.
 A host software walker alone is not hardware/MMU validation.
 
-## 8. Current implementation gap
+## 8. Current implementation boundary
 
-The current `syntra_arm64_page_table_map()` provides overlap preflight and a
-software-walker verifier, but it has no table-page release callback and no
-unmap API. Its current preflight prevents known leaf overlaps; it does not
-provide full rollback for every mid-build allocation failure. This gap must
-be closed before stack mappings are integrated.
+Implemented groundwork:
+- Bounded kernel VA reservation registry in the proposed 64–96 GiB arena.
+- Page-table allocate/release/resolve callback support.
+- Two-phase intermediate-table preparation and bounded rollback journal.
+- Owner-aware page-table reclamation in boot and address-space setup.
+- EL0 address-space validation, user-page unmap, and retry-safe destruction.
+
+Not implemented:
+- Kernel-stack map/unmap API consuming reservation tokens.
+- Generic page-table unmap and empty-table pruning for kernel mappings.
+- TLB invalidation/shootdown integration.
+- MMU activation in the normal boot path.
+- Kernel stack allocator integration with virtual mappings.
+
+Therefore, the current code is not ready for active-MMU kernel-stack mapping.
