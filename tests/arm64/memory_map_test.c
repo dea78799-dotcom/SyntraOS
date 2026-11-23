@@ -14,6 +14,8 @@
 
 static uint8_t blob[TEST_FDT_CAPACITY];
 static size_t structure_cursor;
+static uintptr_t second_memory_base = (uintptr_t)0x50000000U;
+static size_t second_memory_size = (size_t)0x8000U;
 
 static void write_be32(uint8_t *data, uint32_t value)
 {
@@ -126,7 +128,7 @@ static size_t build_memory_map_fdt(
 
     /* A second enabled RAM node must be included in the discovered map. */
     append_node("memory@50000000");
-    append_reg((uintptr_t)0x50000000U, (size_t)0x8000U);
+    append_reg(second_memory_base, second_memory_size);
     append_end_node();
 
     /* Disabled memory nodes must not become allocator RAM. */
@@ -389,9 +391,64 @@ static void test_rejects_reserved_memory_cell_mismatch(void)
     }
 }
 
+static void test_memory_nodes_reject_overlapping_ranges(void)
+{
+    static const uintptr_t overlapping_bases[] = {
+        (uintptr_t)0x40008000U, /* Partial overlap with the first RAM node. */
+        (uintptr_t)0x40004000U, /* Fully contained in the first RAM node. */
+        (uintptr_t)0x40000000U  /* Exact duplicate range. */
+    };
+    static const size_t overlapping_sizes[] = {
+        (size_t)0x8000U,
+        (size_t)0x1000U,
+        (size_t)0x10000U
+    };
+    size_t index;
+
+    for (index = 0U;
+         index < sizeof(overlapping_bases) / sizeof(overlapping_bases[0]);
+         ++index)
+    {
+        syntra_fdt_t fdt;
+        size_t blob_size;
+
+        second_memory_base = overlapping_bases[index];
+        second_memory_size = overlapping_sizes[index];
+        blob_size = build_memory_map_fdt(0, 0, 0, 0);
+
+        assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
+        assert(syntra_arm64_memory_map_discover(
+            &fdt,
+            (uintptr_t)0x40008000U,
+            (size_t)0x1000U) == SYNTRA_STATUS_ERROR);
+    }
+
+    /* Adjacent half-open ranges do not overlap and must both be accepted. */
+    {
+        syntra_fdt_t fdt;
+        size_t blob_size;
+
+        second_memory_base = (uintptr_t)0x40010000U;
+        second_memory_size = (size_t)0x8000U;
+        blob_size = build_memory_map_fdt(0, 0, 0, 0);
+
+        assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
+        assert(syntra_arm64_memory_map_discover(
+            &fdt,
+            (uintptr_t)0x40008000U,
+            (size_t)0x1000U) == SYNTRA_STATUS_OK);
+        assert_region(
+            (uintptr_t)0x40010000U, SYNTRA_MEMORY_REGION_RAM);
+    }
+
+    second_memory_base = (uintptr_t)0x50000000U;
+    second_memory_size = (size_t)0x8000U;
+}
+
 int main(void)
 {
     test_fdt_memory_and_reservation_discovery();
+    test_memory_nodes_reject_overlapping_ranges();
     test_rejects_nonempty_reserved_memory_ranges();
     test_rejects_reserved_memory_cell_mismatch();
     test_rejects_unimplemented_dynamic_reserved_memory();
