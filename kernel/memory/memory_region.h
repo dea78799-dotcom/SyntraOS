@@ -16,7 +16,9 @@ typedef enum
     SYNTRA_MEMORY_REGION_STACK,
     SYNTRA_MEMORY_REGION_DTB,
     SYNTRA_MEMORY_REGION_MMIO,
-    SYNTRA_MEMORY_REGION_RECLAIMABLE
+    SYNTRA_MEMORY_REGION_RECLAIMABLE,
+    /* Reserved physical memory that must not receive a normal VA mapping. */
+    SYNTRA_MEMORY_REGION_NOMAP
 } syntra_memory_region_type_t;
 
 typedef struct

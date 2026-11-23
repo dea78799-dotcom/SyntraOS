@@ -104,6 +104,67 @@ static syntra_status_t append_region(
     return append(plan, base, end - base, memory_type, access, executable);
 }
 
+/*
+ * no-map exclusions are page-rounded outward: ARM64 cannot leave only part
+ * of a translation granule unmapped. Reject any explicit mapping that would
+ * cover even one page intersecting a no-map reservation.
+ */
+static syntra_status_t validate_no_map_exclusions(
+    const syntra_arm64_mmu_mapping_plan_t *plan,
+    const syntra_memory_region_t *regions,
+    size_t region_count)
+{
+    size_t region_index;
+
+    for (region_index = 0U; region_index < region_count; ++region_index)
+    {
+        uint64_t excluded_start;
+        uint64_t excluded_end;
+        uint64_t raw_end;
+        size_t mapping_index;
+
+        if (regions[region_index].type != SYNTRA_MEMORY_REGION_NOMAP)
+        {
+            continue;
+        }
+
+        if (!range_end((uint64_t)regions[region_index].base,
+                       (uint64_t)regions[region_index].size, &raw_end))
+        {
+            return SYNTRA_STATUS_INVALID_ARGUMENT;
+        }
+
+        excluded_start = align_down((uint64_t)regions[region_index].base);
+        if (!align_up(raw_end, &excluded_end))
+        {
+            return SYNTRA_STATUS_INVALID_ARGUMENT;
+        }
+
+        for (mapping_index = 0U;
+             mapping_index < plan->count;
+             ++mapping_index)
+        {
+            const syntra_arm64_mmu_mapping_t *mapping =
+                &plan->mappings[mapping_index];
+            uint64_t mapping_end;
+
+            if (!range_end(mapping->physical_address,
+                           mapping->size, &mapping_end))
+            {
+                return SYNTRA_STATUS_ERROR;
+            }
+
+            if (excluded_start < mapping_end &&
+                mapping->virtual_address < excluded_end)
+            {
+                return SYNTRA_STATUS_ERROR;
+            }
+        }
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
 static syntra_status_t append_section(
     syntra_arm64_mmu_mapping_plan_t *plan,
     uint64_t start,
@@ -275,6 +336,10 @@ syntra_status_t syntra_arm64_mmu_mapping_plan_build_with_virtio(
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
+
+    status = validate_no_map_exclusions(plan, regions, region_count);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
 
     return SYNTRA_STATUS_OK;
 }

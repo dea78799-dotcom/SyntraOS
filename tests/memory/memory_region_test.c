@@ -145,6 +145,18 @@ int main(void)
     assert(region.base == (uintptr_t)0x50000000U);
     assert(region.size == (size_t)(3U * 4096U));
 
+    /* no-map is a first-class reservation and remains outside allocatable RAM. */
+    assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_add(
+        (uintptr_t)0x60000000U, (size_t)(3U * 4096U),
+        SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_reserve(
+        (uintptr_t)0x60001000U, (size_t)4096U,
+        SYNTRA_MEMORY_REGION_NOMAP) == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_find(
+        (uintptr_t)0x60001000U, &region) == SYNTRA_STATUS_OK);
+    assert(region.type == SYNTRA_MEMORY_REGION_NOMAP);
+
     puts("Memory Region Manager tests passed.");
     return 0;
 }
