@@ -135,6 +135,18 @@ int main(void)
         &first, kernel_table.root_physical_address) ==
         SYNTRA_STATUS_INVALID_ARGUMENT);
 
+    /* A copied descriptor is not a registered owner and cannot destroy the real space. */
+    {
+        syntra_arm64_address_space_t unregistered_copy = first;
+        const size_t free_before = syntra_page_allocator_free_count();
+        assert(syntra_arm64_address_space_destroy(&unregistered_copy) ==
+            SYNTRA_STATUS_INVALID_ARGUMENT);
+        assert(unregistered_copy.initialized != 0U);
+        assert(first.initialized != 0U);
+        assert(syntra_page_allocator_free_count() == free_before);
+        assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
+    }
+
     /*
      * User VA boundary: the final 4-KiB page is valid, while the exact
      * exclusive upper bound (512 GiB) must be rejected without consuming
