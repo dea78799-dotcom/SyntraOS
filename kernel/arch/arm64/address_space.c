@@ -707,8 +707,7 @@ static syntra_status_t validate_user_table_tree(
 
         if (level == 3U)
         {
-            if ((descriptor & DESC_TYPE) == 0ULL ||
-                (descriptor & ~(DESC_ADDR | 0xFFFULL)) != 0ULL)
+            if ((descriptor & DESC_TYPE) == 0ULL)
                 return SYNTRA_STATUS_ERROR;
 
             for (size_t mapping_index = 0U;
