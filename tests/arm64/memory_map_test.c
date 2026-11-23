@@ -17,6 +17,7 @@ static size_t structure_cursor;
 static uintptr_t second_memory_base = (uintptr_t)0x50000000U;
 static size_t second_memory_size = (size_t)0x8000U;
 static size_t extra_memory_node_count;
+static int reusable_has_second_reg_tuple;
 
 static void write_be32(uint8_t *data, uint32_t value)
 {
@@ -89,6 +90,26 @@ static void append_reg(uintptr_t base, size_t size)
     write_be32(data + 4U, (uint32_t)base);
     write_be32(data + 8U, (uint32_t)((uint64_t)size >> 32U));
     write_be32(data + 12U, (uint32_t)size);
+    append_property(27U, data, sizeof(data));
+}
+
+static void append_reg_pair(
+    uintptr_t first_base,
+    size_t first_size,
+    uintptr_t second_base,
+    size_t second_size
+)
+{
+    uint8_t data[32];
+
+    write_be32(data, (uint32_t)((uint64_t)first_base >> 32U));
+    write_be32(data + 4U, (uint32_t)first_base);
+    write_be32(data + 8U, (uint32_t)((uint64_t)first_size >> 32U));
+    write_be32(data + 12U, (uint32_t)first_size);
+    write_be32(data + 16U, (uint32_t)((uint64_t)second_base >> 32U));
+    write_be32(data + 20U, (uint32_t)second_base);
+    write_be32(data + 24U, (uint32_t)((uint64_t)second_size >> 32U));
+    write_be32(data + 28U, (uint32_t)second_size);
     append_property(27U, data, sizeof(data));
 }
 
@@ -187,7 +208,16 @@ static size_t build_memory_map_fdt(
         append_property(47U, NULL, 0U);
     }
     append_node("reusable@40004000");
-    append_reg((uintptr_t)0x40004000U, (size_t)0x1000U);
+    if (reusable_has_second_reg_tuple)
+    {
+        append_reg_pair(
+            (uintptr_t)0x40004000U, (size_t)0x1000U,
+            (uintptr_t)0x40006000U, (size_t)0x1000U);
+    }
+    else
+    {
+        append_reg((uintptr_t)0x40004000U, (size_t)0x1000U);
+    }
     append_property(31U, NULL, 0U);
     append_end_node();
 
@@ -533,6 +563,58 @@ static void test_reserved_memory_capacity_failure_rolls_back(void)
     extra_memory_node_count = 0U;
 }
 
+static void test_multi_tuple_reserved_memory_failure_rolls_back(void)
+{
+    syntra_fdt_t fdt;
+    size_t blob_size;
+
+    /*
+     * 2 built-in nodes + 26 extras produce 28 RAM regions.
+     * The header reservation adds 2 regions (30); tuple 0 adds 2 (32).
+     * Tuple 1 then cannot split its RAM region because the registry is full.
+     */
+    extra_memory_node_count = 26U;
+    reusable_has_second_reg_tuple = 1;
+    blob_size = build_memory_map_fdt(0, 0, 0, 0);
+
+    assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
+    {
+        size_t reg_count;
+        syntra_fdt_iterator_t iterator;
+        syntra_fdt_token_t token;
+        syntra_fdt_node_t reserved_child;
+        int found_child = 0;
+
+        syntra_fdt_iterator_init(&iterator);
+        while (syntra_fdt_next(&fdt, &iterator, &token) == SYNTRA_STATUS_OK)
+        {
+            if (token.type == SYNTRA_FDT_TOKEN_BEGIN_NODE &&
+                token.depth == 2U &&
+                token.name != NULL &&
+                token.name[0] == 'r')
+            {
+                reserved_child.begin_offset = token.offset;
+                reserved_child.depth = token.depth;
+                found_child = 1;
+                break;
+            }
+        }
+        assert(found_child);
+        assert(syntra_fdt_get_reg_count(
+            &fdt, &reserved_child, &reg_count) == SYNTRA_STATUS_OK);
+        assert(reg_count == 2U);
+    }
+
+    assert(syntra_arm64_memory_map_discover(
+        &fdt,
+        (uintptr_t)0x40008000U,
+        (size_t)0x1000U) == SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(syntra_memory_region_count() == 0U);
+
+    extra_memory_node_count = 0U;
+    reusable_has_second_reg_tuple = 0;
+}
+
 int main(void)
 {
     test_fdt_memory_and_reservation_discovery();
@@ -540,6 +622,7 @@ int main(void)
     test_memory_map_capacity_failure_rolls_back();
     test_header_reservation_capacity_failure_rolls_back();
     test_reserved_memory_capacity_failure_rolls_back();
+    test_multi_tuple_reserved_memory_failure_rolls_back();
     test_rejects_nonempty_reserved_memory_ranges();
     test_rejects_reserved_memory_cell_mismatch();
     test_rejects_unimplemented_dynamic_reserved_memory();
