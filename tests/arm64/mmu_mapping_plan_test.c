@@ -196,12 +196,63 @@ static void test_existing_rejections(void)
         SYNTRA_STATUS_INVALID_ARGUMENT);
 }
 
+static void test_no_map_region_is_not_mapped(void)
+{
+    syntra_arm64_gic_config_t gic = fixture_gic();
+    syntra_arm64_mmu_mapping_plan_t plan;
+    syntra_arm64_boot_memory_metadata_t metadata = fixture();
+    syntra_memory_region_t regions[] = {
+        {0x40002000U, 0x000FE000U, SYNTRA_MEMORY_REGION_RAM},
+        {0x40100000U, 0x00001000U, SYNTRA_MEMORY_REGION_NOMAP},
+        {0x40101000U, 0x000FF000U, SYNTRA_MEMORY_REGION_RAM},
+        {0x40200000U, 0x00008000U, SYNTRA_MEMORY_REGION_KERNEL},
+        {0x40208000U, 0x1FDF8000U, SYNTRA_MEMORY_REGION_RAM},
+        {0x40000000U, 0x00001800U, SYNTRA_MEMORY_REGION_DTB}
+    };
+    size_t index;
+
+    assert(syntra_arm64_mmu_mapping_plan_build(
+        &metadata, regions, sizeof(regions) / sizeof(regions[0]), &gic,
+        0x09000000U, 0x1000U, 0U, 0U, &plan) == SYNTRA_STATUS_OK);
+
+    for (index = 0U; index < plan.count; ++index)
+    {
+        const syntra_arm64_mmu_mapping_t *mapping =
+            &plan.mappings[index];
+        uint64_t mapping_end =
+            mapping->virtual_address + mapping->size;
+
+        assert(mapping_end <= 0x40100000U ||
+               mapping->virtual_address >= 0x40101000U);
+    }
+}
+
+static void test_no_map_rejects_explicit_mapping_overlap(void)
+{
+    syntra_arm64_gic_config_t gic = fixture_gic();
+    syntra_arm64_mmu_mapping_plan_t plan;
+    syntra_arm64_boot_memory_metadata_t metadata = fixture();
+    syntra_memory_region_t regions[] = {
+        {0x40002000U, 0x001FE000U, SYNTRA_MEMORY_REGION_RAM},
+        {0x40200000U, 0x00008000U, SYNTRA_MEMORY_REGION_KERNEL},
+        {0x40208000U, 0x1FDF8000U, SYNTRA_MEMORY_REGION_RAM},
+        {0x40000000U, 0x00001800U, SYNTRA_MEMORY_REGION_DTB},
+        {0x40200000U, 0x00001000U, SYNTRA_MEMORY_REGION_NOMAP}
+    };
+
+    assert(syntra_arm64_mmu_mapping_plan_build(
+        &metadata, regions, sizeof(regions) / sizeof(regions[0]), &gic,
+        0x09000000U, 0x1000U, 0U, 0U, &plan) == SYNTRA_STATUS_ERROR);
+}
+
 int main(void)
 {
     test_existing_mapping_attributes();
     test_virtio_device_mapping();
     test_virtio_rejections();
     test_existing_rejections();
+    test_no_map_region_is_not_mapped();
+    test_no_map_rejects_explicit_mapping_overlap();
     puts("ARM64 MMU mapping-plan tests passed");
     return 0;
 }
