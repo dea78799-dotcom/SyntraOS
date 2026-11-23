@@ -336,6 +336,49 @@ static syntra_status_t reserve_ram_range(
     return SYNTRA_STATUS_OK;
 }
 
+/*
+ * A no-map reservation must be represented completely in the RAM map.
+ * Silently ignoring a gap or an existing non-RAM region could leave part of
+ * the requested range mapped by another MMU mapping source.
+ */
+static syntra_status_t validate_ram_range(uintptr_t base, size_t size)
+{
+    uintptr_t end;
+    uintptr_t cursor;
+
+    if (size == 0U || base > UINTPTR_MAX - size)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    end = base + size;
+    cursor = base;
+
+    while (cursor < end)
+    {
+        syntra_memory_region_t region;
+        uintptr_t region_end;
+        syntra_status_t status =
+            syntra_memory_region_find(cursor, &region);
+
+        if (status != SYNTRA_STATUS_OK ||
+            region.type != SYNTRA_MEMORY_REGION_RAM)
+        {
+            return SYNTRA_STATUS_ERROR;
+        }
+
+        region_end = region.base + region.size;
+        if (region_end <= cursor)
+        {
+            return SYNTRA_STATUS_ERROR;
+        }
+
+        cursor = region_end < end ? region_end : end;
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
 static syntra_status_t apply_header_reservations(const syntra_fdt_t *fdt)
 {
     size_t count;
@@ -533,15 +576,9 @@ static syntra_status_t discover_reserved_memory_nodes(
 
                 if (no_map_status == SYNTRA_STATUS_OK)
                 {
-                    /*
-                     * The current memory-region and MMU plan APIs cannot
-                     * preserve the no-map constraint. Refuse to boot with
-                     * this reservation until that metadata is supported.
-                     */
-                    return SYNTRA_STATUS_NOT_IMPLEMENTED;
+                    type = SYNTRA_MEMORY_REGION_NOMAP;
                 }
-
-                if (reusable_status == SYNTRA_STATUS_OK)
+                else if (reusable_status == SYNTRA_STATUS_OK)
                 {
                     type = SYNTRA_MEMORY_REGION_RECLAIMABLE;
                 }
@@ -600,6 +637,15 @@ static syntra_status_t discover_reserved_memory_nodes(
                     if (status != SYNTRA_STATUS_OK)
                     {
                         return status;
+                    }
+
+                    if (type == SYNTRA_MEMORY_REGION_NOMAP)
+                    {
+                        status = validate_ram_range(base, size);
+                        if (status != SYNTRA_STATUS_OK)
+                        {
+                            return status;
+                        }
                     }
 
                     status = reserve_ram_range(base, size, type);
