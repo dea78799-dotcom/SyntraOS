@@ -305,7 +305,7 @@ static syntra_status_t rollback_empty_user_tables(
 {
     uint16_t indices[4];
     uint64_t *root, *level2, *level3;
-    uint64_t descriptor, level2_pa, level3_pa;
+    uint64_t descriptor, root_descriptor, level2_pa, level3_pa;
     syntra_status_t status;
 
     status = syntra_arm64_mmu_get_table_indices(virtual_address, indices);
@@ -317,7 +317,8 @@ static syntra_status_t rollback_empty_user_tables(
     if (root == NULL)
         return SYNTRA_STATUS_ERROR;
 
-    descriptor = root[indices[0]];
+    root_descriptor = root[indices[0]];
+    descriptor = root_descriptor;
     if ((descriptor & (DESC_VALID | DESC_TYPE)) !=
         (DESC_VALID | DESC_TYPE))
         return SYNTRA_STATUS_OK;
@@ -347,15 +348,22 @@ static syntra_status_t rollback_empty_user_tables(
             status = syntra_page_free_owned(
                 (uintptr_t)level3_pa, SYNTRA_PAGE_OWNER_PAGE_TABLE);
             if (status != SYNTRA_STATUS_OK)
+            {
+                /* Keep the still-owned child reachable for a later retry. */
+                level2[indices[1]] = descriptor;
                 return status;
+            }
         }
     }
 
     if (table_is_empty(level2))
     {
         root[indices[0]] = 0ULL;
-        return syntra_page_free_owned(
+        status = syntra_page_free_owned(
             (uintptr_t)level2_pa, SYNTRA_PAGE_OWNER_PAGE_TABLE);
+        if (status != SYNTRA_STATUS_OK)
+            root[indices[0]] = root_descriptor;
+        return status;
     }
 
     return SYNTRA_STATUS_OK;
@@ -429,7 +437,8 @@ syntra_status_t syntra_arm64_address_space_unmap_user_page(
 {
     uint16_t indices[4];
     uint64_t *root, *level2, *level3;
-    uint64_t descriptor, level2_pa, level3_pa, process_pa;
+    uint64_t descriptor, root_descriptor, level2_descriptor;
+    uint64_t level2_pa, level3_pa, process_pa, leaf_descriptor;
     size_t mapping_index;
     syntra_status_t status;
 
@@ -461,7 +470,8 @@ syntra_status_t syntra_arm64_address_space_unmap_user_page(
     if (root == NULL)
         return SYNTRA_STATUS_ERROR;
 
-    descriptor = root[indices[0]];
+    root_descriptor = root[indices[0]];
+    descriptor = root_descriptor;
     if ((descriptor & (DESC_VALID | DESC_TYPE)) !=
         (DESC_VALID | DESC_TYPE) ||
         (descriptor & ~(DESC_ADDR | 3ULL)) != 0ULL)
@@ -474,7 +484,8 @@ syntra_status_t syntra_arm64_address_space_unmap_user_page(
     if (level2 == NULL)
         return SYNTRA_STATUS_ERROR;
 
-    descriptor = level2[indices[1]];
+    level2_descriptor = level2[indices[1]];
+    descriptor = level2_descriptor;
     if ((descriptor & (DESC_VALID | DESC_TYPE)) !=
         (DESC_VALID | DESC_TYPE) ||
         (descriptor & ~(DESC_ADDR | 3ULL)) != 0ULL)
@@ -487,17 +498,21 @@ syntra_status_t syntra_arm64_address_space_unmap_user_page(
     if (level3 == NULL)
         return SYNTRA_STATUS_ERROR;
 
-    descriptor = level3[indices[2]];
-    if ((descriptor & (DESC_VALID | DESC_TYPE)) !=
+    leaf_descriptor = level3[indices[2]];
+    if ((leaf_descriptor & (DESC_VALID | DESC_TYPE)) !=
         (DESC_VALID | DESC_TYPE) ||
-        (descriptor & DESC_ADDR) != process_pa)
+        (leaf_descriptor & DESC_ADDR) != process_pa)
         return SYNTRA_STATUS_ERROR;
 
     level3[indices[2]] = 0ULL;
     status = syntra_page_free_owned(
         (uintptr_t)process_pa, SYNTRA_PAGE_OWNER_PROCESS);
     if (status != SYNTRA_STATUS_OK)
+    {
+        /* Restore the mapping if its backing frame could not be reclaimed. */
+        level3[indices[2]] = leaf_descriptor;
         return status;
+    }
 
     for (size_t i = mapping_index + 1U; i < space->mapping_count; ++i)
         space->mappings[i - 1U] = space->mappings[i];
@@ -509,7 +524,11 @@ syntra_status_t syntra_arm64_address_space_unmap_user_page(
         status = syntra_page_free_owned(
             (uintptr_t)level3_pa, SYNTRA_PAGE_OWNER_PAGE_TABLE);
         if (status != SYNTRA_STATUS_OK)
+        {
+            /* The L3 page is still owned; preserve its parent descriptor. */
+            level2[indices[1]] = level2_descriptor;
             return status;
+        }
 
         if (table_is_empty(level2))
         {
@@ -517,7 +536,11 @@ syntra_status_t syntra_arm64_address_space_unmap_user_page(
             status = syntra_page_free_owned(
                 (uintptr_t)level2_pa, SYNTRA_PAGE_OWNER_PAGE_TABLE);
             if (status != SYNTRA_STATUS_OK)
+            {
+                /* Keep the empty L2 table reachable if reclamation fails. */
+                root[indices[0]] = root_descriptor;
                 return status;
+            }
         }
     }
 
