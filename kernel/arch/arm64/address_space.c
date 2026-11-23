@@ -977,7 +977,8 @@ syntra_status_t syntra_arm64_address_space_destroy(
     syntra_status_t status;
     uint64_t root;
 
-    if (space == NULL || !space->initialized)
+    if (space == NULL || !space->initialized ||
+        !address_space_is_registered(space))
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     if (active_address_space == space ||
         active_root_physical_address == space->page_table.root_physical_address)
