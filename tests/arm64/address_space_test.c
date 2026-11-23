@@ -218,6 +218,13 @@ int main(void)
         &rogue_descriptor) == SYNTRA_STATUS_OK);
     first_l3[user_indices[2]] = rogue_descriptor;
     assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_ERROR);
+    /*
+     * Destruction must reject the unregistered leaf before reclaiming the
+     * registered process mapping or releasing any page-table hierarchy.
+     */
+    assert(syntra_arm64_address_space_destroy(&first) == SYNTRA_STATUS_ERROR);
+    assert(first.mapping_count == 1U && first.initialized != 0U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
     first_l3[user_indices[2]] = 0ULL;
     assert(syntra_page_free_owned(
         rogue_process_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
@@ -226,6 +233,32 @@ int main(void)
     assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_ERROR);
     first_root[256U] = saved_kernel_entry;
     assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
+
+    /*
+     * Unmap must refuse to free a PROCESS frame if the live PTE permissions
+     * differ from the mapping registry, leaving ownership and count intact.
+     */
+    {
+        uint16_t first_mapping_indices[4];
+        uint64_t *mapping_l3;
+        uint64_t saved_leaf;
+        const size_t saved_mapping_count = first.mapping_count;
+
+        assert(syntra_arm64_mmu_get_table_indices(
+            0x4000000000ULL, first_mapping_indices) == SYNTRA_STATUS_OK);
+        mapping_l3 = resolve_page(first_l2[first_mapping_indices[1]] &
+            SYNTRA_ARM64_MMU_PA_MASK, NULL);
+        assert(mapping_l3 != NULL);
+        saved_leaf = mapping_l3[first_mapping_indices[2]];
+        mapping_l3[first_mapping_indices[2]] ^= (1ULL << 7U);
+        assert(syntra_arm64_address_space_unmap_user_page(
+            &first, 0x4000000000ULL) == SYNTRA_STATUS_ERROR);
+        assert(first.mapping_count == saved_mapping_count);
+        assert(syntra_page_get_owner(
+            first_process_page, NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
+        mapping_l3[first_mapping_indices[2]] = saved_leaf;
+        assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
+    }
 
     assert(syntra_arm64_address_space_translate(
         &first, 0x4000000034ULL, &translation) == SYNTRA_STATUS_OK);
