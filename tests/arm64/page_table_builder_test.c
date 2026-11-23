@@ -634,13 +634,12 @@ static void test_mapping_journal_capacity_exhaustion(void)
         &pt, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
 
     /*
-     * This range needs one L2 table plus 64 L3 tables. The bounded journal
+     * This page-only range needs one L2 table plus 65 L3 tables. The bounded journal
      * can retain only 64 new-table records, so preparation must fail before
      * publishing any leaf and reclaim every table it did attach.
      */
-    assert(syntra_arm64_page_table_map(
+    assert(syntra_arm64_page_table_map_user(
         &pt, map_va, map_pa, map_size,
-        SYNTRA_ARM64_MMU_MEMORY_NORMAL,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
         SYNTRA_STATUS_OUT_OF_MEMORY);
 
