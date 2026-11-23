@@ -89,10 +89,13 @@ static void append_reg(uintptr_t base, size_t size)
     append_property(27U, data, sizeof(data));
 }
 
-static size_t build_memory_map_fdt(void)
+static size_t build_memory_map_fdt(
+    int dynamic_reserved,
+    int nonempty_ranges
+)
 {
     static const char strings[] =
-        "#address-cells\0#size-cells\0reg\0reusable\0status\0";
+        "#address-cells\0#size-cells\0reg\0reusable\0status\0ranges\0size\0";
     const size_t reserve_offset = 40U;
     const size_t structure_offset = 72U;
     size_t strings_offset;
@@ -145,6 +148,15 @@ static size_t build_memory_map_fdt(void)
     append_node("reserved-memory");
     append_cells_property(0U, 2U);
     append_cells_property(15U, 2U);
+    if (nonempty_ranges)
+    {
+        static const uint8_t invalid_ranges[] = {0U, 0U, 0U, 0U};
+        append_property(47U, invalid_ranges, sizeof(invalid_ranges));
+    }
+    else
+    {
+        append_property(47U, NULL, 0U);
+    }
     append_node("reusable@40004000");
     append_reg((uintptr_t)0x40004000U, (size_t)0x1000U);
     append_property(31U, NULL, 0U);
@@ -176,6 +188,16 @@ static size_t build_memory_map_fdt(void)
         append_property(40U, failed_status, sizeof(failed_status));
     }
     append_end_node();
+
+    if (dynamic_reserved)
+    {
+        static const uint8_t dynamic_size[] = {
+            0U, 0U, 0U, 0U, 0U, 0U, 0x10U, 0U
+        };
+        append_node("dynamic@0");
+        append_property(54U, dynamic_size, sizeof(dynamic_size));
+        append_end_node();
+    }
     append_end_node();
 
     append_end_node();
@@ -221,7 +243,7 @@ static void assert_region(
 static void test_fdt_memory_and_reservation_discovery(void)
 {
     syntra_fdt_t fdt;
-    size_t blob_size = build_memory_map_fdt();
+    size_t blob_size = build_memory_map_fdt(0, 0);
 
     assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_memory_map_discover(
@@ -250,9 +272,35 @@ static void test_fdt_memory_and_reservation_discovery(void)
     }
 }
 
+static void test_rejects_nonempty_reserved_memory_ranges(void)
+{
+    syntra_fdt_t fdt;
+    size_t blob_size = build_memory_map_fdt(0, 1);
+
+    assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_memory_map_discover(
+        &fdt,
+        (uintptr_t)0x40008000U,
+        (size_t)0x1000U) == SYNTRA_STATUS_ERROR);
+}
+
+static void test_rejects_unimplemented_dynamic_reserved_memory(void)
+{
+    syntra_fdt_t fdt;
+    size_t blob_size = build_memory_map_fdt(1, 0);
+
+    assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_memory_map_discover(
+        &fdt,
+        (uintptr_t)0x40008000U,
+        (size_t)0x1000U) == SYNTRA_STATUS_NOT_IMPLEMENTED);
+}
+
 int main(void)
 {
     test_fdt_memory_and_reservation_discovery();
+    test_rejects_nonempty_reserved_memory_ranges();
+    test_rejects_unimplemented_dynamic_reserved_memory();
     puts("ARM64 FDT memory map tests passed");
     return 0;
 }

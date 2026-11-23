@@ -418,6 +418,25 @@ static syntra_status_t discover_memory_nodes(
         : status;
 }
 
+static syntra_status_t validate_reserved_memory_parent(
+    const syntra_fdt_t *fdt,
+    const syntra_fdt_node_t *node
+)
+{
+    const uint8_t *ranges_data;
+    uint32_t ranges_size;
+    syntra_status_t status;
+
+    status = syntra_fdt_get_property(
+        fdt, node, "ranges", &ranges_data, &ranges_size);
+    if (status != SYNTRA_STATUS_OK || ranges_size != 0U)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
 static syntra_status_t discover_reserved_memory_nodes(
     const syntra_fdt_t *fdt
 )
@@ -442,6 +461,18 @@ static syntra_status_t discover_reserved_memory_nodes(
                     (uint32_t)sizeof("reserved-memory"),
                     "reserved-memory");
 
+            if (inside_reserved_memory)
+            {
+                syntra_fdt_node_t parent;
+
+                parent.begin_offset = token.offset;
+                parent.depth = token.depth;
+                status = validate_reserved_memory_parent(fdt, &parent);
+                if (status != SYNTRA_STATUS_OK)
+                {
+                    return status;
+                }
+            }
         }
         else if (token.type == SYNTRA_FDT_TOKEN_END_NODE &&
                  token.depth == 1U)
@@ -484,8 +515,26 @@ static syntra_status_t discover_reserved_memory_nodes(
                     fdt, &node, "reg", &reg_data, &reg_data_size);
                 if (status == SYNTRA_STATUS_NOT_IMPLEMENTED)
                 {
-                    /* Dynamic reserved-memory nodes may use size/alignment. */
-                    continue;
+                    const uint8_t *dynamic_size_data;
+                    uint32_t dynamic_size_data_size;
+                    syntra_status_t size_status;
+
+                    size_status = syntra_fdt_get_property(
+                        fdt, &node, "size",
+                        &dynamic_size_data, &dynamic_size_data_size);
+                    if (size_status == SYNTRA_STATUS_OK)
+                    {
+                        /*
+                         * Dynamic reserved-memory allocation is not
+                         * implemented yet. Fail closed so the requested
+                         * memory cannot remain visible as ordinary RAM.
+                         */
+                        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+                    }
+
+                    return size_status == SYNTRA_STATUS_NOT_IMPLEMENTED
+                        ? SYNTRA_STATUS_ERROR
+                        : size_status;
                 }
                 if (status != SYNTRA_STATUS_OK || reg_data_size == 0U)
                 {
