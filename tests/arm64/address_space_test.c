@@ -39,6 +39,47 @@ static uint64_t *resolve_page(uint64_t physical_address, void *context)
         (physical_address - TEST_RAM_BASE) / SYNTRA_PAGE_SIZE];
 }
 
+typedef struct
+{
+    unsigned int calls;
+    unsigned int fail_on_call;
+} resolve_failure_context_t;
+
+static uint64_t *resolve_page_with_failure(
+    uint64_t physical_address, void *context)
+{
+    resolve_failure_context_t *failure =
+        (resolve_failure_context_t *)context;
+
+    if (failure == NULL)
+        return NULL;
+    failure->calls++;
+    if (failure->calls == failure->fail_on_call)
+        return NULL;
+    return resolve_page(physical_address, NULL);
+}
+
+static void test_address_space_create_releases_unresolvable_root(void)
+{
+    syntra_arm64_address_space_t failed_space = {0};
+    resolve_failure_context_t failure = {0U, 2U};
+    const size_t free_before = syntra_page_allocator_free_count();
+
+    /*
+     * The address-space allocator's preflight resolve succeeds on call one.
+     * The page-table builder's own resolve fails on call two, so init_ex
+     * must return the newly allocated PAGE_TABLE frame through its callback.
+     */
+    assert(syntra_arm64_address_space_create(
+        &failed_space, 99U, resolve_page_with_failure, &failure) ==
+        SYNTRA_STATUS_ERROR);
+    assert(failure.calls == 2U);
+    assert(failed_space.initialized == 0U);
+    assert(failed_space.page_table.root_physical_address == 0ULL);
+    assert(syntra_page_allocator_free_count() == free_before);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+}
+
 int main(void)
 {
     syntra_arm64_address_space_t first = {0};
@@ -67,6 +108,8 @@ int main(void)
     assert(syntra_page_allocator_init() == SYNTRA_STATUS_OK);
     initial_free = syntra_page_allocator_free_count();
     assert(initial_free == TEST_RAM_PAGES);
+
+    test_address_space_create_releases_unresolvable_root();
 
     assert(syntra_page_alloc_owned(
         &kernel_data_page, SYNTRA_PAGE_OWNER_KERNEL) == SYNTRA_STATUS_OK);
