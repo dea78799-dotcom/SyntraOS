@@ -133,6 +133,15 @@ static size_t build_memory_map_fdt(void)
     }
     append_end_node();
 
+    /* fail-sss memory nodes must not become allocator RAM either. */
+    append_node("memory@70000000");
+    append_reg((uintptr_t)0x70000000U, (size_t)0x8000U);
+    {
+        static const uint8_t failed_status[] = "fail-hardware";
+        append_property(40U, failed_status, sizeof(failed_status));
+    }
+    append_end_node();
+
     append_node("reserved-memory");
     append_cells_property(0U, 2U);
     append_cells_property(15U, 2U);
@@ -155,6 +164,13 @@ static size_t build_memory_map_fdt(void)
     append_reg((uintptr_t)0x50003000U, (size_t)0x1000U);
     {
         static const uint8_t failed_status[] = "fail";
+        append_property(40U, failed_status, sizeof(failed_status));
+    }
+    /* A fail-sss reserved-memory child must also be skipped. */
+    append_node("failed-hardware@50004000");
+    append_reg((uintptr_t)0x50004000U, (size_t)0x1000U);
+    {
+        static const uint8_t failed_status[] = "fail-hardware";
         append_property(40U, failed_status, sizeof(failed_status));
     }
     append_end_node();
@@ -227,6 +243,8 @@ static void test_fdt_memory_and_reservation_discovery(void)
         syntra_memory_region_t disabled_region;
         assert(syntra_memory_region_find(
             (uintptr_t)0x60001000U, &disabled_region) != SYNTRA_STATUS_OK);
+        assert(syntra_memory_region_find(
+            (uintptr_t)0x70001000U, &disabled_region) != SYNTRA_STATUS_OK);
     }
 }
 
