@@ -660,7 +660,7 @@ static void test_mapping_journal_capacity_exhaustion(void)
      * Retry a small prefix: the original oversized range inherently exceeds
      * journal capacity even when empty, but its first pages must remain usable.
      */
-    const retry_size = 2ULL * SYNTRA_ARM64_MMU_PAGE_SIZE;
+    const uint64_t retry_size = 2ULL * SYNTRA_ARM64_MMU_PAGE_SIZE;
     assert(syntra_arm64_page_table_map_user(
         &pt, map_va, map_pa, retry_size,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
