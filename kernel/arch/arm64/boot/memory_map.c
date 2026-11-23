@@ -461,6 +461,52 @@ static syntra_status_t discover_memory_nodes(
         : status;
 }
 
+static syntra_status_t read_cell_count_property(
+    const syntra_fdt_t *fdt,
+    const syntra_fdt_node_t *node,
+    const char *name,
+    uint32_t default_value,
+    int required,
+    uint32_t *value
+)
+{
+    const uint8_t *data;
+    uint32_t data_size;
+    syntra_status_t status;
+
+    if (value == NULL)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    status = syntra_fdt_get_property(fdt, node, name, &data, &data_size);
+    if (status == SYNTRA_STATUS_NOT_IMPLEMENTED && !required)
+    {
+        *value = default_value;
+        return SYNTRA_STATUS_OK;
+    }
+    if (status != SYNTRA_STATUS_OK || data_size != 4U)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    *value = ((uint32_t)data[0] << 24U) |
+             ((uint32_t)data[1] << 16U) |
+             ((uint32_t)data[2] << 8U) |
+             (uint32_t)data[3];
+
+    if (*value == 0U)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+    if (*value > 2U)
+    {
+        return SYNTRA_STATUS_NOT_IMPLEMENTED;
+    }
+
+    return SYNTRA_STATUS_OK;
+}
+
 static syntra_status_t validate_reserved_memory_parent(
     const syntra_fdt_t *fdt,
     const syntra_fdt_node_t *node
@@ -468,11 +514,53 @@ static syntra_status_t validate_reserved_memory_parent(
 {
     const uint8_t *ranges_data;
     uint32_t ranges_size;
+    uint32_t root_address_cells;
+    uint32_t root_size_cells;
+    uint32_t reserved_address_cells;
+    uint32_t reserved_size_cells;
+    syntra_fdt_node_t root;
     syntra_status_t status;
 
     status = syntra_fdt_get_property(
         fdt, node, "ranges", &ranges_data, &ranges_size);
     if (status != SYNTRA_STATUS_OK || ranges_size != 0U)
+    {
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    /* The root node is the first structure-block node at offset zero. */
+    root.begin_offset = 0U;
+    root.depth = 0U;
+
+    status = read_cell_count_property(
+        fdt, &root, "#address-cells", 2U, 0, &root_address_cells);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        return status;
+    }
+    status = read_cell_count_property(
+        fdt, &root, "#size-cells", 1U, 0, &root_size_cells);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        return status;
+    }
+
+    /* These two properties are required directly on /reserved-memory. */
+    status = read_cell_count_property(
+        fdt, node, "#address-cells", 0U, 1, &reserved_address_cells);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        return status;
+    }
+    status = read_cell_count_property(
+        fdt, node, "#size-cells", 0U, 1, &reserved_size_cells);
+    if (status != SYNTRA_STATUS_OK)
+    {
+        return status;
+    }
+
+    if (reserved_address_cells != root_address_cells ||
+        reserved_size_cells != root_size_cells)
     {
         return SYNTRA_STATUS_ERROR;
     }
