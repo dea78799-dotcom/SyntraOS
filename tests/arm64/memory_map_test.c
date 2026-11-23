@@ -92,7 +92,8 @@ static void append_reg(uintptr_t base, size_t size)
 static size_t build_memory_map_fdt(
     int dynamic_reserved,
     int nonempty_ranges,
-    int reserved_flags
+    int reserved_flags,
+    int reserved_cells_flags
 )
 {
     static const char strings[] =
@@ -147,8 +148,16 @@ static size_t build_memory_map_fdt(
     append_end_node();
 
     append_node("reserved-memory");
-    append_cells_property(0U, 2U);
-    append_cells_property(15U, 2U);
+    if ((reserved_cells_flags & 1) == 0)
+    {
+        append_cells_property(
+            0U, (reserved_cells_flags & 4) != 0 ? 1U : 2U);
+    }
+    if ((reserved_cells_flags & 2) == 0)
+    {
+        append_cells_property(
+            15U, (reserved_cells_flags & 8) != 0 ? 1U : 2U);
+    }
     if (nonempty_ranges)
     {
         static const uint8_t invalid_ranges[] = {0U, 0U, 0U, 0U};
@@ -268,7 +277,7 @@ static void assert_region(
 static void test_fdt_memory_and_reservation_discovery(void)
 {
     syntra_fdt_t fdt;
-    size_t blob_size = build_memory_map_fdt(0, 0, 0);
+    size_t blob_size = build_memory_map_fdt(0, 0, 0, 0);
 
     assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_memory_map_discover(
@@ -300,7 +309,7 @@ static void test_fdt_memory_and_reservation_discovery(void)
 static void test_rejects_nonempty_reserved_memory_ranges(void)
 {
     syntra_fdt_t fdt;
-    size_t blob_size = build_memory_map_fdt(0, 1, 0);
+    size_t blob_size = build_memory_map_fdt(0, 1, 0, 0);
 
     assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_memory_map_discover(
@@ -312,7 +321,7 @@ static void test_rejects_nonempty_reserved_memory_ranges(void)
 static void test_rejects_unimplemented_dynamic_reserved_memory(void)
 {
     syntra_fdt_t fdt;
-    size_t blob_size = build_memory_map_fdt(1, 0, 0);
+    size_t blob_size = build_memory_map_fdt(1, 0, 0, 0);
 
     assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_memory_map_discover(
@@ -324,7 +333,7 @@ static void test_rejects_unimplemented_dynamic_reserved_memory(void)
 static void test_discovers_no_map_reservation(void)
 {
     syntra_fdt_t fdt;
-    size_t blob_size = build_memory_map_fdt(0, 0, 1);
+    size_t blob_size = build_memory_map_fdt(0, 0, 1, 0);
 
     assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_memory_map_discover(
@@ -338,7 +347,7 @@ static void test_discovers_no_map_reservation(void)
 static void test_rejects_conflicting_no_map_and_reusable(void)
 {
     syntra_fdt_t fdt;
-    size_t blob_size = build_memory_map_fdt(0, 0, 2);
+    size_t blob_size = build_memory_map_fdt(0, 0, 2, 0);
 
     assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_memory_map_discover(
@@ -350,7 +359,7 @@ static void test_rejects_conflicting_no_map_and_reusable(void)
 static void test_rejects_nonempty_reusable_boolean(void)
 {
     syntra_fdt_t fdt;
-    size_t blob_size = build_memory_map_fdt(0, 0, 3);
+    size_t blob_size = build_memory_map_fdt(0, 0, 3, 0);
 
     assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_memory_map_discover(
@@ -359,10 +368,32 @@ static void test_rejects_nonempty_reusable_boolean(void)
         (size_t)0x1000U) == SYNTRA_STATUS_ERROR);
 }
 
+static void test_rejects_reserved_memory_cell_mismatch(void)
+{
+    static const int invalid_cell_layouts[] = {1, 2, 4, 8};
+    size_t index;
+
+    for (index = 0U;
+         index < sizeof(invalid_cell_layouts) / sizeof(invalid_cell_layouts[0]);
+         ++index)
+    {
+        syntra_fdt_t fdt;
+        size_t blob_size = build_memory_map_fdt(
+            0, 0, 0, invalid_cell_layouts[index]);
+
+        assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
+        assert(syntra_arm64_memory_map_discover(
+            &fdt,
+            (uintptr_t)0x40008000U,
+            (size_t)0x1000U) == SYNTRA_STATUS_ERROR);
+    }
+}
+
 int main(void)
 {
     test_fdt_memory_and_reservation_discovery();
     test_rejects_nonempty_reserved_memory_ranges();
+    test_rejects_reserved_memory_cell_mismatch();
     test_rejects_unimplemented_dynamic_reserved_memory();
     test_discovers_no_map_reservation();
     test_rejects_conflicting_no_map_and_reusable();
