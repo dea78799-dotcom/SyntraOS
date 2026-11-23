@@ -277,6 +277,49 @@ static void test_user_map_rolls_back_on_allocation_failure(void)
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
 }
 
+static void test_user_map_preallocates_before_publishing_any_leaf(void)
+{
+    syntra_arm64_page_table_t pt;
+    syntra_arm64_mmu_translation_t translation;
+
+    reset();
+    released = 0U;
+    release_attempts = 0U;
+    assert(syntra_arm64_page_table_init_ex(
+        &pt, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+
+    /* Seed an L3 table in the first 2-MiB region of this L1 slot. */
+    assert(syntra_arm64_page_table_map_user(
+        &pt, 0x50000000ULL, 0x80000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+
+    /*
+     * The first requested page reuses that L3 table; the next page crosses
+     * into a new L2 slot and needs another L3 table. Fail that allocation.
+     * Preparation must fail before publishing the first requested leaf.
+     */
+    allocation_limit = used;
+    assert(syntra_arm64_page_table_map_user(
+        &pt, 0x501ff000ULL, 0x801ff000ULL, 0x2000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
+        SYNTRA_STATUS_OUT_OF_MEMORY);
+
+    assert(syntra_arm64_mmu_walk(pt.root_physical_address, 0x501ff000ULL,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_ERROR);
+    assert(syntra_arm64_mmu_walk(pt.root_physical_address, 0x50200000ULL,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_ERROR);
+
+    allocation_limit = TABLES;
+    assert(syntra_arm64_page_table_map_user(
+        &pt, 0x501ff000ULL, 0x801ff000ULL, 0x2000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_page_table_verify_user(
+        &pt, 0x501ff000ULL, 0x801ff000ULL, 0x2000ULL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+}
+
 static void test_user_page_mappings(void)
 {
     syntra_arm64_page_table_t pt;
@@ -470,6 +513,7 @@ int main(void)
     test_map_preallocates_before_publishing_any_leaf();
     test_rollback_preserves_hierarchy_when_release_fails();
     test_user_map_rolls_back_on_allocation_failure();
+    test_user_map_preallocates_before_publishing_any_leaf();
     test_user_page_mappings();
     test_block_mapping();
     test_block_page_conflict();
