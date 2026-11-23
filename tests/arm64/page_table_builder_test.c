@@ -656,12 +656,16 @@ static void test_mapping_journal_capacity_exhaustion(void)
         (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
         &translation) == SYNTRA_STATUS_ERROR);
 
-    /* A failed transaction must leave the same VA range available for retry. */
+    /*
+     * Retry a small prefix: the original oversized range inherently exceeds
+     * journal capacity even when empty, but its first pages must remain usable.
+     */
+    const retry_size = 2ULL * SYNTRA_ARM64_MMU_PAGE_SIZE;
     assert(syntra_arm64_page_table_map_user(
-        &pt, map_va, map_pa, map_size,
+        &pt, map_va, map_pa, retry_size,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_page_table_verify_user(
-        &pt, map_va, map_pa, map_size,
+        &pt, map_va, map_pa, retry_size,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_mmu_walk(pt.root_physical_address, map_va,
         (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
@@ -669,11 +673,11 @@ static void test_mapping_journal_capacity_exhaustion(void)
     assert(translation.physical_address == map_pa);
     assert(syntra_arm64_mmu_walk(
         pt.root_physical_address,
-        map_va + map_size - SYNTRA_ARM64_MMU_PAGE_SIZE,
+        map_va + retry_size - SYNTRA_ARM64_MMU_PAGE_SIZE,
         (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
         &translation) == SYNTRA_STATUS_OK);
     assert(translation.physical_address ==
-        map_pa + map_size - SYNTRA_ARM64_MMU_PAGE_SIZE);
+        map_pa + retry_size - SYNTRA_ARM64_MMU_PAGE_SIZE);
 }
 
 int main(void)
