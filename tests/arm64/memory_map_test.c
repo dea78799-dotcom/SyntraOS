@@ -140,6 +140,15 @@ static size_t build_memory_map_fdt(void)
     append_reg((uintptr_t)0x40004000U, (size_t)0x1000U);
     append_property(31U, NULL, 0U);
     append_end_node();
+
+    /* Disabled reserved-memory children must leave the RAM range allocatable. */
+    append_node("disabled@50002000");
+    append_reg((uintptr_t)0x50002000U, (size_t)0x1000U);
+    {
+        static const uint8_t disabled_status[] = "disabled";
+        append_property(40U, disabled_status, sizeof(disabled_status));
+    }
+    append_end_node();
     append_end_node();
 
     append_end_node();
@@ -202,6 +211,8 @@ static void test_fdt_memory_and_reservation_discovery(void)
     assert_region((uintptr_t)0x40008000U, SYNTRA_MEMORY_REGION_DTB);
     assert_region((uintptr_t)0x40009000U, SYNTRA_MEMORY_REGION_RAM);
     assert_region((uintptr_t)0x50001000U, SYNTRA_MEMORY_REGION_RAM);
+    assert_region((uintptr_t)0x50002000U, SYNTRA_MEMORY_REGION_RAM);
+    assert_region((uintptr_t)0x50003000U, SYNTRA_MEMORY_REGION_RAM);
     {
         syntra_memory_region_t disabled_region;
         assert(syntra_memory_region_find(
