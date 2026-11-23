@@ -92,6 +92,45 @@ int main(void)
         &first, kernel_table.root_physical_address) ==
         SYNTRA_STATUS_INVALID_ARGUMENT);
 
+    /*
+     * User VA boundary: the final 4-KiB page is valid, while the exact
+     * exclusive upper bound (512 GiB) must be rejected without consuming
+     * the caller-owned PROCESS page.
+     */
+    {
+        uintptr_t boundary_page;
+        const uint64_t last_user_page =
+            SYNTRA_ARM64_USER_VA_LIMIT - SYNTRA_ARM64_MMU_PAGE_SIZE;
+
+        assert(syntra_page_alloc_owned(
+            &boundary_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+        assert(syntra_arm64_address_space_map_user_page(
+            &first, SYNTRA_ARM64_USER_VA_LIMIT, boundary_page,
+            SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
+            SYNTRA_STATUS_INVALID_ARGUMENT);
+        assert(syntra_page_get_owner(
+            boundary_page, NULL) == SYNTRA_STATUS_INVALID_ARGUMENT ||
+            syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+        assert(syntra_page_free_owned(
+            boundary_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+
+        assert(syntra_page_alloc_owned(
+            &boundary_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+        assert(syntra_arm64_address_space_map_user_page(
+            &first, last_user_page, boundary_page,
+            SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+        assert(syntra_arm64_address_space_translate(
+            &first, last_user_page, &translation) == SYNTRA_STATUS_OK);
+        assert(translation.physical_address == boundary_page);
+        assert(translation.user_read && translation.user_write);
+        assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
+        assert(syntra_arm64_address_space_unmap_user_page(
+            &first, last_user_page) == SYNTRA_STATUS_OK);
+        assert(syntra_arm64_address_space_translate(
+            &first, last_user_page, &translation) == SYNTRA_STATUS_ERROR);
+        assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+    }
+
     /* Both roots see the kernel mapping, but retain separate user roots. */
     assert(syntra_arm64_address_space_translate(
         &first, 0x10000034ULL, &translation) == SYNTRA_STATUS_OK);
