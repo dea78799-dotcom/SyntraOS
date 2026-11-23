@@ -39,9 +39,13 @@ syntra_status_t syntra_arm64_page_table_init(
  * Maps aligned 2-MiB L2 blocks where possible, otherwise 4-KiB pages.
  * New intermediate tables are tracked in a bounded 64-entry rollback journal.
  * A release callback enables reclamation of newly-created hierarchy on setup
- * failure. Without it, the legacy initializer remains usable but allocated
- * pages cannot be returned on rollback. This is not yet a fully atomic
- * multi-range leaf update when pre-existing tables are used.
+ * failure. Mapping uses two phases: prepare all required intermediate tables,
+ * then publish leaf descriptors. This prevents table-allocation failures from
+ * publishing a partial range. The bounded journal does not make unexpected
+ * resolver/descriptor failures during the leaf-publication phase fully atomic;
+ * callers must keep the hierarchy stable and must not use this as an SMP-safe
+ * mapping transaction. Without a release callback, newly allocated tables
+ * remain attached for their owner to reclaim.
  */
 syntra_status_t syntra_arm64_page_table_map(
     syntra_arm64_page_table_t *table,
