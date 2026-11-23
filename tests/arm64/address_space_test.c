@@ -50,6 +50,7 @@ int main(void)
     syntra_arm64_mmu_translation_t translation;
     uintptr_t first_process_page;
     uintptr_t second_process_page;
+    uintptr_t extra_process_pages[2];
     size_t initial_free;
 
     assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
@@ -215,9 +216,29 @@ int main(void)
     assert(syntra_arm64_address_space_map_user_page(
         &first, 0x4000000000ULL, first_process_page,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+
+    /*
+     * Populate two additional L2 slots. Destroy must walk and reclaim all
+     * mappings, including multiple L3 tables under the same private L2.
+     */
+    assert(syntra_page_alloc_owned(
+        &extra_process_pages[0], SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+    assert(syntra_page_alloc_owned(
+        &extra_process_pages[1], SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_address_space_map_user_page(
+        &first, 0x4000200000ULL, extra_process_pages[0],
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_address_space_map_user_page(
+        &first, 0x4000400000ULL, extra_process_pages[1],
+        SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 0) == SYNTRA_STATUS_OK);
+    assert(first.mapping_count == 4U);
     assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
 
     assert(syntra_arm64_address_space_destroy(&first) == SYNTRA_STATUS_OK);
+    assert(first.mapping_count == 0U);
+    assert(first.initialized == 0U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
     assert(syntra_arm64_address_space_destroy(&second) == SYNTRA_STATUS_OK);
 
     /* Address-space destruction must not free the borrowed kernel subtree. */
