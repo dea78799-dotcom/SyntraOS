@@ -497,11 +497,54 @@ static syntra_status_t discover_reserved_memory_nodes(
                 continue;
             }
 
-            if (syntra_fdt_get_property(
-                    fdt, &node, "reusable",
-                    &reusable_data, &reusable_size) == SYNTRA_STATUS_OK)
             {
-                type = SYNTRA_MEMORY_REGION_RECLAIMABLE;
+                const uint8_t *no_map_data;
+                uint32_t no_map_size;
+                syntra_status_t reusable_status;
+                syntra_status_t no_map_status;
+
+                reusable_status = syntra_fdt_get_property(
+                    fdt, &node, "reusable",
+                    &reusable_data, &reusable_size);
+                no_map_status = syntra_fdt_get_property(
+                    fdt, &node, "no-map",
+                    &no_map_data, &no_map_size);
+
+                if (reusable_status != SYNTRA_STATUS_OK &&
+                    reusable_status != SYNTRA_STATUS_NOT_IMPLEMENTED)
+                {
+                    return reusable_status;
+                }
+                if (no_map_status != SYNTRA_STATUS_OK &&
+                    no_map_status != SYNTRA_STATUS_NOT_IMPLEMENTED)
+                {
+                    return no_map_status;
+                }
+
+                if ((reusable_status == SYNTRA_STATUS_OK &&
+                     reusable_size != 0U) ||
+                    (no_map_status == SYNTRA_STATUS_OK &&
+                     no_map_size != 0U) ||
+                    (reusable_status == SYNTRA_STATUS_OK &&
+                     no_map_status == SYNTRA_STATUS_OK))
+                {
+                    return SYNTRA_STATUS_ERROR;
+                }
+
+                if (no_map_status == SYNTRA_STATUS_OK)
+                {
+                    /*
+                     * The current memory-region and MMU plan APIs cannot
+                     * preserve the no-map constraint. Refuse to boot with
+                     * this reservation until that metadata is supported.
+                     */
+                    return SYNTRA_STATUS_NOT_IMPLEMENTED;
+                }
+
+                if (reusable_status == SYNTRA_STATUS_OK)
+                {
+                    type = SYNTRA_MEMORY_REGION_RECLAIMABLE;
+                }
             }
 
             {

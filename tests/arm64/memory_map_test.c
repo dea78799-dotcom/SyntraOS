@@ -91,11 +91,12 @@ static void append_reg(uintptr_t base, size_t size)
 
 static size_t build_memory_map_fdt(
     int dynamic_reserved,
-    int nonempty_ranges
+    int nonempty_ranges,
+    int reserved_flags
 )
 {
     static const char strings[] =
-        "#address-cells\0#size-cells\0reg\0reusable\0status\0ranges\0size\0";
+        "#address-cells\0#size-cells\0reg\0reusable\0status\0ranges\0size\0no-map\0";
     const size_t reserve_offset = 40U;
     const size_t structure_offset = 72U;
     size_t strings_offset;
@@ -189,6 +190,30 @@ static size_t build_memory_map_fdt(
     }
     append_end_node();
 
+    if (reserved_flags != 0)
+    {
+        append_node("special@50005000");
+        append_reg((uintptr_t)0x50005000U, (size_t)0x1000U);
+
+        if (reserved_flags == 1 || reserved_flags == 2)
+        {
+            append_property(59U, NULL, 0U);
+        }
+
+        if (reserved_flags == 2)
+        {
+            append_property(31U, NULL, 0U);
+        }
+        else if (reserved_flags == 3)
+        {
+            static const uint8_t malformed_reusable[] = {1U};
+            append_property(31U, malformed_reusable,
+                            sizeof(malformed_reusable));
+        }
+
+        append_end_node();
+    }
+
     if (dynamic_reserved)
     {
         static const uint8_t dynamic_size[] = {
@@ -243,7 +268,7 @@ static void assert_region(
 static void test_fdt_memory_and_reservation_discovery(void)
 {
     syntra_fdt_t fdt;
-    size_t blob_size = build_memory_map_fdt(0, 0);
+    size_t blob_size = build_memory_map_fdt(0, 0, 0);
 
     assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_memory_map_discover(
@@ -275,7 +300,7 @@ static void test_fdt_memory_and_reservation_discovery(void)
 static void test_rejects_nonempty_reserved_memory_ranges(void)
 {
     syntra_fdt_t fdt;
-    size_t blob_size = build_memory_map_fdt(0, 1);
+    size_t blob_size = build_memory_map_fdt(0, 1, 0);
 
     assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_memory_map_discover(
@@ -287,7 +312,7 @@ static void test_rejects_nonempty_reserved_memory_ranges(void)
 static void test_rejects_unimplemented_dynamic_reserved_memory(void)
 {
     syntra_fdt_t fdt;
-    size_t blob_size = build_memory_map_fdt(1, 0);
+    size_t blob_size = build_memory_map_fdt(1, 0, 0);
 
     assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
     assert(syntra_arm64_memory_map_discover(
@@ -296,11 +321,50 @@ static void test_rejects_unimplemented_dynamic_reserved_memory(void)
         (size_t)0x1000U) == SYNTRA_STATUS_NOT_IMPLEMENTED);
 }
 
+static void test_rejects_no_map_until_mapping_metadata_exists(void)
+{
+    syntra_fdt_t fdt;
+    size_t blob_size = build_memory_map_fdt(0, 0, 1);
+
+    assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_memory_map_discover(
+        &fdt,
+        (uintptr_t)0x40008000U,
+        (size_t)0x1000U) == SYNTRA_STATUS_NOT_IMPLEMENTED);
+}
+
+static void test_rejects_conflicting_no_map_and_reusable(void)
+{
+    syntra_fdt_t fdt;
+    size_t blob_size = build_memory_map_fdt(0, 0, 2);
+
+    assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_memory_map_discover(
+        &fdt,
+        (uintptr_t)0x40008000U,
+        (size_t)0x1000U) == SYNTRA_STATUS_ERROR);
+}
+
+static void test_rejects_nonempty_reusable_boolean(void)
+{
+    syntra_fdt_t fdt;
+    size_t blob_size = build_memory_map_fdt(0, 0, 3);
+
+    assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_memory_map_discover(
+        &fdt,
+        (uintptr_t)0x40008000U,
+        (size_t)0x1000U) == SYNTRA_STATUS_ERROR);
+}
+
 int main(void)
 {
     test_fdt_memory_and_reservation_discovery();
     test_rejects_nonempty_reserved_memory_ranges();
     test_rejects_unimplemented_dynamic_reserved_memory();
+    test_rejects_no_map_until_mapping_metadata_exists();
+    test_rejects_conflicting_no_map_and_reusable();
+    test_rejects_nonempty_reusable_boolean();
     puts("ARM64 FDT memory map tests passed");
     return 0;
 }
