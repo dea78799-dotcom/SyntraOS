@@ -129,7 +129,7 @@ static size_t build_memory_map_fdt(void)
     append_reg((uintptr_t)0x60000000U, (size_t)0x8000U);
     {
         static const uint8_t disabled_status[] = "disabled";
-        append_property(39U, disabled_status, sizeof(disabled_status));
+        append_property(40U, disabled_status, sizeof(disabled_status));
     }
     append_end_node();
 
