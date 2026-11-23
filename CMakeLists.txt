@@ -244,6 +244,15 @@ add_executable(memory_region_test
 target_include_directories(memory_region_test PRIVATE kernel/memory kernel/core)
 add_test(NAME MemoryRegionManagerTest COMMAND memory_region_test)
 
+# ARM64 FDT physical memory map discovery integration test
+add_executable(arm64_memory_map_test
+    tests/arm64/memory_map_test.c
+    kernel/arch/arm64/boot/memory_map.c
+    kernel/arch/arm64/boot/fdt.c
+    kernel/memory/memory_region.c
+)
+add_test(NAME ARM64FDTMemoryMapDiscoveryTest COMMAND arm64_memory_map_test)
+
 # ARM64 independent address-space and ownership integration test
 add_executable(address_space_test
     tests/arm64/address_space_test.c
