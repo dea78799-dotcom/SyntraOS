@@ -10,6 +10,7 @@ static unsigned int used;
 static unsigned int released;
 static unsigned int release_attempts;
 static unsigned int allocation_limit = TABLES;
+static int fail_release;
 
 static syntra_status_t alloc_cb(void *ctx, uint64_t *pa)
 {
@@ -33,6 +34,7 @@ static void reset(void)
 {
     used = 0U;
     allocation_limit = TABLES;
+    fail_release = 0;
     for (unsigned int i = 0U; i < TABLES; ++i)
         for (unsigned int j = 0U; j < 512U; ++j)
             storage[i][j] = 0ULL;
@@ -46,6 +48,7 @@ static syntra_status_t release_cb(void *ctx, uint64_t pa)
     if (pa < BASE_PA || pa >= BASE_PA + (uint64_t)TABLES * 4096ULL ||
         ((pa - BASE_PA) & 4095ULL) != 0ULL)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
+    if (fail_release) return SYNTRA_STATUS_ERROR;
     ++released;
     return SYNTRA_STATUS_OK;
 }
@@ -155,6 +158,45 @@ static void test_map_rolls_back_on_allocation_failure(void)
         &pt, 0x51000000ULL, 0x81000000ULL, 0x1000ULL,
         SYNTRA_ARM64_MMU_MEMORY_NORMAL,
         SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+}
+
+static void test_rollback_preserves_hierarchy_when_release_fails(void)
+{
+    syntra_arm64_page_table_t pt;
+    syntra_arm64_mmu_translation_t translation;
+    uint64_t l1_descriptor;
+
+    reset();
+    released = 0U;
+    release_attempts = 0U;
+    assert(syntra_arm64_page_table_init_ex(
+        &pt, alloc_cb, release_cb, resolve_cb, NULL) == SYNTRA_STATUS_OK);
+
+    /* Force L3 allocation to fail, then make reclamation of L2 fail too. */
+    allocation_limit = 2U;
+    fail_release = 1;
+    assert(syntra_arm64_page_table_map(
+        &pt, 0x53000000ULL, 0x83000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) ==
+        SYNTRA_STATUS_OUT_OF_MEMORY);
+
+    l1_descriptor = storage[0][(0x53000000ULL >> 30U) & 0x1ffU];
+    assert(l1_descriptor != 0ULL);
+    assert(release_attempts == 1U);
+    assert(released == 0U);
+    assert(resolve_cb(l1_descriptor & 0x0000fffffffff000ULL, NULL) != NULL);
+
+    /* Once ownership release works, the retained empty hierarchy is reusable. */
+    fail_release = 0;
+    allocation_limit = TABLES;
+    assert(syntra_arm64_page_table_map(
+        &pt, 0x53000000ULL, 0x83000000ULL, 0x1000ULL,
+        SYNTRA_ARM64_MMU_MEMORY_NORMAL,
+        SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_mmu_walk(pt.root_physical_address, 0x53000000ULL,
+        (syntra_arm64_mmu_table_resolver_t)resolve_cb, NULL,
+        &translation) == SYNTRA_STATUS_OK);
 }
 
 static void test_user_map_rolls_back_on_allocation_failure(void)
@@ -381,6 +423,7 @@ int main(void)
     test_init_reclaims_unresolvable_root();
     test_build_and_walk_verify();
     test_map_rolls_back_on_allocation_failure();
+    test_rollback_preserves_hierarchy_when_release_fails();
     test_user_map_rolls_back_on_allocation_failure();
     test_user_page_mappings();
     test_block_mapping();
