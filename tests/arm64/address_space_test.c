@@ -148,6 +148,39 @@ int main(void)
     }
 
     /*
+     * A corrupted private-root pointer must not alias and free the borrowed
+     * kernel root. Verify destroy rejects it without releasing either root.
+     */
+    {
+        const uint64_t saved_first_root =
+            first.page_table.root_physical_address;
+        const size_t free_before = syntra_page_allocator_free_count();
+        syntra_page_owner_t owner = SYNTRA_PAGE_OWNER_NONE;
+
+        first.page_table.root_physical_address =
+            kernel_table.root_physical_address;
+        assert(syntra_arm64_address_space_validate(&first) ==
+            SYNTRA_STATUS_ERROR);
+        assert(syntra_arm64_address_space_destroy(&first) ==
+            SYNTRA_STATUS_ERROR);
+        assert(first.initialized != 0U);
+        assert(first.page_table.root_physical_address ==
+            kernel_table.root_physical_address);
+        assert(syntra_page_allocator_free_count() == free_before);
+        assert(syntra_page_get_owner(
+            (uintptr_t)saved_first_root, &owner) == SYNTRA_STATUS_OK);
+        assert(owner == SYNTRA_PAGE_OWNER_PAGE_TABLE);
+        assert(syntra_page_get_owner(
+            (uintptr_t)kernel_table.root_physical_address, &owner) ==
+            SYNTRA_STATUS_OK);
+        assert(owner == SYNTRA_PAGE_OWNER_PAGE_TABLE);
+
+        first.page_table.root_physical_address = saved_first_root;
+        assert(syntra_arm64_address_space_validate(&first) ==
+            SYNTRA_STATUS_OK);
+    }
+
+    /*
      * User VA boundary: the final 4-KiB page is valid, while the exact
      * exclusive upper bound (512 GiB) must be rejected without consuming
      * the caller-owned PROCESS page.

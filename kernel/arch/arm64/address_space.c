@@ -773,6 +773,15 @@ static syntra_status_t validate_address_space_root_layout(
     uint64_t *root, *kernel_root;
     syntra_status_t status;
 
+    /*
+     * The process root is privately owned. If a corrupted descriptor aliases
+     * the borrowed kernel root, destruction could otherwise free the kernel
+     * page-table tree.
+     */
+    if (space->page_table.root_physical_address ==
+        space->kernel_root_physical_address)
+        return SYNTRA_STATUS_ERROR;
+
     status = page_owner_is(
         space->kernel_root_physical_address,
         SYNTRA_PAGE_OWNER_PAGE_TABLE);
