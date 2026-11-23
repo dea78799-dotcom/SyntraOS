@@ -168,6 +168,29 @@ int main(void)
     assert(syntra_page_allocator_free_count() == 0U);
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_INVALID_ARGUMENT);
 
+    /*
+     * Physical page zero is reserved: it cannot be allocated even when the
+     * firmware memory map reports RAM beginning at address zero.
+     */
+    assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_add(
+        0U, (size_t)(3U * SYNTRA_PAGE_SIZE),
+        SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_init() == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_total_count() == 2U);
+    assert(syntra_page_allocator_free_count() == 2U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+    assert(syntra_page_alloc(&first) == SYNTRA_STATUS_OK);
+    assert(syntra_page_alloc(&second) == SYNTRA_STATUS_OK);
+    assert(first == (uintptr_t)SYNTRA_PAGE_SIZE);
+    assert(second == (uintptr_t)(2U * SYNTRA_PAGE_SIZE));
+    assert(syntra_page_alloc(&third) == SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(syntra_page_free(0U) == SYNTRA_STATUS_ERROR);
+    assert(syntra_page_free(first) == SYNTRA_STATUS_OK);
+    assert(syntra_page_free(second) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_free_count() == 2U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+
     puts("Physical Page Allocator V1 tests passed.");
     return 0;
 }
