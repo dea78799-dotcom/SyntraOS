@@ -365,7 +365,7 @@ static void test_multi_tuple_memory_node_discovery(void)
      * The first tuple is valid, but the second overlaps the other RAM node.
      * Discovery must reject the map and roll back the already-added tuple.
      */
-    memory_second_reg_base = (uintptr_t)0x50000000U;
+    memory_second_reg_base = (uintptr_t)0x40008000U;
     memory_second_reg_size = (size_t)0x1000U;
     blob_size = build_memory_map_fdt(0, 0, 0, 0);
 
