@@ -48,6 +48,10 @@ int main(void)
     uint64_t *first_root;
     uint64_t saved_kernel_entry;
     uint16_t kernel_indices[4];
+    uint16_t user_indices[4];
+    uint64_t *first_l2, *first_l3;
+    uint64_t rogue_descriptor;
+    uintptr_t rogue_process_page;
     uintptr_t kernel_data_page;
     syntra_arm64_mmu_translation_t translation;
     uintptr_t first_process_page;
@@ -145,6 +149,36 @@ int main(void)
     assert(syntra_arm64_address_space_map_user_page(
         &second, 0x4000000000ULL, second_process_page,
         SYNTRA_ARM64_MMU_ACCESS_READ_ONLY, 0) == SYNTRA_STATUS_OK);
+
+    /*
+     * The validator must reject a valid-looking but unregistered user leaf,
+     * as well as a block descriptor in the private user root window.
+     */
+    assert(syntra_page_alloc_owned(
+        &rogue_process_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_mmu_get_table_indices(
+        0x4000001000ULL, user_indices) == SYNTRA_STATUS_OK);
+    first_root = resolve_page(first.page_table.root_physical_address, NULL);
+    assert(first_root != NULL);
+    first_l2 = resolve_page(first_root[user_indices[0]] &
+        SYNTRA_ARM64_MMU_PA_MASK, NULL);
+    assert(first_l2 != NULL);
+    first_l3 = resolve_page(first_l2[user_indices[1]] &
+        SYNTRA_ARM64_MMU_PA_MASK, NULL);
+    assert(first_l3 != NULL);
+    assert(syntra_arm64_mmu_make_user_page_descriptor(
+        rogue_process_page, SYNTRA_ARM64_MMU_ACCESS_READ_WRITE, 0,
+        &rogue_descriptor) == SYNTRA_STATUS_OK);
+    first_l3[user_indices[2]] = rogue_descriptor;
+    assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_ERROR);
+    first_l3[user_indices[2]] = 0ULL;
+    assert(syntra_page_free_owned(
+        rogue_process_page, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_OK);
+    saved_kernel_entry = first_root[256U];
+    first_root[256U] = 1ULL;
+    assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_ERROR);
+    first_root[256U] = saved_kernel_entry;
+    assert(syntra_arm64_address_space_validate(&first) == SYNTRA_STATUS_OK);
 
     assert(syntra_arm64_address_space_translate(
         &first, 0x4000000034ULL, &translation) == SYNTRA_STATUS_OK);
