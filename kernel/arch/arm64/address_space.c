@@ -564,6 +564,9 @@ syntra_status_t syntra_arm64_address_space_translate(
         translation);
 }
 
+static syntra_status_t validate_address_space_root_layout(
+    syntra_arm64_address_space_t *space);
+
 syntra_status_t syntra_arm64_address_space_validate(
     syntra_arm64_address_space_t *space)
 {
@@ -580,6 +583,10 @@ syntra_status_t syntra_arm64_address_space_validate(
     status = page_owner_is(
         space->page_table.root_physical_address,
         SYNTRA_PAGE_OWNER_PAGE_TABLE);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    status = validate_address_space_root_layout(space);
     if (status != SYNTRA_STATUS_OK)
         return status;
 
@@ -662,6 +669,51 @@ static syntra_status_t validate_table_tree(
     }
 
     return SYNTRA_STATUS_OK;
+}
+
+static syntra_status_t validate_address_space_root_layout(
+    syntra_arm64_address_space_t *space)
+{
+    uint64_t *root, *kernel_root;
+    syntra_status_t status;
+
+    status = page_owner_is(
+        space->kernel_root_physical_address,
+        SYNTRA_PAGE_OWNER_PAGE_TABLE);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    root = resolve_page_table_page(
+        space->page_table.root_physical_address, space);
+    kernel_root = resolve_page_table_page(
+        space->kernel_root_physical_address, space);
+    if (root == NULL || kernel_root == NULL)
+        return SYNTRA_STATUS_ERROR;
+
+    /*
+     * Entries 0..127 are borrowed from the kernel root and must remain
+     * byte-for-byte identical. The bitmap must describe exactly those
+     * non-empty borrowed entries so destruction never frees shared tables.
+     */
+    for (size_t i = 0U; i < 128U; ++i)
+    {
+        int expected_borrowed = kernel_root[i] != 0ULL;
+        if (root[i] != kernel_root[i] ||
+            root_entry_is_borrowed(space, i) != expected_borrowed)
+            return SYNTRA_STATUS_ERROR;
+    }
+
+    /* Entries 128..255 are the reserved gap before the EL0 user range. */
+    for (size_t i = 128U; i < 256U; ++i)
+        if (root[i] != 0ULL)
+            return SYNTRA_STATUS_ERROR;
+
+    /*
+     * Audit every reachable table page, including private user tables and
+     * borrowed kernel subtrees, before the address space is activated.
+     */
+    return validate_table_tree(
+        space, space->page_table.root_physical_address, 1U);
 }
 
 static syntra_status_t release_table_tree(
