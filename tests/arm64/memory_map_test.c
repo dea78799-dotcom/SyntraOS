@@ -149,6 +149,15 @@ static size_t build_memory_map_fdt(void)
         append_property(40U, disabled_status, sizeof(disabled_status));
     }
     append_end_node();
+
+    /* Nodes with status = "fail" must also be skipped. */
+    append_node("failed@50003000");
+    append_reg((uintptr_t)0x50003000U, (size_t)0x1000U);
+    {
+        static const uint8_t failed_status[] = "fail";
+        append_property(40U, failed_status, sizeof(failed_status));
+    }
+    append_end_node();
     append_end_node();
 
     append_end_node();
@@ -213,6 +222,7 @@ static void test_fdt_memory_and_reservation_discovery(void)
     assert_region((uintptr_t)0x50001000U, SYNTRA_MEMORY_REGION_RAM);
     assert_region((uintptr_t)0x50002000U, SYNTRA_MEMORY_REGION_RAM);
     assert_region((uintptr_t)0x50003000U, SYNTRA_MEMORY_REGION_RAM);
+    assert_region((uintptr_t)0x50004000U, SYNTRA_MEMORY_REGION_RAM);
     {
         syntra_memory_region_t disabled_region;
         assert(syntra_memory_region_find(
