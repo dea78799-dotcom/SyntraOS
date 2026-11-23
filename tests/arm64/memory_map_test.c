@@ -6,7 +6,7 @@
 #include "../../kernel/arch/arm64/boot/fdt.h"
 #include "../../kernel/arch/arm64/boot/memory_map.h"
 
-#define TEST_FDT_CAPACITY 1024U
+#define TEST_FDT_CAPACITY 4096U
 #define FDT_BEGIN_NODE 1U
 #define FDT_END_NODE 2U
 #define FDT_PROP 3U
@@ -16,6 +16,7 @@ static uint8_t blob[TEST_FDT_CAPACITY];
 static size_t structure_cursor;
 static uintptr_t second_memory_base = (uintptr_t)0x50000000U;
 static size_t second_memory_size = (size_t)0x8000U;
+static size_t extra_memory_node_count;
 
 static void write_be32(uint8_t *data, uint32_t value)
 {
@@ -130,6 +131,22 @@ static size_t build_memory_map_fdt(
     append_node("memory@50000000");
     append_reg(second_memory_base, second_memory_size);
     append_end_node();
+
+    for (index = 0U; index < extra_memory_node_count; ++index)
+    {
+        char memory_node_name[32];
+        uintptr_t memory_base =
+            (uintptr_t)0x80000000U + (uintptr_t)index * 0x10000U;
+
+        (void)snprintf(
+            memory_node_name,
+            sizeof(memory_node_name),
+            "memory@%08x",
+            (unsigned int)memory_base);
+        append_node(memory_node_name);
+        append_reg(memory_base, (size_t)0x8000U);
+        append_end_node();
+    }
 
     /* Disabled memory nodes must not become allocator RAM. */
     append_node("memory@60000000");
@@ -421,6 +438,7 @@ static void test_memory_nodes_reject_overlapping_ranges(void)
             &fdt,
             (uintptr_t)0x40008000U,
             (size_t)0x1000U) == SYNTRA_STATUS_ERROR);
+        assert(syntra_memory_region_count() == 0U);
     }
 
     /* Adjacent half-open ranges do not overlap and must both be accepted. */
@@ -445,10 +463,32 @@ static void test_memory_nodes_reject_overlapping_ranges(void)
     second_memory_size = (size_t)0x8000U;
 }
 
+static void test_memory_map_capacity_failure_rolls_back(void)
+{
+    syntra_fdt_t fdt;
+    size_t blob_size;
+
+    /* Two built-in RAM nodes plus 31 additional nodes exceed the 32 slots. */
+    extra_memory_node_count = 31U;
+    blob_size = build_memory_map_fdt(0, 0, 0, 0);
+
+    assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_memory_map_discover(
+        &fdt,
+        (uintptr_t)0x40008000U,
+        (size_t)0x1000U) == SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(syntra_memory_region_count() == 0U);
+
+    extra_memory_node_count = 0U;
+    second_memory_base = (uintptr_t)0x50000000U;
+    second_memory_size = (size_t)0x8000U;
+}
+
 int main(void)
 {
     test_fdt_memory_and_reservation_discovery();
     test_memory_nodes_reject_overlapping_ranges();
+    test_memory_map_capacity_failure_rolls_back();
     test_rejects_nonempty_reserved_memory_ranges();
     test_rejects_reserved_memory_cell_mismatch();
     test_rejects_unimplemented_dynamic_reserved_memory();
