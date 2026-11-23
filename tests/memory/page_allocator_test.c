@@ -276,6 +276,56 @@ int main(void)
     assert(syntra_page_allocator_free_count() == 4U);
     assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
 
+    /*
+     * Discontiguous RAM ranges: partial edge pages and physical gaps must
+     * never become allocator capacity or bridge a contiguous allocation.
+     */
+    assert(syntra_memory_regions_init() == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_add(
+        (uintptr_t)0x60000003U, (size_t)0x2FFDU,
+        SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_add(
+        (uintptr_t)0x60005000U, (size_t)0x2000U,
+        SYNTRA_MEMORY_REGION_RAM) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_init() == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_total_count() == 4U);
+    assert(syntra_page_allocator_free_count() == 4U);
+    assert(syntra_page_alloc(&first) == SYNTRA_STATUS_OK);
+    assert(syntra_page_alloc(&second) == SYNTRA_STATUS_OK);
+    assert(syntra_page_alloc(&third) == SYNTRA_STATUS_OK);
+    assert(syntra_page_alloc(&fourth) == SYNTRA_STATUS_OK);
+    assert(first == (uintptr_t)0x60001000U);
+    assert(second == (uintptr_t)0x60002000U);
+    assert(third == (uintptr_t)0x60005000U);
+    assert(fourth == (uintptr_t)0x60006000U);
+    assert(syntra_page_alloc(&first) == SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(syntra_page_allocator_free_count() == 0U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+
+    assert(syntra_page_free(second) == SYNTRA_STATUS_OK);
+    assert(syntra_page_free(fourth) == SYNTRA_STATUS_OK);
+    assert(syntra_page_free(first) == SYNTRA_STATUS_OK);
+    assert(syntra_page_free(third) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_free_count() == 4U);
+    /* Three pages cannot be contiguous across the two-page physical gap. */
+    assert(syntra_page_alloc_contiguous(3U, &first) ==
+           SYNTRA_STATUS_OUT_OF_MEMORY);
+    assert(syntra_page_allocator_free_count() == 4U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+
+    assert(syntra_page_alloc_contiguous(2U, &first) == SYNTRA_STATUS_OK);
+    assert(first == (uintptr_t)0x60001000U);
+    assert(syntra_page_alloc_contiguous(2U, &second) == SYNTRA_STATUS_OK);
+    assert(second == (uintptr_t)0x60005000U);
+    assert(syntra_page_allocator_free_count() == 0U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+    assert(syntra_page_free(first) == SYNTRA_STATUS_OK);
+    assert(syntra_page_free(first + SYNTRA_PAGE_SIZE) == SYNTRA_STATUS_OK);
+    assert(syntra_page_free(second) == SYNTRA_STATUS_OK);
+    assert(syntra_page_free(second + SYNTRA_PAGE_SIZE) == SYNTRA_STATUS_OK);
+    assert(syntra_page_allocator_free_count() == 4U);
+    assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+
     puts("Physical Page Allocator V1 tests passed.");
     return 0;
 }
