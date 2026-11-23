@@ -22,6 +22,13 @@ int main(void)
     assert(syntra_memory_region_add(
         (uintptr_t)0x20000000U, (size_t)0x1000U,
         SYNTRA_MEMORY_REGION_MMIO) == SYNTRA_STATUS_OK);
+    /* Reclaimable and no-map extents are not ordinary allocator RAM. */
+    assert(syntra_memory_region_add(
+        (uintptr_t)0x30000000U, (size_t)0x1000U,
+        SYNTRA_MEMORY_REGION_RECLAIMABLE) == SYNTRA_STATUS_OK);
+    assert(syntra_memory_region_add(
+        (uintptr_t)0x40000000U, (size_t)0x1000U,
+        SYNTRA_MEMORY_REGION_NOMAP) == SYNTRA_STATUS_OK);
 
     assert(syntra_page_allocator_init() == SYNTRA_STATUS_OK);
     assert(syntra_page_allocator_total_count() == 2U);

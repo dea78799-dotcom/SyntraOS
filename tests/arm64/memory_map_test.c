@@ -18,6 +18,9 @@ static uintptr_t second_memory_base = (uintptr_t)0x50000000U;
 static size_t second_memory_size = (size_t)0x8000U;
 static size_t extra_memory_node_count;
 static int reusable_has_second_reg_tuple;
+static int memory_has_second_reg_tuple;
+static uintptr_t memory_second_reg_base = (uintptr_t)0x41000000U;
+static size_t memory_second_reg_size = (size_t)0x8000U;
 
 static void write_be32(uint8_t *data, uint32_t value)
 {
@@ -145,7 +148,16 @@ static size_t build_memory_map_fdt(
     append_cells_property(15U, 2U);
 
     append_node("memory@40000000");
-    append_reg((uintptr_t)0x40000000U, (size_t)0x10000U);
+    if (memory_has_second_reg_tuple)
+    {
+        append_reg_pair(
+            (uintptr_t)0x40000000U, (size_t)0x10000U,
+            memory_second_reg_base, memory_second_reg_size);
+    }
+    else
+    {
+        append_reg((uintptr_t)0x40000000U, (size_t)0x10000U);
+    }
     append_end_node();
 
     /* A second enabled RAM node must be included in the discovered map. */
@@ -321,6 +333,52 @@ static void assert_region(
 
     assert(syntra_memory_region_find(address, &region) == SYNTRA_STATUS_OK);
     assert(region.type == expected_type);
+}
+
+static void test_multi_tuple_memory_node_discovery(void)
+{
+    syntra_fdt_t fdt;
+    size_t blob_size;
+    syntra_memory_region_t region;
+
+    /* The second tuple is a separate, non-overlapping RAM extent. */
+    memory_has_second_reg_tuple = 1;
+    memory_second_reg_base = (uintptr_t)0x41000000U;
+    memory_second_reg_size = (size_t)0x8000U;
+    blob_size = build_memory_map_fdt(0, 0, 0, 0);
+
+    assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_memory_map_discover(
+        &fdt,
+        (uintptr_t)0x40008000U,
+        (size_t)0x1000U) == SYNTRA_STATUS_OK);
+
+    /* One additional FDT reg tuple must produce one additional RAM region. */
+    assert(syntra_memory_region_count() == 9U);
+    assert(syntra_memory_region_find(
+        (uintptr_t)0x41000000U, &region) == SYNTRA_STATUS_OK);
+    assert(region.base == (uintptr_t)0x41000000U);
+    assert(region.size == (size_t)0x8000U);
+    assert(region.type == SYNTRA_MEMORY_REGION_RAM);
+
+    /*
+     * The first tuple is valid, but the second overlaps the first tuple's RAM extent.
+     * Discovery must reject the map and roll back the already-added tuple.
+     */
+    memory_second_reg_base = (uintptr_t)0x40008000U;
+    memory_second_reg_size = (size_t)0x1000U;
+    blob_size = build_memory_map_fdt(0, 0, 0, 0);
+
+    assert(syntra_fdt_open(blob, blob_size, &fdt) == SYNTRA_STATUS_OK);
+    assert(syntra_arm64_memory_map_discover(
+        &fdt,
+        (uintptr_t)0x40008000U,
+        (size_t)0x1000U) == SYNTRA_STATUS_ERROR);
+    assert(syntra_memory_region_count() == 0U);
+
+    memory_has_second_reg_tuple = 0;
+    memory_second_reg_base = (uintptr_t)0x41000000U;
+    memory_second_reg_size = (size_t)0x8000U;
 }
 
 static void test_fdt_memory_and_reservation_discovery(void)
@@ -618,6 +676,7 @@ static void test_multi_tuple_reserved_memory_failure_rolls_back(void)
 int main(void)
 {
     test_fdt_memory_and_reservation_discovery();
+    test_multi_tuple_memory_node_discovery();
     test_memory_nodes_reject_overlapping_ranges();
     test_memory_map_capacity_failure_rolls_back();
     test_header_reservation_capacity_failure_rolls_back();
