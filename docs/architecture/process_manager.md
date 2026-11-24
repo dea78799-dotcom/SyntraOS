@@ -69,3 +69,24 @@ an SMP lock and does not protect FIQ or multiple CPU cores.
 New code should use `process_get_snapshot()`. The compatibility
 `process_get()` accessor returns a pointer after IRQ state has been restored;
 do not retain or mutate that pointer.
+
+
+## Generation-aware identity API (V2 Phase 1)
+
+The first V2 identity increment adds `syntra_process_handle_t`, containing a
+32-bit slot and a 32-bit generation. Each occupied process-table slot stores
+its current generation. New code can resolve a legacy process ID with
+`process_get_handle()`, then use `process_get_snapshot_by_handle()` or
+`process_set_state_by_handle()`. Both handle APIs reject out-of-range slots,
+zero generations, unoccupied slots, and generation mismatches.
+
+The initial generation is one. Slot reuse is deliberately disabled: there is
+no reaping API and no resource-ownership cleanup contract yet. Consequently,
+generation advancement and stale-handle rejection after actual slot reuse
+remain unimplemented. This phase establishes validation primitives only.
+
+Legacy integer-ID APIs remain for migration compatibility. The mutable
+`process_get()` pointer remains unsafe to retain or mutate after the function
+returns; new code should use generation-aware handles and caller-owned
+snapshots. The API still provides metadata tracking, not process isolation or
+authenticated identity.
