@@ -118,6 +118,10 @@ static syntra_status_t scheduler_insert_thread(
         return SYNTRA_STATUS_ERROR;
     }
 
+    /* Keep the reserved append-only slot stable until publish or abort. */
+    if (reserved_thread_valid)
+        return SYNTRA_STATUS_ERROR;
+
     if (thread_id == 0U || scheduler_find_slot(thread_id) >= 0)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
