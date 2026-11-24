@@ -51,25 +51,25 @@ Assembly keeps the original frame address in callee-saved `x19`. If the bridge r
 
 If the bridge returns NULL or the original frame pointer, the completion hook is not called. In particular, the no-successor path returns the original frame with an invalid return cookie, so assembly halts without publishing a false switch-away event.
 
-The hook only calls `scheduler_complete_switch_away()`. It performs no logging, allocation, deallocation, or TCB mutation. The boot scheduler test drains the event FIFO later, from the resumed boot thread, and validates nonzero handles and strictly increasing sequence values.
+The hook only calls `scheduler_complete_switch_away()`. It performs no logging, allocation, deallocation, or TCB mutation. The QEMU scheduler test later runs the bounded candidate dispatcher from the resumed boot thread; it validates terminal-intent events against exact terminated TCB handles and discards older preemption/block events.
 
 ## 5. Validation
 
 Host tests cover:
 
 - blocked and terminated outgoing identities;
-- exact handle and sequence publication;
+- exact handle, sequence, and event-time terminal-intent publication;
 - normal context-aware selection;
 - explicit blocked boot-thread staging;
 - no-successor behavior producing no completion event.
 
-ARM64/QEMU validation covers the scheduler-start handoff, timer-driven worker switching, natural worker return, successor handoff, proof-event publication, and the existing desktop framebuffer smoke test.
+ARM64/QEMU validation covers the scheduler-start handoff, timer-driven worker switching, natural worker return, successor handoff, candidate dispatch for both terminated workers, discard of nonterminal events, and the existing desktop framebuffer smoke test.
 
 ## 6. Safety limits
 
 - A switch-away event proves only that the outgoing kernel stack is no longer the active `SP_EL1`.
 - It does not prove allocator ownership, user-stack unmapping, process teardown completion, or that every other resource is safe to release.
-- The event FIFO currently has no production reaper consumer. The QEMU scheduler test drains it as a test consumer.
+- The event FIFO currently has no production reaper consumer. The QEMU scheduler test uses the candidate dispatcher as its sole test consumer; no runtime stack release is enabled.
 - No stack or context memory is freed.
 - No TCB is removed and no thread slot is reused.
 - The current IRQ masking model is single-core only; no SMP guarantee is made.
