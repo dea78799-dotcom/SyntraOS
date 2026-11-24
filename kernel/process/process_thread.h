@@ -49,6 +49,17 @@ syntra_status_t process_thread_create_user(
 );
 
 /*
+ * Create a process-owned kernel thread with a kernel stack allocated by
+ * Memory V2. stack_blocks is measured in 4 KiB allocator blocks.
+ * The output handle is written only after the thread is fully published.
+ */
+syntra_status_t process_thread_create_kernel_allocated_with_handle(
+    syntra_process_handle_t owner, unsigned int thread_id,
+    unsigned int priority, syntra_thread_entry_t entry, void *argument,
+    unsigned int stack_blocks, syntra_thread_handle_t *handle_out
+);
+
+/*
  * Terminate a process and all scheduler threads carrying its exact handle.
  * This is the canonical process-termination path. It does not reclaim stacks,
  * remove TCBs, or make process slots reusable.
