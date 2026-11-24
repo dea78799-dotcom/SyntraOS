@@ -156,3 +156,70 @@ This design does not implement address-space isolation, user credentials, capabi
 V2 is not complete until identity, lifecycle, scheduler ownership, IPC authentication, cleanup, and reaping work together with regression coverage. A passing metadata unit test alone is insufficient.
 
 The project version remains 0.1.0 for this design work. No release or production-readiness claim is implied.
+
+
+## 12. Scheduler and resource ownership audit — 2026-11-24
+
+This section records an inspection of the current `design/process-identity-lifecycle-v1` implementation. It is an implementation audit, not a claim that every repository call site has been exhaustively reviewed.
+
+### 12.1 Scheduler facts
+
+- `syntra_thread_t` currently has a thread ID, scheduling state, entry/argument, kernel stack range, optional user stack range, user-thread flag, and saved CPU-context pointer.
+- It has no process-owner handle or owner-validity field. The scheduler therefore cannot currently answer which process owns a thread.
+- `scheduler_create_thread()` and `scheduler_create_user_thread()` accept caller-provided stack memory. Their API contract leaves allocation ownership with the caller.
+- Scheduler records are stored densely in a fixed array. There is no thread-removal/reaping API. Terminating a thread changes its state, but does not decrement the table count or release its stack/context.
+- Stack ranges remain reserved by the scheduler until scheduler reset, including after a thread is marked terminated.
+- The boot path creates scheduler worker threads directly. Kernel initialization initializes Scheduler and Process Manager as separate subsystems; no process/thread binding is established there.
+
+### 12.2 Process and IPC facts
+
+- Process Manager stores process metadata and generation-aware handles, but it does not create, enumerate, or own scheduler threads.
+- A process state update is independent of scheduler state. There is currently no cross-module invariant that prevents a thread from being scheduled after its associated process is marked TERMINATED, because no association exists yet.
+- IPC V1 stores caller-supplied integer sender and receiver IDs. It has no process-handle validation, trusted sender derivation, or endpoint cleanup.
+- Memory V1 exposes block allocation and release operations, but its public allocation metadata does not associate an allocation with a process handle. Scheduler stack APIs currently receive externally supplied pointers rather than memory-allocation ownership records.
+
+### 12.3 Phase 2 design decisions
+
+Do not add process ownership by making Scheduler include the full Process Manager API. The shared identity value should be moved into a small dependency-neutral header (proposed: `kernel/process/process_handle.h`) and included by both Process Manager and Scheduler. This avoids importing process lifecycle operations into the scheduler interface.
+
+The next implementation proposal should introduce additive, handle-aware scheduler creation APIs while preserving current compatibility entry points:
+
+- A process-owned kernel-thread creation API that accepts a validated `syntra_process_handle_t`.
+- A process-owned user-thread creation API with the same owner identity.
+- An explicit owner-validity field in each TCB; kernel/bootstrap threads created through legacy APIs must be distinguishable from process-owned threads rather than assigned a fabricated process ID.
+- A scheduler query that counts or snapshots threads for an exact process handle, comparing both slot and generation.
+- Validation that rejects a process-owned thread when its handle is invalid or the process is already terminated.
+
+The scheduler should store the owner handle as a reference, not as proof that the process is still live. Every lifecycle-sensitive operation must revalidate the handle through a coordinated kernel path.
+
+### 12.4 Stack and context lifetime
+
+The current scheduler receives borrowed stack pointers and has no release callback or allocator ownership token. It must not free caller-provided stacks.
+
+Before introducing stack reclamation, define an explicit ownership model for each stack and context:
+
+1. **Borrowed:** caller retains ownership; scheduler only reserves and uses the range.
+2. **Scheduler-owned:** scheduler receives an allocation token and may release it only after the thread is terminated and no CPU context can still reference it.
+3. **Process-owned:** Process Manager/resource layer owns the allocation; it cannot release it while any thread or kernel reference remains.
+
+A thread marked TERMINATED is not yet safe to reclaim if it is the currently executing thread or if its saved context can still be selected. Reclamation must occur only after the scheduler has switched away and removed every runnable/reference path to that TCB and its stacks.
+
+No implicit ownership may be inferred from a raw pointer. No stack may be released merely because a process state became TERMINATED.
+
+### 12.5 Required Phase 2 tests
+
+- Kernel/bootstrap threads without a process owner remain valid and are not mistaken for user processes.
+- Process-owned thread creation rejects zero, out-of-range, stale, and terminated process handles.
+- Two threads may share one process handle; a different generation must not match them.
+- Scheduler owner-count/snapshot queries return only exact slot-and-generation matches.
+- A process with any registered thread cannot be reaped.
+- A terminated current thread is not reclaimed until execution has switched away.
+- Borrowed stack memory is never released by Scheduler.
+- A failed thread creation leaves no partial TCB or ownership reference.
+- Existing legacy scheduler tests and ARM64 boot workers remain compatible.
+
+### 12.6 Explicit hold point
+
+Phase 2 is design-only at this point. Do not add owner fields, change scheduler ABI, release stacks, add thread removal, terminate processes through Scheduler, or enable process reaping until the API and synchronization design is reviewed and the required tests can be implemented together.
+
+The project version remains 0.1.0.
