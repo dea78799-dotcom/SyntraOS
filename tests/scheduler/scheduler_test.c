@@ -106,7 +106,7 @@ int main(void)
         check("Consume exact blocked-thread switch event",
             scheduler_take_switch_away_event(&event) == SYNTRA_STATUS_OK &&
             scheduler_thread_handle_equal(event.handle, outgoing_snapshot.handle) &&
-            event.sequence != 0U);
+            event.sequence != 0U && event.terminal == 0U);
     }
     check("Wake blocked thread",
         scheduler_wake_thread(1U) == SYNTRA_STATUS_OK);
@@ -129,7 +129,7 @@ int main(void)
         check("Consume exact terminated-thread switch event",
             scheduler_take_switch_away_event(&event) == SYNTRA_STATUS_OK &&
             scheduler_thread_handle_equal(event.handle, outgoing_snapshot.handle) &&
-            event.sequence != 0U);
+            event.sequence != 0U && event.terminal == 1U);
     }
 
     check("Thread count remains consistent",
@@ -232,7 +232,7 @@ int main(void)
             check("Context switch event identifies exact outgoing generation",
                 scheduler_take_switch_away_event(&event) == SYNTRA_STATUS_OK &&
                 scheduler_thread_handle_equal(event.handle, outgoing_snapshot.handle) &&
-                event.sequence != 0U);
+                event.sequence != 0U && event.terminal == 0U);
         }
         selected = scheduler_get_current();
         check("Context-aware selection marks successor RUNNING",

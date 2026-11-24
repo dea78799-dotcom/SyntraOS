@@ -113,7 +113,7 @@ int main(void)
     check("Post-switch hook publishes exact boot-thread event",
         scheduler_take_switch_away_event(&switch_event) == SYNTRA_STATUS_OK &&
         scheduler_thread_handle_equal(switch_event.handle, boot_snapshot.handle) &&
-        switch_event.sequence != 0U);
+        switch_event.sequence != 0U && switch_event.terminal == 0U);
     check("Retire boot thread to construct a true no-successor case",
         scheduler_set_thread_state(1U, THREAD_TERMINATED) == SYNTRA_STATUS_OK);
 

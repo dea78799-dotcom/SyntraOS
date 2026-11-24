@@ -40,6 +40,7 @@ typedef struct
 {
     syntra_thread_handle_t handle;
     uint64_t sequence;
+    uint8_t terminal;
     int valid;
 } scheduler_pending_switch_t;
 
@@ -88,7 +89,7 @@ static int scheduler_stack_range_conflicts(
 }
 
 static syntra_status_t scheduler_stage_switch_unlocked(
-    syntra_thread_handle_t handle)
+    syntra_thread_handle_t handle, int terminal)
 {
     if (pending_switch.valid ||
         switch_event_count >= SYNTRA_SWITCH_COMPLETION_CAPACITY ||
@@ -100,6 +101,7 @@ static syntra_status_t scheduler_stage_switch_unlocked(
     ++switch_sequence;
     pending_switch.handle = handle;
     pending_switch.sequence = switch_sequence;
+    pending_switch.terminal = terminal != 0 ? 1U : 0U;
     pending_switch.valid = 1;
     return SYNTRA_STATUS_OK;
 }
@@ -172,6 +174,7 @@ static syntra_status_t scheduler_init_unlocked(void)
     pending_switch.handle.slot = 0U;
     pending_switch.handle.generation = 0U;
     pending_switch.sequence = 0U;
+    pending_switch.terminal = 0U;
     pending_switch.valid = 0;
     switch_event_head = 0U;
     switch_event_tail = 0U;
@@ -435,7 +438,9 @@ static syntra_status_t scheduler_set_thread_state_unlocked(
     if (current_slot == slot && new_state != THREAD_RUNNING)
     {
         syntra_status_t stage_status =
-            scheduler_stage_switch_unlocked(threads[(unsigned int)slot].handle);
+            scheduler_stage_switch_unlocked(
+                threads[(unsigned int)slot].handle,
+                new_state == THREAD_TERMINATED);
         if (stage_status != SYNTRA_STATUS_OK)
             return stage_status;
     }
@@ -472,7 +477,7 @@ static syntra_status_t scheduler_block_current_unlocked(void)
     if (!scheduler_initialized || current_slot < 0)
         return SYNTRA_STATUS_ERROR;
     if (scheduler_stage_switch_unlocked(
-            threads[(unsigned int)current_slot].handle) != SYNTRA_STATUS_OK)
+            threads[(unsigned int)current_slot].handle, 0) != SYNTRA_STATUS_OK)
         return SYNTRA_STATUS_ERROR;
     threads[(unsigned int)current_slot].state = THREAD_BLOCKED;
     current_slot = -1;
@@ -484,7 +489,7 @@ static syntra_status_t scheduler_terminate_current_unlocked(void)
     if (!scheduler_initialized || current_slot < 0)
         return SYNTRA_STATUS_ERROR;
     if (scheduler_stage_switch_unlocked(
-            threads[(unsigned int)current_slot].handle) != SYNTRA_STATUS_OK)
+            threads[(unsigned int)current_slot].handle, 1) != SYNTRA_STATUS_OK)
         return SYNTRA_STATUS_ERROR;
     threads[(unsigned int)current_slot].state = THREAD_TERMINATED;
     current_slot = -1;
@@ -610,13 +615,14 @@ static syntra_status_t scheduler_schedule_next_context_unlocked(void **cpu_conte
         pending_switch.handle.slot = 0U;
         pending_switch.handle.generation = 0U;
         pending_switch.sequence = 0U;
+        pending_switch.terminal = 0U;
     }
 
     if (!pending_switch.valid && had_outgoing &&
         !scheduler_thread_handle_equal(outgoing_handle, selected->handle))
     {
         /* Preconditions were checked before changing current_slot. */
-        if (scheduler_stage_switch_unlocked(outgoing_handle) != SYNTRA_STATUS_OK)
+        if (scheduler_stage_switch_unlocked(outgoing_handle, 0) != SYNTRA_STATUS_OK)
             return SYNTRA_STATUS_ERROR;
     }
 
@@ -1149,7 +1155,7 @@ syntra_status_t scheduler_terminate_process_threads(
             current->owner_process.slot == owner.slot &&
             current->owner_process.generation == owner.generation)
         {
-            if (scheduler_stage_switch_unlocked(current->handle) != SYNTRA_STATUS_OK)
+            if (scheduler_stage_switch_unlocked(current->handle, 1) != SYNTRA_STATUS_OK)
             {
                 syntra_irq_restore(irq);
                 return SYNTRA_STATUS_ERROR;
@@ -1314,7 +1320,8 @@ syntra_status_t scheduler_prepare_switch_away(
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
 
-    status = scheduler_stage_switch_unlocked(handle);
+    status = scheduler_stage_switch_unlocked(
+        handle, threads[(unsigned int)slot].state == THREAD_TERMINATED);
     syntra_irq_restore(irq);
     return status;
 }
@@ -1344,6 +1351,7 @@ syntra_status_t scheduler_complete_switch_away(void)
 
     switch_events[switch_event_tail].handle = pending_switch.handle;
     switch_events[switch_event_tail].sequence = pending_switch.sequence;
+    switch_events[switch_event_tail].terminal = pending_switch.terminal;
     switch_event_tail =
         (switch_event_tail + 1U) % SYNTRA_SWITCH_COMPLETION_CAPACITY;
     ++switch_event_count;
@@ -1352,6 +1360,53 @@ syntra_status_t scheduler_complete_switch_away(void)
     pending_switch.handle.slot = 0U;
     pending_switch.handle.generation = 0U;
     pending_switch.sequence = 0U;
+    pending_switch.terminal = 0U;
+
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t scheduler_peek_switch_away_event(
+    syntra_thread_switch_event_t *event_out)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+
+    if (event_out == NULL)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+    if (switch_event_count == 0U)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    *event_out = switch_events[switch_event_head];
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t scheduler_ack_switch_away_event(
+    syntra_thread_switch_event_t event)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+
+    if (switch_event_count == 0U ||
+        event.handle.generation == 0U ||
+        event.sequence == 0U ||
+        !scheduler_thread_handle_equal(
+            switch_events[switch_event_head].handle, event.handle) ||
+        switch_events[switch_event_head].sequence != event.sequence ||
+        switch_events[switch_event_head].terminal != event.terminal)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    switch_event_head =
+        (switch_event_head + 1U) % SYNTRA_SWITCH_COMPLETION_CAPACITY;
+    --switch_event_count;
 
     syntra_irq_restore(irq);
     return SYNTRA_STATUS_OK;
