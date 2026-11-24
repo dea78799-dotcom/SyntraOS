@@ -408,6 +408,8 @@ static syntra_status_t scheduler_set_thread_state_unlocked(
         {
             threads[(unsigned int)current_slot].state = THREAD_READY;
         }
+        if (current_slot < 0 && thread_count != 0U)
+            next_slot = ((unsigned int)slot + 1U) % thread_count;
         current_slot = slot;
     }
     else if (current_slot == slot)
