@@ -26,7 +26,7 @@ The current `syntra_process_t` contains only process ID, priority and state. It 
 - File descriptors, handles or kernel objects.
 - Credentials, capabilities or access-control policy.
 - Parent/child relationships, exit status or process reaping.
-- Safe concurrent access or lifecycle synchronization.
+- SMP/FIQ-safe synchronization, thread ownership, or lifecycle synchronization.
 
 A process record is therefore metadata only. Creating one does not create an independently executable or isolated process.
 
@@ -40,7 +40,7 @@ The kernel initialization sequence initializes the Process Manager, but the curr
 
 ## 6. Validation scope
 
-The process unit tests cover initialization, record creation and lookup, duplicate-ID rejection, state transitions and termination metadata. These tests do not demonstrate address-space isolation, process execution, permission enforcement or concurrent safety.
+The process unit tests cover initialization, record creation and lookup, duplicate-ID rejection, state changes, termination metadata, and snapshot-copy isolation. These tests do not demonstrate address-space isolation, process execution, permission enforcement or concurrent safety.
 
 ## 7. V1 status
 
@@ -53,8 +53,9 @@ New code should use `process_get_snapshot()` to copy process metadata into
 caller-owned storage. The snapshot is independent of the manager's internal
 record and cannot be used to mutate manager state. The legacy
 `process_get()` mutable-pointer accessor remains for compatibility only and
-must not be used by new code. Snapshot copying does not provide synchronization;
-the Process Manager still has no concurrency protection.
+must not be used by new code. Snapshot copying does not itself provide synchronization. Public operations use
+local IRQ masking on the current single-core ARM64 target; this is not SMP or
+FIQ protection.
 
 
 ## Synchronization
