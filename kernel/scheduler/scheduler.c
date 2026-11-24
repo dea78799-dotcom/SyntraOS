@@ -7,6 +7,22 @@ static unsigned int next_slot;
 static int current_slot;
 static int scheduler_initialized;
 
+#define SYNTRA_SWITCH_COMPLETION_CAPACITY 128U
+
+typedef struct
+{
+    syntra_thread_handle_t handle;
+    uint64_t sequence;
+    int valid;
+} scheduler_pending_switch_t;
+
+static scheduler_pending_switch_t pending_switch;
+static syntra_thread_switch_event_t switch_events[SYNTRA_SWITCH_COMPLETION_CAPACITY];
+static unsigned int switch_event_head;
+static unsigned int switch_event_tail;
+static unsigned int switch_event_count;
+static uint64_t switch_sequence;
+
 static int scheduler_find_slot(unsigned int thread_id)
 {
     for (unsigned int i = 0U; i < thread_count; ++i)
@@ -42,6 +58,23 @@ static int scheduler_stack_range_conflicts(
             return 1;
     }
     return 0;
+}
+
+static syntra_status_t scheduler_stage_switch_unlocked(
+    syntra_thread_handle_t handle)
+{
+    if (pending_switch.valid ||
+        switch_event_count >= SYNTRA_SWITCH_COMPLETION_CAPACITY ||
+        switch_sequence == UINT64_MAX ||
+        handle.generation == 0U ||
+        handle.slot >= thread_count)
+        return SYNTRA_STATUS_ERROR;
+
+    ++switch_sequence;
+    pending_switch.handle = handle;
+    pending_switch.sequence = switch_sequence;
+    pending_switch.valid = 1;
+    return SYNTRA_STATUS_OK;
 }
 
 static syntra_status_t scheduler_insert_thread(
@@ -100,6 +133,14 @@ static syntra_status_t scheduler_init_unlocked(void)
     thread_count = 0U;
     next_slot = 0U;
     current_slot = -1;
+    pending_switch.handle.slot = 0U;
+    pending_switch.handle.generation = 0U;
+    pending_switch.sequence = 0U;
+    pending_switch.valid = 0;
+    switch_event_head = 0U;
+    switch_event_tail = 0U;
+    switch_event_count = 0U;
+    switch_sequence = 0U;
 
     for (unsigned int i = 0U; i < SYNTRA_MAX_THREADS; ++i)
     {
@@ -352,6 +393,14 @@ static syntra_status_t scheduler_set_thread_state_unlocked(
         new_state != THREAD_TERMINATED)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
+    if (current_slot == slot && new_state != THREAD_RUNNING)
+    {
+        syntra_status_t stage_status =
+            scheduler_stage_switch_unlocked(threads[(unsigned int)slot].handle);
+        if (stage_status != SYNTRA_STATUS_OK)
+            return stage_status;
+    }
+
     if (new_state == THREAD_RUNNING)
     {
         if (current_slot >= 0 && current_slot != slot &&
@@ -383,6 +432,9 @@ static syntra_status_t scheduler_block_current_unlocked(void)
 {
     if (!scheduler_initialized || current_slot < 0)
         return SYNTRA_STATUS_ERROR;
+    if (scheduler_stage_switch_unlocked(
+            threads[(unsigned int)current_slot].handle) != SYNTRA_STATUS_OK)
+        return SYNTRA_STATUS_ERROR;
     threads[(unsigned int)current_slot].state = THREAD_BLOCKED;
     current_slot = -1;
     return SYNTRA_STATUS_OK;
@@ -391,6 +443,9 @@ static syntra_status_t scheduler_block_current_unlocked(void)
 static syntra_status_t scheduler_terminate_current_unlocked(void)
 {
     if (!scheduler_initialized || current_slot < 0)
+        return SYNTRA_STATUS_ERROR;
+    if (scheduler_stage_switch_unlocked(
+            threads[(unsigned int)current_slot].handle) != SYNTRA_STATUS_OK)
         return SYNTRA_STATUS_ERROR;
     threads[(unsigned int)current_slot].state = THREAD_TERMINATED;
     current_slot = -1;
@@ -479,12 +534,39 @@ static syntra_status_t scheduler_set_thread_context_unlocked(
 static syntra_status_t scheduler_schedule_next_context_unlocked(void **cpu_context_out)
 {
     syntra_thread_t *selected;
+    syntra_thread_handle_t outgoing_handle = {0U, 0U};
+    int had_outgoing = 0;
+
     if (cpu_context_out == NULL)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     *cpu_context_out = NULL;
+
+    if (pending_switch.valid &&
+        switch_event_count >= SYNTRA_SWITCH_COMPLETION_CAPACITY)
+        return SYNTRA_STATUS_ERROR;
+
+    if (!pending_switch.valid && current_slot >= 0 &&
+        threads[(unsigned int)current_slot].state == THREAD_RUNNING)
+    {
+        if (switch_event_count >= SYNTRA_SWITCH_COMPLETION_CAPACITY ||
+            switch_sequence == UINT64_MAX)
+            return SYNTRA_STATUS_ERROR;
+        outgoing_handle = threads[(unsigned int)current_slot].handle;
+        had_outgoing = 1;
+    }
+
     selected = scheduler_schedule_next_with_context_unlocked();
     if (selected == NULL)
         return SYNTRA_STATUS_ERROR;
+
+    if (!pending_switch.valid && had_outgoing &&
+        !scheduler_thread_handle_equal(outgoing_handle, selected->handle))
+    {
+        /* Preconditions were checked before changing current_slot. */
+        if (scheduler_stage_switch_unlocked(outgoing_handle) != SYNTRA_STATUS_OK)
+            return SYNTRA_STATUS_ERROR;
+    }
+
     *cpu_context_out = selected->cpu_context;
     return SYNTRA_STATUS_OK;
 }
@@ -789,6 +871,21 @@ syntra_status_t scheduler_terminate_process_threads(
         return SYNTRA_STATUS_ERROR;
     }
 
+    if (current_slot >= 0)
+    {
+        syntra_thread_t *current = &threads[(unsigned int)current_slot];
+        if (current->has_process_owner != 0U &&
+            current->owner_process.slot == owner.slot &&
+            current->owner_process.generation == owner.generation)
+        {
+            if (scheduler_stage_switch_unlocked(current->handle) != SYNTRA_STATUS_OK)
+            {
+                syntra_irq_restore(irq);
+                return SYNTRA_STATUS_ERROR;
+            }
+        }
+    }
+
     for (unsigned int i = 0U; i < thread_count; ++i)
     {
         syntra_thread_t *thread = &threads[i];
@@ -928,6 +1025,57 @@ syntra_status_t scheduler_terminate_current(void)
     syntra_status_t status = scheduler_terminate_current_unlocked();
     syntra_irq_restore(irq);
     return status;
+}
+
+syntra_status_t scheduler_complete_switch_away(void)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+
+    if (!pending_switch.valid ||
+        switch_event_count >= SYNTRA_SWITCH_COMPLETION_CAPACITY)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    switch_events[switch_event_tail].handle = pending_switch.handle;
+    switch_events[switch_event_tail].sequence = pending_switch.sequence;
+    switch_event_tail =
+        (switch_event_tail + 1U) % SYNTRA_SWITCH_COMPLETION_CAPACITY;
+    ++switch_event_count;
+
+    pending_switch.valid = 0;
+    pending_switch.handle.slot = 0U;
+    pending_switch.handle.generation = 0U;
+    pending_switch.sequence = 0U;
+
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t scheduler_take_switch_away_event(
+    syntra_thread_switch_event_t *event_out)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+
+    if (event_out == NULL)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+    if (switch_event_count == 0U)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    *event_out = switch_events[switch_event_head];
+    switch_event_head =
+        (switch_event_head + 1U) % SYNTRA_SWITCH_COMPLETION_CAPACITY;
+    --switch_event_count;
+
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t scheduler_get_thread_snapshot_by_handle(
