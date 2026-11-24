@@ -1,0 +1,89 @@
+#include <stdio.h>
+#include <stdint.h>
+#include "../..//kernel/process/process.h"
+#include "../../kernel/process/process_thread.h"
+#include "../../kernel/scheduler/scheduler.h"
+
+static int failures;
+
+static void check(const char *name, int ok)
+{
+    printf("[%s] %s\n", ok ? "PASS" : "FAIL", name);
+    if (!ok) ++failures;
+}
+
+static void thread_entry(void *argument)
+{
+    (void)argument;
+}
+
+int main(void)
+{
+    static _Alignas(16) unsigned char stack_a[2048];
+    static _Alignas(16) unsigned char stack_b[2048];
+    static _Alignas(16) unsigned char stack_c[2048];
+    syntra_process_handle_t owner = {0U, 0U};
+    syntra_process_handle_t other = {0U, 0U};
+    syntra_process_handle_t invalid;
+    syntra_thread_t snapshot;
+    unsigned int count = 99U;
+
+    check("Initialize process manager", process_init() == SYNTRA_STATUS_OK);
+    check("Initialize scheduler", scheduler_init() == SYNTRA_STATUS_OK);
+    check("Create owner process",
+        process_create_with_handle(10U, 4U, &owner) == SYNTRA_STATUS_OK);
+    check("Create second process",
+        process_create_with_handle(11U, 4U, &other) == SYNTRA_STATUS_OK);
+
+    check("Create first process-owned kernel thread",
+        process_thread_create_kernel(owner, 100U, 3U, thread_entry, NULL,
+            stack_a, sizeof(stack_a)) == SYNTRA_STATUS_OK);
+    check("Create second thread for same process",
+        process_thread_create_kernel(owner, 101U, 3U, thread_entry, NULL,
+            stack_b, sizeof(stack_b)) == SYNTRA_STATUS_OK);
+    check("Count exact owner threads",
+        process_thread_get_count(owner, &count) == SYNTRA_STATUS_OK &&
+        count == 2U);
+    check("Read owner thread snapshot",
+        process_thread_get_snapshot(owner, 1U, &snapshot) == SYNTRA_STATUS_OK &&
+        snapshot.thread_id == 101U && snapshot.has_process_owner == 1U &&
+        snapshot.owner_process.slot == owner.slot &&
+        snapshot.owner_process.generation == owner.generation);
+
+    invalid = owner;
+    invalid.generation = 0U;
+    check("Reject zero-generation owner",
+        process_thread_create_kernel(invalid, 102U, 1U, thread_entry, NULL,
+            stack_c, sizeof(stack_c)) == SYNTRA_STATUS_INVALID_ARGUMENT);
+    invalid = owner;
+    ++invalid.generation;
+    check("Reject stale or mismatched owner",
+        process_thread_create_kernel(invalid, 102U, 1U, thread_entry, NULL,
+            stack_c, sizeof(stack_c)) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+    check("Reject duplicate thread ID without partial insertion",
+        process_thread_create_kernel(owner, 100U, 1U, thread_entry, NULL,
+            stack_c, sizeof(stack_c)) == SYNTRA_STATUS_INVALID_ARGUMENT);
+    count = 0U;
+    check("Failed creation leaves owner count unchanged",
+        process_thread_get_count(owner, &count) == SYNTRA_STATUS_OK &&
+        count == 2U);
+
+    check("Terminate second process",
+        process_set_state_by_handle(other, PROCESS_TERMINATED) == SYNTRA_STATUS_OK);
+    check("Reject thread creation for terminated process",
+        process_thread_create_kernel(other, 200U, 1U, thread_entry, NULL,
+            stack_c, sizeof(stack_c)) == SYNTRA_STATUS_PERMISSION_DENIED);
+
+    check("Legacy scheduler thread remains unowned",
+        scheduler_add_thread(300U, 1U) == SYNTRA_STATUS_OK &&
+        scheduler_get_thread_snapshot(300U, &snapshot) == SYNTRA_STATUS_OK &&
+        snapshot.has_process_owner == 0U &&
+        snapshot.owner_process.slot == 0U &&
+        snapshot.owner_process.generation == 0U);
+    check("Scheduler invariants remain valid",
+        scheduler_validate() == SYNTRA_STATUS_OK);
+
+    printf("Total failures: %d\n", failures);
+    return failures == 0 ? 0 : 1;
+}
