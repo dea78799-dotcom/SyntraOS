@@ -756,6 +756,10 @@ static void syntra_scheduler_test_worker(void *argument)
     unsigned int worker_index = worker_id - SYNTRA_SCHEDULER_TEST_WORKER_A_ID;
     uint64_t observed_tick = timer_get_ticks();
 
+    syntra_uart_puts(worker_id == SYNTRA_SCHEDULER_TEST_WORKER_A_ID
+        ? "Scheduler worker A: START\\n"
+        : "Scheduler worker B: START\\n");
+
     for (;;)
     {
         uint64_t current_tick;
