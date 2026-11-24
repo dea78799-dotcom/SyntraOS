@@ -1,7 +1,7 @@
 # Thread Identity V1 — Generation-aware Thread Handles
 
 Version target: SYNTRA OS v0.1.0  
-Status: Design proposal; no thread-slot reuse or resource reclamation is enabled.  
+Status: D1 implementation in progress; append-only slots, exact-handle APIs, and no resource reclamation.  
 Parent: Deferred Thread Reaper V1
 
 ## 1. Objective
@@ -16,7 +16,7 @@ Both fields must match. A matching slot with a different generation is stale.
 
 ## 2. Handle representation
 
-Proposed public type:
+Implemented public type in `kernel/scheduler/scheduler.h`:
 
 ```c
 typedef struct
@@ -48,15 +48,14 @@ The generation counter must not be reset by ordinary scheduler reinitialization 
 
 ## 4. API design
 
-Add handle-first operations while retaining numeric-ID compatibility APIs:
+D1 implemented operations while retaining numeric-ID compatibility APIs:
 
-- create thread and return `syntra_thread_handle_t`;
-- resolve exact handle to a copy-out snapshot;
-- update state by exact handle;
-- obtain current thread handle;
-- obtain owner-process handle from an exact thread snapshot.
+- `scheduler_create_thread_with_handle` creates a runnable thread and returns its committed handle;
+- `scheduler_get_thread_snapshot_by_handle` resolves an exact handle to a copy-out snapshot;
+- `scheduler_set_thread_state_by_handle` updates state only after exact-handle validation;
+- `scheduler_thread_handle_equal` compares both fields explicitly.
 
-No public API should return a mutable TCB pointer. Existing legacy mutable-pointer APIs remain compatibility-only and must not be used by the reaper or new lifecycle code.
+The handle-first APIs do not return a mutable TCB pointer. No current-thread-handle accessor or owner-process convenience accessor is included in D1. Existing public APIs returning mutable TCB pointers remain compatibility-only and must not be used by the reaper or new lifecycle code.
 
 Handle resolution validates:
 1. non-null output pointer where required;
@@ -118,4 +117,4 @@ No fallback to numeric thread_id is allowed in lifecycle or reclamation code.
 
 ## 9. Non-goals
 
-This document does not implement slot reuse, TCB removal, generation increment on reuse, reaper queue, stack freeing, allocator integration, process-slot reuse, SMP synchronization, or production readiness. SYNTRA OS remains a single-core QEMU prototype at v0.1.0.
+D1 implements thread-handle metadata and handle-first create/snapshot/state APIs. It does not implement slot reuse, TCB removal, generation increment on reuse, reaper queue, stack freeing, allocator integration, process-slot reuse, SMP synchronization, or production readiness. SYNTRA OS remains a single-core QEMU prototype at v0.1.0.

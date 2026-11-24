@@ -69,6 +69,8 @@ static syntra_status_t scheduler_insert_thread(
     }
 
     syntra_thread_t *thread = &threads[thread_count];
+    thread->handle.slot = (uint32_t)thread_count;
+    thread->handle.generation = 1U;
     thread->thread_id = thread_id;
     thread->priority = priority;
     thread->state = THREAD_READY;
@@ -101,6 +103,8 @@ static syntra_status_t scheduler_init_unlocked(void)
 
     for (unsigned int i = 0U; i < SYNTRA_MAX_THREADS; ++i)
     {
+        threads[i].handle.slot = 0U;
+        threads[i].handle.generation = 0U;
         threads[i].thread_id = 0U;
         threads[i].priority = 0U;
         threads[i].state = THREAD_TERMINATED;
@@ -394,6 +398,47 @@ static syntra_status_t scheduler_terminate_current_unlocked(void)
 }
 
 
+static int scheduler_resolve_handle_unlocked(syntra_thread_handle_t handle)
+{
+    if (!scheduler_initialized || handle.generation == 0U ||
+        handle.slot >= SYNTRA_MAX_THREADS || handle.slot >= thread_count)
+        return -1;
+
+    const syntra_thread_t *thread = &threads[handle.slot];
+    if (thread->handle.slot != handle.slot ||
+        thread->handle.generation != handle.generation)
+        return -1;
+
+    return (int)handle.slot;
+}
+
+static syntra_status_t scheduler_get_thread_snapshot_by_handle_unlocked(
+    syntra_thread_handle_t handle, syntra_thread_t *snapshot)
+{
+    if (snapshot == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    if (!scheduler_initialized)
+        return SYNTRA_STATUS_ERROR;
+
+    int slot = scheduler_resolve_handle_unlocked(handle);
+    if (slot < 0)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    *snapshot = threads[(unsigned int)slot];
+    return SYNTRA_STATUS_OK;
+}
+
+static syntra_status_t scheduler_set_thread_state_by_handle_unlocked(
+    syntra_thread_handle_t handle, thread_state_t new_state)
+{
+    int slot = scheduler_resolve_handle_unlocked(handle);
+    if (slot < 0)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    return scheduler_set_thread_state_unlocked(
+        threads[(unsigned int)slot].thread_id, new_state);
+}
+
 static syntra_status_t scheduler_get_thread_snapshot_unlocked(
     unsigned int thread_id,
     syntra_thread_t *snapshot)
@@ -473,7 +518,8 @@ static syntra_status_t scheduler_validate_unlocked(void)
     {
         const syntra_thread_t *thread = &threads[i];
 
-        if (thread->thread_id == 0U ||
+        if (thread->handle.slot != i || thread->handle.generation == 0U ||
+            thread->thread_id == 0U ||
             thread->state < THREAD_READY ||
             thread->state > THREAD_TERMINATED)
         {
@@ -571,6 +617,33 @@ syntra_status_t scheduler_add_thread(unsigned int id, unsigned int priority)
 {
     syntra_irq_state_t irq = syntra_irq_save();
     syntra_status_t status = scheduler_add_thread_unlocked(id, priority);
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_create_thread_with_handle(
+    unsigned int id, unsigned int priority, syntra_thread_entry_t entry,
+    void *argument, void *stack, size_t stack_size,
+    syntra_thread_handle_t *handle_out)
+{
+    syntra_irq_state_t irq;
+    syntra_status_t status;
+    int slot;
+
+    if (handle_out == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    irq = syntra_irq_save();
+    status = scheduler_create_thread_unlocked(
+        id, priority, entry, argument, stack, stack_size);
+    if (status == SYNTRA_STATUS_OK)
+    {
+        slot = scheduler_find_slot(id);
+        if (slot < 0)
+            status = SYNTRA_STATUS_ERROR;
+        else
+            *handle_out = threads[(unsigned int)slot].handle;
+    }
     syntra_irq_restore(irq);
     return status;
 }
@@ -825,6 +898,33 @@ syntra_status_t scheduler_terminate_current(void)
     syntra_status_t status = scheduler_terminate_current_unlocked();
     syntra_irq_restore(irq);
     return status;
+}
+
+syntra_status_t scheduler_get_thread_snapshot_by_handle(
+    syntra_thread_handle_t handle, syntra_thread_t *out)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status =
+        scheduler_get_thread_snapshot_by_handle_unlocked(handle, out);
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_set_thread_state_by_handle(
+    syntra_thread_handle_t handle, thread_state_t state)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status =
+        scheduler_set_thread_state_by_handle_unlocked(handle, state);
+    syntra_irq_restore(irq);
+    return status;
+}
+
+int scheduler_thread_handle_equal(
+    syntra_thread_handle_t left, syntra_thread_handle_t right)
+{
+    return left.slot == right.slot &&
+        left.generation == right.generation;
 }
 
 syntra_status_t scheduler_get_thread_snapshot(unsigned int id, syntra_thread_t *out)

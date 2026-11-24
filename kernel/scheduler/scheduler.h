@@ -23,6 +23,14 @@ typedef void (*syntra_thread_entry_t)(void *argument);
 
 typedef struct
 {
+    uint32_t slot;
+    uint32_t generation;
+} syntra_thread_handle_t;
+
+typedef struct
+{
+    /* Stable scheduler-slot identity; generation is nonzero when occupied. */
+    syntra_thread_handle_t handle;
     unsigned int thread_id;
     unsigned int priority;
     thread_state_t state;
@@ -52,6 +60,20 @@ syntra_status_t scheduler_init(void);
 syntra_status_t scheduler_add_thread(
     unsigned int thread_id,
     unsigned int priority
+);
+
+/*
+ * Handle-first create API. On success, returns the committed slot identity.
+ * D1 is append-only: slots are not reused and generation is currently 1.
+ */
+syntra_status_t scheduler_create_thread_with_handle(
+    unsigned int thread_id,
+    unsigned int priority,
+    syntra_thread_entry_t entry,
+    void *argument,
+    void *stack,
+    size_t stack_size,
+    syntra_thread_handle_t *handle_out
 );
 
 /* Create a runnable thread using a caller-provided, 16-byte aligned stack. */
@@ -109,6 +131,14 @@ syntra_status_t scheduler_get_thread_snapshot(
     syntra_thread_t *snapshot
 );
 syntra_status_t scheduler_get_current_snapshot(syntra_thread_t *snapshot);
+
+/* Exact-handle copy-out and state update APIs; stale handles are rejected. */
+syntra_status_t scheduler_get_thread_snapshot_by_handle(
+    syntra_thread_handle_t handle, syntra_thread_t *snapshot);
+syntra_status_t scheduler_set_thread_state_by_handle(
+    syntra_thread_handle_t handle, thread_state_t new_state);
+int scheduler_thread_handle_equal(
+    syntra_thread_handle_t left, syntra_thread_handle_t right);
 
 /* Controlled context mutation; avoids exposing a mutable TCB to callers. */
 syntra_status_t scheduler_set_thread_context(
