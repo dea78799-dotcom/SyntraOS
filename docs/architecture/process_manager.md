@@ -75,8 +75,9 @@ do not retain or mutate that pointer.
 
 The first V2 identity increment adds `syntra_process_handle_t`, containing a
 32-bit slot and a 32-bit generation. Each occupied process-table slot stores
-its current generation. New code can resolve a legacy process ID with
-`process_get_handle()`, then use `process_get_snapshot_by_handle()` or
+its current generation. New code should create a process with `process_create_with_handle()` to receive
+a generation-aware handle directly. Existing records can be resolved from a
+legacy ID with `process_get_handle()`. Callers can then use `process_get_snapshot_by_handle()` or
 `process_set_state_by_handle()`. Both handle APIs reject out-of-range slots,
 zero generations, unoccupied slots, and generation mismatches.
 
