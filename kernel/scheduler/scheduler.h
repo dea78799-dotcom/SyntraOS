@@ -95,6 +95,29 @@ syntra_status_t scheduler_wake_thread(unsigned int thread_id);
 syntra_status_t scheduler_block_current(void);
 syntra_status_t scheduler_terminate_current(void);
 
+/*
+ * Copy-out inspection APIs. The caller owns the destination snapshot; changes
+ * to it never mutate scheduler state.
+ */
+syntra_status_t scheduler_get_thread_snapshot(
+    unsigned int thread_id,
+    syntra_thread_t *snapshot
+);
+syntra_status_t scheduler_get_current_snapshot(syntra_thread_t *snapshot);
+
+/* Controlled context mutation; avoids exposing a mutable TCB to callers. */
+syntra_status_t scheduler_set_thread_context(
+    unsigned int thread_id,
+    void *cpu_context
+);
+
+/* Select the next context-aware thread and return only its saved context. */
+syntra_status_t scheduler_schedule_next_context(void **cpu_context_out);
+
+/*
+ * Legacy mutable-pointer accessors retained for compatibility only.
+ * New kernel code must use snapshot and controlled mutation APIs above.
+ */
 syntra_thread_t *scheduler_get_thread(unsigned int thread_id);
 unsigned int scheduler_get_thread_count(void);
 syntra_status_t scheduler_validate(void);
