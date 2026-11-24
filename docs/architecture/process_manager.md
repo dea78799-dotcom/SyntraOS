@@ -1,49 +1,47 @@
 # SyntraOS Process Manager
 
 Version: 0.1.0
-Status: Design Phase
+Implementation status: V1 metadata prototype
 
-## 1. Overview
+## 1. Purpose
 
-The Process Manager controls processes
-running in SyntraOS.
+The Process Manager currently tracks a bounded set of process records. It is an early kernel prototype, not yet a complete process lifecycle or isolation subsystem.
 
-## 2. Main Responsibilities
+## 2. Implemented in V1
 
-- Create processes.
-- Terminate processes.
-- Track process states.
-- Manage process identifiers.
-- Coordinate with the Memory Manager.
-- Coordinate with the Scheduler.
+- Initialize a fixed-capacity table of up to 64 process records.
+- Create a process record with a nonzero ID and priority.
+- Reject duplicate process IDs and capacity overflow.
+- Look up a process by ID.
+- Track READY, RUNNING, BLOCKED and TERMINATED metadata states.
+- Change a process state and mark a process TERMINATED.
 
-## 3. Process States
+## 3. Not implemented yet
 
-- CREATED: Process has been created.
-- READY: Process is ready to run.
-- RUNNING: Process is executing.
-- BLOCKED: Process is waiting for an event.
-- TERMINATED: Process has finished.
+The current `syntra_process_t` contains only process ID, priority and state. It does not yet own or manage:
 
-## 4. Process Isolation
+- An address space or page-table root.
+- A process-specific memory map or resource table.
+- Threads or scheduler ownership.
+- File descriptors, handles or kernel objects.
+- Credentials, capabilities or access-control policy.
+- Parent/child relationships, exit status or process reaping.
+- Safe concurrent access or lifecycle synchronization.
 
-Each process must have its own
-protected virtual address space.
+A process record is therefore metadata only. Creating one does not create an independently executable or isolated process.
 
-Processes must not access
-unauthorized memory belonging to others.
+## 4. Security and isolation
 
-## 5. System Integration
+Per-process virtual address-space isolation remains a design requirement, not a V1 capability. Do not treat process IDs as authenticated identities or as an authorization boundary.
 
-The Process Manager will communicate with:
+## 5. Integration
 
-- Scheduler
-- Memory Manager
-- IPC
-- Security Manager
+The kernel initialization sequence initializes the Process Manager, but the current Process Manager API is not yet connected to Scheduler resource ownership or IPC endpoint authorization.
 
-## 6. Current Status
+## 6. Validation scope
 
-Process Manager is not implemented yet.
+The process unit tests cover initialization, record creation and lookup, duplicate-ID rejection, state transitions and termination metadata. These tests do not demonstrate address-space isolation, process execution, permission enforcement or concurrent safety.
 
-This document describes the planned design.
+## 7. V1 status
+
+The metadata prototype is implemented and unit-tested. Full process creation, isolation, resource ownership, cleanup and security enforcement remain future work.
