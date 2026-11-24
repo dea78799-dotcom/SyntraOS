@@ -22,6 +22,7 @@ int main(void)
     static _Alignas(16) unsigned char stack_a[2048];
     static _Alignas(16) unsigned char stack_b[2048];
     static _Alignas(16) unsigned char stack_c[2048];
+    static _Alignas(16) unsigned char stack_d[2048];
     static _Alignas(16) unsigned char user_kernel_stack[2048];
     static _Alignas(16) unsigned char user_stack[2048];
     static unsigned char user_cpu_context[256];
@@ -48,6 +49,9 @@ int main(void)
         process_thread_create_user(owner, 102U, 2U, thread_entry, NULL,
             user_kernel_stack, sizeof(user_kernel_stack),
             user_stack, sizeof(user_stack), user_cpu_context) == SYNTRA_STATUS_OK);
+    check("Create thread owned by second process",
+        process_thread_create_kernel(other, 201U, 2U, thread_entry, NULL,
+            stack_d, sizeof(stack_d)) == SYNTRA_STATUS_OK);
     check("Count exact owner threads",
         process_thread_get_count(owner, &count) == SYNTRA_STATUS_OK &&
         count == 3U);
@@ -87,11 +91,45 @@ int main(void)
         process_thread_get_count(owner, &count) == SYNTRA_STATUS_OK &&
         count == 3U);
 
-    check("Terminate second process",
+    check("Mark second process terminated through metadata API",
         process_set_state_by_handle(other, PROCESS_TERMINATED) == SYNTRA_STATUS_OK);
     check("Reject thread creation for terminated process",
         process_thread_create_kernel(other, 200U, 1U, thread_entry, NULL,
             stack_c, sizeof(stack_c)) == SYNTRA_STATUS_PERMISSION_DENIED);
+
+    check("Schedule an owned thread before cascade",
+        scheduler_schedule_next() != NULL);
+    check("Terminate owner process and its complete thread set",
+        process_thread_terminate_process(owner) == SYNTRA_STATUS_OK);
+    {
+        syntra_process_t process_snapshot;
+        check("Owner process state becomes terminated",
+            process_get_snapshot_by_handle(owner, &process_snapshot) == SYNTRA_STATUS_OK &&
+            process_snapshot.state == PROCESS_TERMINATED);
+    }
+    check("All owner threads are terminated",
+        process_thread_get_snapshot(owner, 0U, &snapshot) == SYNTRA_STATUS_OK &&
+        snapshot.state == THREAD_TERMINATED &&
+        process_thread_get_snapshot(owner, 1U, &snapshot) == SYNTRA_STATUS_OK &&
+        snapshot.state == THREAD_TERMINATED &&
+        process_thread_get_snapshot(owner, 2U, &snapshot) == SYNTRA_STATUS_OK &&
+        snapshot.state == THREAD_TERMINATED);
+    check("Current thread pointer is cleared after current-owner termination",
+        scheduler_get_current() == NULL);
+    check("Second process thread remains unaffected by owner cascade",
+        scheduler_get_thread_snapshot(201U, &snapshot) == SYNTRA_STATUS_OK &&
+        snapshot.state == THREAD_READY);
+
+    check("Cascade repairs active threads on already-terminated process",
+        process_thread_terminate_process(other) == SYNTRA_STATUS_OK &&
+        scheduler_get_thread_snapshot(201U, &snapshot) == SYNTRA_STATUS_OK &&
+        snapshot.state == THREAD_TERMINATED);
+    check("Repeated process cascade is idempotent",
+        process_thread_terminate_process(owner) == SYNTRA_STATUS_OK);
+    check("Invalid handle does not mutate scheduler",
+        process_thread_terminate_process(invalid) == SYNTRA_STATUS_INVALID_ARGUMENT &&
+        scheduler_get_thread_snapshot(201U, &snapshot) == SYNTRA_STATUS_OK &&
+        snapshot.state == THREAD_TERMINATED);
 
     check("Legacy scheduler thread remains unowned",
         scheduler_add_thread(300U, 1U) == SYNTRA_STATUS_OK &&
