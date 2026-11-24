@@ -21,6 +21,7 @@ on:
       - design/d3-resource-reclamation-audit-v1
       - design/d3-resource-descriptor-api-v1
       - design/d3-deferred-reaper-runtime-v1
+      - feat/memory-allocation-identity-v2
 
   pull_request:
     branches:
