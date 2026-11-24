@@ -8,6 +8,7 @@ on:
       - design/process-identity-lifecycle-v1
       - design/process-thread-ownership-v1
       - feat/process-thread-ownership-v1
+      - feat/process-termination-cascade-v1
 
   pull_request:
     branches:
