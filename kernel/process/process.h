@@ -3,8 +3,7 @@
 
 #include <stdint.h>
 #include "../core/status.h"
-
-#define SYNTRA_MAX_PROCESSES 64
+#include "process_handle.h"
 
 typedef enum
 {
@@ -13,17 +12,6 @@ typedef enum
     PROCESS_BLOCKED,
     PROCESS_TERMINATED
 } syntra_process_state_t;
-
-/*
- * Generation-aware value handle for one occupied process-table slot.
- * Its fields are public; validity is determined by the manager only when
- * both slot and generation match.
- */
-typedef struct
-{
-    uint32_t slot;
-    uint32_t generation;
-} syntra_process_handle_t;
 
 typedef struct
 {

@@ -7,6 +7,7 @@ on:
       # Run the full validation suite on active stacked process-identity branches.
       - design/process-identity-lifecycle-v1
       - design/process-thread-ownership-v1
+      - feat/process-thread-ownership-v1
 
   pull_request:
     branches:
@@ -23,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: syntraos-ci-${{ github.ref }}
+  group: syntraos-ci-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:

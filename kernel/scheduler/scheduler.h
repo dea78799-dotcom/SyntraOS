@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "../core/status.h"
+#include "../process/process_handle.h"
 
 #define SYNTRA_MAX_THREADS 32U
 #define SYNTRA_THREAD_MIN_STACK_SIZE 1024U
@@ -39,6 +40,10 @@ typedef struct
 
     /* Architecture layer stores the saved ARM64 exception frame here. */
     void *cpu_context;
+
+    /* Exact process identity; zeroed when has_process_owner is false. */
+    syntra_process_handle_t owner_process;
+    uint8_t has_process_owner;
 } syntra_thread_t;
 
 syntra_status_t scheduler_init(void);

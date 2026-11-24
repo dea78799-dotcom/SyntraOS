@@ -23,6 +23,59 @@ static size_t syntra_fw_cfg_size;
 #include "../../../timer/timer.h"
 #include "../../../interrupt/interrupt.h"
 #include "../../../scheduler/scheduler.h"
+#include "../../../process/process.h"
+#include "../../../process/process_thread.h"
+
+static void syntra_uart_puts(const char *message);
+
+static _Alignas(16) uint8_t syntra_process_thread_probe_stack[4096];
+
+static void syntra_process_thread_probe_entry(void *argument)
+{
+    (void)argument;
+}
+
+/*
+ * Exercise the process/thread coordinator on the real ARM64 QEMU boot path.
+ * This validates metadata registration only; the probe thread is not run.
+ */
+static syntra_status_t syntra_arm64_process_thread_ownership_test(void)
+{
+    syntra_process_handle_t owner = {0U, 0U};
+    syntra_thread_t snapshot;
+    unsigned int thread_count = 0U;
+    syntra_status_t status;
+
+    status = process_init();
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    status = process_create_with_handle(0x53594eU, 2U, &owner);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    status = process_thread_create_kernel(
+        owner, 0x53594eU, 2U, syntra_process_thread_probe_entry, NULL,
+        syntra_process_thread_probe_stack,
+        sizeof(syntra_process_thread_probe_stack));
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    status = process_thread_get_count(owner, &thread_count);
+    if (status != SYNTRA_STATUS_OK || thread_count != 1U)
+        return SYNTRA_STATUS_ERROR;
+
+    status = process_thread_get_snapshot(owner, 0U, &snapshot);
+    if (status != SYNTRA_STATUS_OK ||
+        snapshot.thread_id != 0x53594eU ||
+        snapshot.has_process_owner != 1U ||
+        snapshot.owner_process.slot != owner.slot ||
+        snapshot.owner_process.generation != owner.generation)
+        return SYNTRA_STATUS_ERROR;
+
+    syntra_uart_puts("Process/thread ownership registration: PASS\n");
+    return SYNTRA_STATUS_OK;
+}
 
 /*
  * SyntraOS ARM64 Boot Stage
@@ -1194,6 +1247,13 @@ syntra_status_t syntra_arm64_boot_main(
     if (status != SYNTRA_STATUS_OK)
     {
         syntra_uart_puts("SyntraOS boot failed: ARM64 Scheduler context switch test\n");
+        return status;
+    }
+
+    status = syntra_arm64_process_thread_ownership_test();
+    if (status != SYNTRA_STATUS_OK)
+    {
+        syntra_uart_puts("SyntraOS boot failed: process/thread ownership test\n");
         return status;
     }
 

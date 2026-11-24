@@ -47,6 +47,7 @@ add_library(syntra_kernel STATIC
     kernel/scheduler/scheduler.c
     kernel/memory/memory.c
     kernel/process/process.c
+    kernel/process/process_thread.c
     kernel/ipc/ipc.c
 
     kernel/interrupt/interrupt.c
@@ -177,6 +178,11 @@ add_executable(process_test
 )
 target_link_libraries(process_test PRIVATE syntra_kernel)
 add_test(NAME ProcessTest COMMAND process_test)
+
+# Process-owned thread lifecycle test
+add_executable(process_thread_test tests/process/process_thread_test.c)
+target_link_libraries(process_thread_test PRIVATE syntra_kernel)
+add_test(NAME ProcessThreadOwnershipTest COMMAND process_thread_test)
 
 # IPC Test
 add_executable(ipc_test

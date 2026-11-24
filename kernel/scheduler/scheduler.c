@@ -80,6 +80,9 @@ static syntra_status_t scheduler_insert_thread(
     thread->user_stack_size = 0U;
     thread->is_user_thread = 0U;
     thread->cpu_context = NULL;
+    thread->owner_process.slot = 0U;
+    thread->owner_process.generation = 0U;
+    thread->has_process_owner = 0U;
     ++thread_count;
 
     return SYNTRA_STATUS_OK;
@@ -109,6 +112,9 @@ static syntra_status_t scheduler_init_unlocked(void)
         threads[i].user_stack_size = 0U;
         threads[i].is_user_thread = 0U;
         threads[i].cpu_context = NULL;
+        threads[i].owner_process.slot = 0U;
+        threads[i].owner_process.generation = 0U;
+        threads[i].has_process_owner = 0U;
     }
 
     scheduler_initialized = 1;
@@ -486,7 +492,15 @@ static syntra_status_t scheduler_validate_unlocked(void)
             }
         }
 
-        if (thread->is_user_thread > 1U)
+        if (thread->is_user_thread > 1U || thread->has_process_owner > 1U)
+            return SYNTRA_STATUS_ERROR;
+        if (thread->has_process_owner == 0U &&
+            (thread->owner_process.slot != 0U ||
+             thread->owner_process.generation != 0U))
+            return SYNTRA_STATUS_ERROR;
+        if (thread->has_process_owner != 0U &&
+            (thread->owner_process.generation == 0U ||
+             thread->owner_process.slot >= 64U))
             return SYNTRA_STATUS_ERROR;
 
         if (thread->is_user_thread != 0U)
@@ -578,6 +592,132 @@ syntra_status_t scheduler_create_user_thread(
         user_stack, user_stack_size, cpu_context);
     syntra_irq_restore(irq);
     return status;
+}
+
+
+/*
+ * Ownership-aware scheduler entry points. The process/thread coordinator
+ * validates the handle while holding the outer local-IRQ critical section.
+ * These functions retain their own nested save/restore for safe standalone
+ * scheduler access and commit ownership only after successful insertion.
+ */
+syntra_status_t scheduler_create_owned_thread(
+    syntra_process_handle_t owner, unsigned int id, unsigned int priority,
+    syntra_thread_entry_t entry, void *argument, void *stack, size_t stack_size)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status;
+    if (owner.generation == 0U || owner.slot >= SYNTRA_MAX_PROCESSES)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+    status = scheduler_create_thread_unlocked(
+        id, priority, entry, argument, stack, stack_size);
+    if (status == SYNTRA_STATUS_OK)
+    {
+        int slot = scheduler_find_slot(id);
+        if (slot < 0)
+            status = SYNTRA_STATUS_ERROR;
+        else
+        {
+            threads[(unsigned int)slot].owner_process = owner;
+            threads[(unsigned int)slot].has_process_owner = 1U;
+        }
+    }
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_create_owned_user_thread(
+    syntra_process_handle_t owner, unsigned int id, unsigned int priority,
+    syntra_thread_entry_t entry, void *argument,
+    void *kernel_stack, size_t kernel_stack_size,
+    void *user_stack, size_t user_stack_size, void *cpu_context)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status;
+    if (owner.generation == 0U || owner.slot >= 64U)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+    status = scheduler_create_user_thread_unlocked(
+        id, priority, entry, argument, kernel_stack, kernel_stack_size,
+        user_stack, user_stack_size, cpu_context);
+    if (status == SYNTRA_STATUS_OK)
+    {
+        int slot = scheduler_find_slot(id);
+        if (slot < 0)
+            status = SYNTRA_STATUS_ERROR;
+        else
+        {
+            threads[(unsigned int)slot].owner_process = owner;
+            threads[(unsigned int)slot].has_process_owner = 1U;
+        }
+    }
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_get_process_thread_count(
+    syntra_process_handle_t owner, unsigned int *count_out)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    if (count_out == NULL || owner.generation == 0U || owner.slot >= 64U)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+    if (!scheduler_initialized)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_ERROR;
+    }
+    unsigned int count = 0U;
+    for (unsigned int i = 0U; i < thread_count; ++i)
+        if (threads[i].has_process_owner != 0U &&
+            threads[i].owner_process.slot == owner.slot &&
+            threads[i].owner_process.generation == owner.generation)
+            ++count;
+    *count_out = count;
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t scheduler_get_process_thread_snapshot(
+    syntra_process_handle_t owner, unsigned int index,
+    syntra_thread_t *snapshot)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    if (snapshot == NULL || owner.generation == 0U || owner.slot >= 64U)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+    if (!scheduler_initialized)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_ERROR;
+    }
+    unsigned int found = 0U;
+    for (unsigned int i = 0U; i < thread_count; ++i)
+    {
+        if (threads[i].has_process_owner != 0U &&
+            threads[i].owner_process.slot == owner.slot &&
+            threads[i].owner_process.generation == owner.generation)
+        {
+            if (found == index)
+            {
+                *snapshot = threads[i];
+                syntra_irq_restore(irq);
+                return SYNTRA_STATUS_OK;
+            }
+            ++found;
+        }
+    }
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_INVALID_ARGUMENT;
 }
 
 syntra_thread_t *scheduler_get_next_ready(void)
