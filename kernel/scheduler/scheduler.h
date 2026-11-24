@@ -36,6 +36,8 @@ typedef struct
 {
     syntra_thread_handle_t handle;
     uint64_t sequence;
+    /* State intent captured when the outgoing transition is staged. */
+    uint8_t terminal;
 } syntra_thread_switch_event_t;
 
 typedef enum
