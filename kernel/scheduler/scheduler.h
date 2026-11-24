@@ -169,11 +169,16 @@ syntra_status_t scheduler_set_thread_context(
 syntra_status_t scheduler_schedule_next_context(void **cpu_context_out);
 
 /*
- * Called by the ARM64 vector path only after SP_EL1 has switched to the
- * successor context. It publishes a bounded event; it never frees memory.
+ * Explicitly stage a BLOCKED/TERMINATED TCB known by the architecture layer
+ * to still be executing (bootstrap handoff). This records identity only.
  */
 syntra_status_t scheduler_prepare_switch_away(
     syntra_thread_handle_t handle);
+
+/*
+ * Called by the ARM64 vector path only after SP_EL1 has switched to the
+ * successor context. It publishes a bounded event; it never frees memory.
+ */
 syntra_status_t scheduler_complete_switch_away(void);
 syntra_status_t scheduler_take_switch_away_event(
     syntra_thread_switch_event_t *event_out);
