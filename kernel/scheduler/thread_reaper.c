@@ -95,6 +95,7 @@ syntra_status_t thread_reaper_dispatch(
                 status = scheduler_ack_switch_away_event(event);
                 if (status != SYNTRA_STATUS_OK)
                 {
+                    *processed_out = processed;
                     syntra_irq_restore(irq);
                     return status;
                 }
@@ -160,6 +161,7 @@ syntra_status_t thread_reaper_dispatch(
                 candidates[(unsigned int)existing_index] =
                     previous_candidate;
             }
+            *processed_out = processed;
             syntra_irq_restore(irq);
             return status;
         }
@@ -173,7 +175,14 @@ syntra_status_t thread_reaper_dispatch(
                 ++reaper_stats.quarantined;
         }
         else if (candidate_modified)
-            ++reaper_stats.quarantined;
+        {
+            if (previous_candidate.state == SYNTRA_REAPER_CANDIDATE_QUEUED)
+            {
+                if (reaper_stats.queued > 0U)
+                    --reaper_stats.queued;
+                ++reaper_stats.quarantined;
+            }
+        }
         else
             ++reaper_stats.discarded_nonterminal;
 
