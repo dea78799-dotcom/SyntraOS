@@ -86,6 +86,8 @@ int main(void)
     check("Register worker thread",
         scheduler_create_thread(2U, 0U, worker_entry, NULL,
             worker_stack, sizeof(worker_stack)) == SYNTRA_STATUS_OK);
+    check("Install worker exception context",
+        scheduler_set_thread_context(2U, &worker_context) == SYNTRA_STATUS_OK);
     check("Attach fake GIC",
         interrupt_init() == SYNTRA_STATUS_OK &&
         interrupt_controller_attach(&gic, NULL) == SYNTRA_STATUS_OK &&
