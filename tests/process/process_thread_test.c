@@ -34,7 +34,8 @@ int main(void)
     syntra_thread_t snapshot;
     syntra_thread_handle_t kernel_handle = {0U, 0U};
     syntra_thread_handle_t user_handle = {0U, 0U};
-    syntra_thread_handle_t owned_handle = {77U, 88U};
+    syntra_thread_handle_t owned_handle = {0U, 0U};
+    syntra_thread_handle_t failure_handle = {77U, 88U};
     syntra_thread_handle_t current_handle = {77U, 88U};
     unsigned int count = 99U;
 
@@ -171,14 +172,14 @@ int main(void)
     {
         syntra_memory_info_t before;
         syntra_memory_info_t after;
-        owned_handle.slot = 77U;
-        owned_handle.generation = 88U;
+        failure_handle.slot = 77U;
+        failure_handle.generation = 88U;
         memory_get_info(&before);
         check("Reject owned-thread creation for terminated process",
             process_thread_create_kernel_owned_with_handle(
                 other, 202U, 1U, thread_entry, NULL, 2048U,
-                &owned_handle) == SYNTRA_STATUS_PERMISSION_DENIED &&
-            owned_handle.slot == 77U && owned_handle.generation == 88U);
+                &failure_handle) == SYNTRA_STATUS_PERMISSION_DENIED &&
+            failure_handle.slot == 77U && failure_handle.generation == 88U);
         memory_get_info(&after);
         check("Terminated-process rejection allocates no stack",
             before.active_allocations == after.active_allocations);
