@@ -56,9 +56,10 @@ to a compatible allocator.
 
 ## 6. Next lifecycle design
 
-The separate design audit
-[`thread_exit_reclamation_v1.md`](thread_exit_reclamation_v1.md) defines the
-required two-stage lifecycle:
+The separate design audits
+[`thread_exit_reclamation_v1.md`](thread_exit_reclamation_v1.md) and
+[`thread_resource_ownership_v1.md`](thread_resource_ownership_v1.md) define
+the two-stage lifecycle and the explicit allocator-ownership contract:
 
 1. TERMINATED: the thread is no longer runnable.
 2. REAPABLE: the architecture has switched away and no active or saved context
