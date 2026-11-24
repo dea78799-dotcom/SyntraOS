@@ -3,6 +3,7 @@
 #include "../../kernel/process/process.h"
 #include "../../kernel/process/process_thread.h"
 #include "../../kernel/scheduler/scheduler.h"
+#include "../../kernel/memory/memory.h"
 
 static int failures;
 
@@ -28,19 +29,25 @@ int main(void)
     static unsigned char user_cpu_context[256];
     syntra_process_handle_t owner = {0U, 0U};
     syntra_process_handle_t other = {0U, 0U};
+    syntra_process_handle_t owned_process = {0U, 0U};
     syntra_process_handle_t invalid;
     syntra_thread_t snapshot;
     syntra_thread_handle_t kernel_handle = {0U, 0U};
     syntra_thread_handle_t user_handle = {0U, 0U};
+    syntra_thread_handle_t owned_handle = {0U, 0U};
+    syntra_thread_handle_t failure_handle = {77U, 88U};
     syntra_thread_handle_t current_handle = {77U, 88U};
     unsigned int count = 99U;
 
+    check("Initialize memory manager", memory_init() == SYNTRA_STATUS_OK);
     check("Initialize process manager", process_init() == SYNTRA_STATUS_OK);
     check("Initialize scheduler", scheduler_init() == SYNTRA_STATUS_OK);
     check("Create owner process",
         process_create_with_handle(10U, 4U, &owner) == SYNTRA_STATUS_OK);
     check("Create second process",
         process_create_with_handle(11U, 4U, &other) == SYNTRA_STATUS_OK);
+    check("Create process for allocator-owned thread tests",
+        process_create_with_handle(12U, 4U, &owned_process) == SYNTRA_STATUS_OK);
 
     check("Create first process-owned kernel thread and return handle",
         process_thread_create_kernel_with_handle(
@@ -72,6 +79,47 @@ int main(void)
     check("Create thread owned by second process",
         process_thread_create_kernel(other, 201U, 2U, thread_entry, NULL,
             stack_d, sizeof(stack_d)) == SYNTRA_STATUS_OK);
+    check("Create allocator-owned kernel thread transactionally",
+        process_thread_create_kernel_owned_with_handle(
+            owned_process, 301U, 2U, thread_entry, NULL, 3000U,
+            &owned_handle) == SYNTRA_STATUS_OK);
+    check("Owned thread handle resolves exact published TCB",
+        owned_handle.generation != 0U &&
+        scheduler_get_thread_snapshot_by_handle(owned_handle, &snapshot) ==
+            SYNTRA_STATUS_OK && snapshot.thread_id == 301U &&
+        snapshot.stack_ownership == SYNTRA_THREAD_STACK_OWNED &&
+        snapshot.stack_allocation.generation != 0U &&
+        snapshot.has_process_owner == 1U &&
+        snapshot.owner_process.slot == owned_process.slot &&
+        snapshot.owner_process.generation == owned_process.generation);
+    {
+        syntra_memory_allocation_t allocation_snapshot;
+        syntra_memory_allocation_handle_t token = snapshot.stack_allocation;
+        check("Owned TCB token resolves exact THREAD_OWNED allocation",
+            memory_get_allocation_by_handle(token, &allocation_snapshot) ==
+                SYNTRA_STATUS_OK &&
+            allocation_snapshot.ownership_state ==
+                SYNTRA_MEMORY_ALLOCATION_THREAD_OWNED &&
+            allocation_snapshot.owner.slot == owned_handle.slot &&
+            allocation_snapshot.owner.generation == owned_handle.generation &&
+            allocation_snapshot.address == (void *)snapshot.stack_base &&
+            allocation_snapshot.block_count * SYNTRA_MEMORY_BLOCK_SIZE >=
+                snapshot.stack_size);
+    }
+    {
+        syntra_memory_info_t before;
+        syntra_memory_info_t after;
+        memory_get_info(&before);
+        check("Duplicate owned-thread ID fails without publishing",
+            process_thread_create_kernel_owned_with_handle(
+                owner, 100U, 1U, thread_entry, NULL, 2048U,
+                &owned_handle) == SYNTRA_STATUS_INVALID_ARGUMENT);
+        memory_get_info(&after);
+        check("Failed owned-thread transaction releases staged allocation",
+            before.active_allocations == after.active_allocations &&
+            scheduler_validate() == SYNTRA_STATUS_OK);
+    }
+
     check("Count exact owner threads",
         process_thread_get_count(owner, &count) == SYNTRA_STATUS_OK &&
         count == 3U);
@@ -121,6 +169,26 @@ int main(void)
     check("Reject thread creation for terminated process",
         process_thread_create_kernel(other, 200U, 1U, thread_entry, NULL,
             stack_c, sizeof(stack_c)) == SYNTRA_STATUS_PERMISSION_DENIED);
+    {
+        syntra_memory_info_t before;
+        syntra_memory_info_t after;
+        failure_handle.slot = 77U;
+        failure_handle.generation = 88U;
+        memory_get_info(&before);
+        check("Reject owned-thread creation for terminated process",
+            process_thread_create_kernel_owned_with_handle(
+                other, 202U, 1U, thread_entry, NULL, 2048U,
+                &failure_handle) == SYNTRA_STATUS_PERMISSION_DENIED &&
+            failure_handle.slot == 77U && failure_handle.generation == 88U);
+        memory_get_info(&after);
+        check("Terminated-process rejection allocates no stack",
+            before.active_allocations == after.active_allocations);
+    }
+    check("Reject undersized owned kernel stack before allocation",
+        process_thread_create_kernel_owned_with_handle(
+            owner, 203U, 1U, thread_entry, NULL, 512U,
+            &owned_handle) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
 
     check("Current handle is unavailable before scheduling and output is unchanged",
         scheduler_get_current_handle(&current_handle) == SYNTRA_STATUS_ERROR &&
@@ -175,6 +243,15 @@ int main(void)
         snapshot.has_process_owner == 0U &&
         snapshot.owner_process.slot == 0U &&
         snapshot.owner_process.generation == 0U);
+
+    check("Terminate process containing allocator-owned thread",
+        process_thread_terminate_process(owned_process) == SYNTRA_STATUS_OK &&
+        scheduler_get_thread_snapshot_by_handle(owned_handle, &snapshot) ==
+            SYNTRA_STATUS_OK && snapshot.state == THREAD_TERMINATED);
+    check("Owned stack remains accounted until deferred reaper exists",
+        memory_get_allocation_by_handle(snapshot.stack_allocation,
+            &(syntra_memory_allocation_t){0}) == SYNTRA_STATUS_OK &&
+        memory_validate() == SYNTRA_STATUS_OK);
     check("Scheduler invariants remain valid",
         scheduler_validate() == SYNTRA_STATUS_OK);
 

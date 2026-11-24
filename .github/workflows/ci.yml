@@ -25,10 +25,12 @@ on:
       - design/d3-scheduler-resource-integration-v1
       - feat/d3-thread-resource-descriptor-v1
       - feat/d3-scheduler-reservation-transaction-v1
+      - feat/d3-owned-kernel-thread-coordinator-v1
 
   pull_request:
     branches:
       - main
+      - feat/d3-owned-kernel-thread-coordinator-v1
 
   # Run a health check every day at 02:00 UTC (09:00 Vietnam time).
   schedule:
