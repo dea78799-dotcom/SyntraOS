@@ -14,7 +14,7 @@ The scheduler exposes three operations:
 
 - `scheduler_peek_switch_away_event()` copies the FIFO head without consuming it.
 - `scheduler_ack_switch_away_event(event)` consumes only if the exact handle and sequence still match the FIFO head.
-- `scheduler_take_switch_away_event()` remains as a compatibility wrapper over peek plus exact acknowledgement.
+- `scheduler_take_switch_away_event()` remains an atomic compatibility dequeue; the new peek/ack pair is used by the dispatcher.
 
 The exact acknowledgement prevents a consumer from accidentally removing a different proof event after inspecting the head. The scheduler FIFO remains bounded and retains its fail-closed overflow behavior.
 
