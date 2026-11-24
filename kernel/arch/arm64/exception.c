@@ -359,7 +359,18 @@ syntra_arm64_exception_handle_and_select(
             (void)scheduler_set_thread_context(current_snapshot.thread_id, context);
 
         if (scheduler_schedule_next_context(&next_context) != SYNTRA_STATUS_OK)
+        {
+            /*
+             * No runnable saved context exists. Returning the interrupted
+             * frame would resume a thread that has already terminated or
+             * blocked. Leave the return cookie invalid so vectors.S takes
+             * its non-returning exception-halt path instead.
+             *
+             * This is a deterministic prototype stop, not an idle thread.
+             */
+            context->reserved = 0U;
             return context;
+        }
         return (syntra_arm64_exception_context_t *)next_context;
     }
 
