@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "../core/status.h"
+#include "../process/process_handle.h"
 
 #define SYNTRA_MAX_THREADS 32U
 #define SYNTRA_THREAD_MIN_STACK_SIZE 1024U
@@ -39,9 +40,29 @@ typedef struct
 
     /* Architecture layer stores the saved ARM64 exception frame here. */
     void *cpu_context;
+
+    /* Exact process identity; zeroed when has_process_owner is false. */
+    syntra_process_handle_t owner_process;
+    uint8_t has_process_owner;
 } syntra_thread_t;
 
 syntra_status_t scheduler_init(void);
+
+/* Internal ownership-aware entry points; call through process_thread API. */
+syntra_status_t scheduler_create_owned_thread(
+    syntra_process_handle_t owner, unsigned int thread_id,
+    unsigned int priority, syntra_thread_entry_t entry, void *argument,
+    void *stack, size_t stack_size);
+syntra_status_t scheduler_create_owned_user_thread(
+    syntra_process_handle_t owner, unsigned int thread_id,
+    unsigned int priority, syntra_thread_entry_t entry, void *argument,
+    void *kernel_stack, size_t kernel_stack_size,
+    void *user_stack, size_t user_stack_size, void *cpu_context);
+syntra_status_t scheduler_get_process_thread_count(
+    syntra_process_handle_t owner, unsigned int *count_out);
+syntra_status_t scheduler_get_process_thread_snapshot(
+    syntra_process_handle_t owner, unsigned int index,
+    syntra_thread_t *snapshot);
 
 /* Metadata-only compatibility API, useful for scheduler policy tests. */
 syntra_status_t scheduler_add_thread(
