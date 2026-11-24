@@ -39,8 +39,14 @@ remaining scheduler/exception references.
 - The timer IRQ exception bridge can later select another READY thread when
   context switching is active. The exit trampoline itself does not synchronously
   switch stacks or prove that the old stack is no longer referenced.
-- If no eligible context exists, the current exit path remains waiting. This
-  is a safe stop for the prototype, not a complete thread-exit/reaper protocol.
+- When the IRQ bridge finds no eligible saved context, it invalidates the
+  exception-return cookie. The assembly return path then enters its permanent
+  WFE halt path instead of restoring the interrupted frame. This is a
+  deterministic prototype stop, not an idle-thread implementation.
+- The QEMU scheduler integration test exercises natural return from both
+  worker entry functions and verifies that the boot thread resumes after the
+  second worker exits. The host scheduler test covers the empty eligible-context
+  selection case.
 
 ### Process termination interaction
 
@@ -106,11 +112,15 @@ A thread must not become REAPABLE merely because its TCB says TERMINATED.
 ## 6. Implementation phases
 
 ### Phase A — Exit-path correctness
-- Audit the ARM64 timer/exception return contract.
-- Make thread return and explicit thread exit converge on one non-returning
-  scheduler handoff.
-- Add tests proving a returned thread is never selected again.
-- Define behavior when no successor is runnable (idle thread requirement).
+- [x] Audit the ARM64 timer/exception return contract.
+- [x] Prevent the IRQ bridge from restoring a terminated/blocked frame when
+  no successor context is eligible; invalidate the return cookie and halt.
+- [x] Verify natural kernel-thread return hands off to another thread in QEMU.
+- [x] Verify the scheduler reports no context and leaves no current thread
+  when all remaining entries are terminal or lack saved contexts.
+- [ ] Implement a real idle thread. Until then, no-successor behavior is a
+  deliberate permanent halt and must not be described as idle scheduling.
+- [ ] Add a dedicated QEMU negative-path test for the no-successor halt.
 
 ### Phase B — Resource ownership metadata
 - Introduce explicit borrowed-versus-owned resource descriptors.
