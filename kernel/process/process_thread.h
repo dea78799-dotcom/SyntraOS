@@ -10,6 +10,13 @@
  * Coordinated process-owned thread creation.
  * Stacks and CPU contexts remain caller-owned in this phase.
  */
+syntra_status_t process_thread_create_kernel_with_handle(
+    syntra_process_handle_t owner, unsigned int thread_id,
+    unsigned int priority, syntra_thread_entry_t entry, void *argument,
+    void *kernel_stack, size_t kernel_stack_size,
+    syntra_thread_handle_t *handle_out
+);
+
 syntra_status_t process_thread_create_kernel(
     syntra_process_handle_t owner,
     unsigned int thread_id,
@@ -18,6 +25,14 @@ syntra_status_t process_thread_create_kernel(
     void *argument,
     void *kernel_stack,
     size_t kernel_stack_size
+);
+
+syntra_status_t process_thread_create_user_with_handle(
+    syntra_process_handle_t owner, unsigned int thread_id,
+    unsigned int priority, syntra_thread_entry_t entry, void *argument,
+    void *kernel_stack, size_t kernel_stack_size,
+    void *user_stack, size_t user_stack_size, void *cpu_context,
+    syntra_thread_handle_t *handle_out
 );
 
 syntra_status_t process_thread_create_user(
