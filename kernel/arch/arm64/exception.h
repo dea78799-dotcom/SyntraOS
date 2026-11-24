@@ -206,6 +206,9 @@ syntra_arm64_exception_handle_and_select(
     syntra_arm64_exception_context_t *context
 );
 
+/* Assembly invokes this only after installing the successor SP_EL1. */
+void syntra_arm64_thread_switch_complete(void);
+
 /* Read-only access to the most recently captured exception snapshot. */
 const syntra_arm64_exception_context_t *
 syntra_arm64_exception_get_last_context(void);
