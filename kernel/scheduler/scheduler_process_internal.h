@@ -7,16 +7,17 @@
  * Private Process/Thread coordinator boundary.
  * Do not call these functions from drivers or ordinary kernel clients.
  */
-syntra_status_t scheduler_create_owned_thread(
+syntra_status_t scheduler_create_owned_thread_with_handle(
     syntra_process_handle_t owner, unsigned int thread_id,
     unsigned int priority, syntra_thread_entry_t entry, void *argument,
-    void *stack, size_t stack_size);
+    void *stack, size_t stack_size, syntra_thread_handle_t *handle_out);
 
-syntra_status_t scheduler_create_owned_user_thread(
+syntra_status_t scheduler_create_owned_user_thread_with_handle(
     syntra_process_handle_t owner, unsigned int thread_id,
     unsigned int priority, syntra_thread_entry_t entry, void *argument,
     void *kernel_stack, size_t kernel_stack_size,
-    void *user_stack, size_t user_stack_size, void *cpu_context);
+    void *user_stack, size_t user_stack_size, void *cpu_context,
+    syntra_thread_handle_t *handle_out);
 
 syntra_status_t scheduler_terminate_process_threads(
     syntra_process_handle_t owner);
