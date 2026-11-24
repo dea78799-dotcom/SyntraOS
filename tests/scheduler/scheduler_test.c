@@ -127,6 +127,19 @@ int main(void)
             scheduler_ack_switch_away_event(&event) == SYNTRA_STATUS_OK);
         check("Acknowledged event is no longer at FIFO head",
             scheduler_peek_switch_away_event(&event) == SYNTRA_STATUS_ERROR);
+        check("Peek rejects NULL output",
+            scheduler_peek_switch_away_event(NULL) ==
+                SYNTRA_STATUS_INVALID_ARGUMENT);
+        check("Ack rejects NULL expected event",
+            scheduler_ack_switch_away_event(NULL) ==
+                SYNTRA_STATUS_INVALID_ARGUMENT);
+        {
+            syntra_thread_switch_event_t invalid = event;
+            invalid.handle.generation = 0U;
+            check("Ack rejects invalid generation identity",
+                scheduler_ack_switch_away_event(&invalid) ==
+                    SYNTRA_STATUS_INVALID_ARGUMENT);
+        }
     }
     check("Wake blocked thread",
         scheduler_wake_thread(1U) == SYNTRA_STATUS_OK);
