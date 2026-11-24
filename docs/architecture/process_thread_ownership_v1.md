@@ -51,3 +51,13 @@ builds Debug and Release configurations and verifies the ARM64 ELF/QEMU path.
 - No automatic process-to-thread termination cascade.
 - No authenticated IPC endpoints.
 - No SMP-safe locking or production-readiness claim.
+
+
+## ARM64 QEMU integration
+
+The ARM64 image now compiles the Process Manager and Process/Thread coordinator.
+The boot smoke test initializes the manager after the scheduler context-switch
+test, creates a process-owned kernel thread, and verifies its owner handle and
+owner-specific count through snapshot APIs. The probe thread is registered but
+not executed. This checks runtime linkage and metadata coordination on QEMU; it
+does not establish user-mode process isolation or thread teardown semantics.
