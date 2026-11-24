@@ -1,4 +1,5 @@
 #include "process_thread.h"
+#include "../scheduler/scheduler_process_internal.h"
 #include "process.h"
 #include "../arch/irq.h"
 
