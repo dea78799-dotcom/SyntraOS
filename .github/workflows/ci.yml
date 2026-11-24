@@ -17,6 +17,7 @@ on:
       - feat/thread-identity-v1
       - feat/thread-handle-owned-api-v1
       - design/thread-switch-away-proof-v1
+      - feat/thread-switch-away-proof-v1
 
   pull_request:
     branches:

@@ -27,6 +27,16 @@ typedef struct
     uint32_t generation;
 } syntra_thread_handle_t;
 
+/*
+ * Evidence emitted only after ARM64 has installed a successor SP_EL1.
+ * The sequence distinguishes repeated switches by the same thread handle.
+ */
+typedef struct
+{
+    syntra_thread_handle_t handle;
+    uint64_t sequence;
+} syntra_thread_switch_event_t;
+
 typedef struct
 {
     /* Stable scheduler-slot identity; generation is nonzero when occupied. */
@@ -157,6 +167,21 @@ syntra_status_t scheduler_set_thread_context(
 
 /* Select the next context-aware thread and return only its saved context. */
 syntra_status_t scheduler_schedule_next_context(void **cpu_context_out);
+
+/*
+ * Explicitly stage a BLOCKED/TERMINATED TCB known by the architecture layer
+ * to still be executing (bootstrap handoff). This records identity only.
+ */
+syntra_status_t scheduler_prepare_switch_away(
+    syntra_thread_handle_t handle);
+
+/*
+ * Called by the ARM64 vector path only after SP_EL1 has switched to the
+ * successor context. It publishes a bounded event; it never frees memory.
+ */
+syntra_status_t scheduler_complete_switch_away(void);
+syntra_status_t scheduler_take_switch_away_event(
+    syntra_thread_switch_event_t *event_out);
 
 /*
  * Legacy mutable-pointer accessors retained for compatibility only.

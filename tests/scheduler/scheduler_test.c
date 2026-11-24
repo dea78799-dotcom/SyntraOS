@@ -84,21 +84,48 @@ int main(void)
     check("Round-robin wraps to first thread",
         thread != NULL && thread->thread_id == 1U);
 
-    check("Block current thread",
-        scheduler_block_current() == SYNTRA_STATUS_OK);
-    check("Blocked thread is not selected",
-        scheduler_schedule_next() != NULL &&
-        scheduler_get_current()->thread_id == 2U);
+    {
+        syntra_thread_t outgoing_snapshot;
+        syntra_thread_switch_event_t event;
+
+        check("Capture blocked thread identity before detaching current slot",
+            scheduler_get_thread_snapshot(1U, &outgoing_snapshot) ==
+                SYNTRA_STATUS_OK);
+        check("Block current thread",
+            scheduler_block_current() == SYNTRA_STATUS_OK);
+        check("Blocked thread is not selected",
+            scheduler_schedule_next() != NULL &&
+            scheduler_get_current()->thread_id == 2U);
+        check("Publish blocked-thread switch proof",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+        check("Consume exact blocked-thread switch event",
+            scheduler_take_switch_away_event(&event) == SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(event.handle, outgoing_snapshot.handle) &&
+            event.sequence != 0U);
+    }
     check("Wake blocked thread",
         scheduler_wake_thread(1U) == SYNTRA_STATUS_OK);
 
-    check("Terminate current thread",
-        scheduler_terminate_current() == SYNTRA_STATUS_OK);
-    check("Terminated thread remains terminated",
-        scheduler_get_thread(2U)->state == THREAD_TERMINATED);
-    check("Next READY thread is scheduled",
-        scheduler_schedule_next() != NULL &&
-        scheduler_get_current()->thread_id == 1U);
+    {
+        syntra_thread_t outgoing_snapshot;
+        syntra_thread_switch_event_t event;
+        check("Capture terminating thread identity",
+            scheduler_get_thread_snapshot(2U, &outgoing_snapshot) ==
+                SYNTRA_STATUS_OK);
+        check("Terminate current thread",
+            scheduler_terminate_current() == SYNTRA_STATUS_OK);
+        check("Terminated thread remains terminated",
+            scheduler_get_thread(2U)->state == THREAD_TERMINATED);
+        check("Next READY thread is scheduled",
+            scheduler_schedule_next() != NULL &&
+            scheduler_get_current()->thread_id == 1U);
+        check("Publish terminated-thread switch proof",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+        check("Consume exact terminated-thread switch event",
+            scheduler_take_switch_away_event(&event) == SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(event.handle, outgoing_snapshot.handle) &&
+            event.sequence != 0U);
+    }
 
     check("Thread count remains consistent",
         scheduler_get_thread_count() == 2U);
@@ -184,8 +211,26 @@ int main(void)
         if (context_thread != NULL)
             context_thread->state = THREAD_READY;
 
-        selected = scheduler_schedule_next_with_context();
-        check("Context-aware selection skips metadata-only READY thread",
+        {
+            void *selected_context = NULL;
+            syntra_thread_t outgoing_snapshot;
+            syntra_thread_switch_event_t event;
+            (void)scheduler_get_thread_snapshot(1U, &outgoing_snapshot);
+            check("Context-aware selection skips metadata-only READY thread",
+                scheduler_schedule_next_context(&selected_context) ==
+                    SYNTRA_STATUS_OK &&
+                selected_context == context_thread->cpu_context &&
+                scheduler_get_current() != NULL &&
+                scheduler_get_current()->thread_id == 4U);
+            check("Publish outgoing thread proof after simulated stack handoff",
+                scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+            check("Context switch event identifies exact outgoing generation",
+                scheduler_take_switch_away_event(&event) == SYNTRA_STATUS_OK &&
+                scheduler_thread_handle_equal(event.handle, outgoing_snapshot.handle) &&
+                event.sequence != 0U);
+        }
+        selected = scheduler_get_current();
+        check("Context-aware selection marks successor RUNNING",
             selected != NULL && selected->thread_id == 4U &&
             selected->cpu_context != NULL &&
             selected->state == THREAD_RUNNING);
@@ -215,6 +260,22 @@ int main(void)
     }
 
     {
+        void *resumed_context = NULL;
+        syntra_thread_t *context_thread = scheduler_get_thread(4U);
+
+        check("Block current thread for wake-before-switch case",
+            scheduler_block_current() == SYNTRA_STATUS_OK);
+        check("Wake thread before a successor stack is installed",
+            scheduler_wake_thread(4U) == SYNTRA_STATUS_OK);
+        check("Scheduler may resume the same exact thread context",
+            scheduler_schedule_next_context(&resumed_context) == SYNTRA_STATUS_OK &&
+            context_thread != NULL &&
+            resumed_context == context_thread->cpu_context);
+        check("Same-thread resume cancels stale switch-away proof",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_ERROR);
+    }
+
+    {
         syntra_thread_t snapshot_a;
         syntra_thread_t snapshot_b;
 
@@ -224,8 +285,16 @@ int main(void)
         check("Terminate remaining metadata-only thread",
             scheduler_set_thread_state(1U, THREAD_TERMINATED) ==
                 SYNTRA_STATUS_OK);
-        check("No-successor context selection returns no context",
-            scheduler_schedule_next_with_context() == NULL);
+        {
+            void *no_context = NULL;
+            syntra_thread_switch_event_t no_event;
+            check("No-successor context selection returns no context",
+                scheduler_schedule_next_context(&no_context) ==
+                    SYNTRA_STATUS_ERROR && no_context == NULL);
+            check("No-successor does not publish switch-away proof",
+                scheduler_take_switch_away_event(&no_event) ==
+                    SYNTRA_STATUS_ERROR);
+        }
         check("No-successor leaves no current thread",
             scheduler_get_current() == NULL);
         check("Terminated threads remain terminal after empty selection",

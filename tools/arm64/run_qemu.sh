@@ -46,6 +46,7 @@ if grep -Fq "SyntraOS boot OK" "$LOG_FILE" &&
    grep -Fq "PASS: ARM64 Generic Timer IRQ delivered 3 ticks" "$LOG_FILE" &&
    grep -Fq "PASS: ARM64 Scheduler switched between two threads" "$LOG_FILE" &&
    grep -Fq "PASS: ARM64 natural thread return handed off to successor" "$LOG_FILE" &&
+   grep -Fq "Thread switch-away proof: PUBLISHED" "$LOG_FILE" &&
    grep -Eq "Scheduler trace: AB(AB)+" "$LOG_FILE" &&
    grep -Eq "MMU identity mapping audit: PASS entries=0x0*[1-9a-fA-F][0-9a-fA-F]* root=0x0*[1-9a-fA-F][0-9a-fA-F]*" "$LOG_FILE" &&
    grep -Eq "MMU activation: PASS SCTLR_EL1.M=1 TTBR0_EL1=0x0*[1-9a-fA-F][0-9a-fA-F]*" "$LOG_FILE" &&

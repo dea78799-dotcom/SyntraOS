@@ -462,7 +462,7 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
         syntra_uart_put_hex((uint64_t)metadata.dtb_start);
         syntra_uart_puts(" size=");
         syntra_uart_put_hex((uint64_t)metadata.dtb_size);
-        syntra_uart_puts("\\n");
+        syntra_uart_puts("\n");
     }
 
     status = syntra_arm64_memory_map_discover(
@@ -755,7 +755,6 @@ static void syntra_scheduler_test_worker(void *argument)
     unsigned int worker_id = (unsigned int)(uintptr_t)argument;
     unsigned int worker_index = worker_id - SYNTRA_SCHEDULER_TEST_WORKER_A_ID;
     uint64_t observed_tick = timer_get_ticks();
-
     for (;;)
     {
         uint64_t current_tick;
@@ -806,6 +805,9 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
 {
     syntra_status_t status;
     syntra_arm64_exception_context_t *initial_context = NULL;
+    syntra_thread_switch_event_t switch_event;
+    unsigned int switch_proof_count = 0U;
+    uint64_t last_switch_sequence = 0U;
 
     scheduler_test_completed = 0U;
     scheduler_test_last_worker = 0U;
@@ -878,15 +880,54 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
     (void)syntra_arm64_timer_disable();
     (void)interrupt_disable(30U);
 
-    if (scheduler_test_completed != 2U ||
-        scheduler_test_worker_slices[0] == 0U ||
-        scheduler_test_worker_slices[1] == 0U ||
-        scheduler_test_switches < 2U ||
-        scheduler_test_trace_length < 4U ||
-        scheduler_validate() != SYNTRA_STATUS_OK)
+    /*
+     * Drain the bounded proof queue from the resumed boot thread, not from
+     * IRQ context. The post-SP hook itself performs metadata publication only.
+     */
+    while (scheduler_take_switch_away_event(&switch_event) == SYNTRA_STATUS_OK)
     {
-        syntra_uart_puts("FAIL: ARM64 Scheduler context switch validation\n");
+        if (switch_event.handle.generation == 0U ||
+            switch_event.sequence == 0U ||
+            switch_event.sequence <= last_switch_sequence)
+        {
+            syntra_uart_puts("Thread switch-away proof validation: FAIL\n");
+            return SYNTRA_STATUS_ERROR;
+        }
+        last_switch_sequence = switch_event.sequence;
+        ++switch_proof_count;
+    }
+    if (switch_proof_count == 0U)
+    {
+        syntra_uart_puts("Thread switch-away proof validation: FAIL\n");
         return SYNTRA_STATUS_ERROR;
+    }
+    syntra_uart_puts("Thread switch-away proof: PUBLISHED\n");
+
+    {
+        syntra_status_t validation_status = scheduler_validate();
+        if (scheduler_test_completed != 2U ||
+            scheduler_test_worker_slices[0] == 0U ||
+            scheduler_test_worker_slices[1] == 0U ||
+            scheduler_test_switches < 2U ||
+            scheduler_test_trace_length < 4U ||
+            validation_status != SYNTRA_STATUS_OK)
+        {
+            syntra_uart_puts("Scheduler diagnostics: completed=");
+            syntra_uart_put_hex(scheduler_test_completed);
+            syntra_uart_puts(" slicesA=");
+            syntra_uart_put_hex(scheduler_test_worker_slices[0]);
+            syntra_uart_puts(" slicesB=");
+            syntra_uart_put_hex(scheduler_test_worker_slices[1]);
+            syntra_uart_puts(" switches=");
+            syntra_uart_put_hex(scheduler_test_switches);
+            syntra_uart_puts(" trace_length=");
+            syntra_uart_put_hex(scheduler_test_trace_length);
+            syntra_uart_puts(" validate=");
+            syntra_uart_put_hex((uint64_t)validation_status);
+            syntra_uart_puts("\n");
+            syntra_uart_puts("FAIL: ARM64 Scheduler context switch validation\n");
+            return SYNTRA_STATUS_ERROR;
+        }
     }
 
     for (unsigned int i = 1U; i < scheduler_test_trace_length; ++i)
@@ -1158,7 +1199,7 @@ static syntra_status_t syntra_arm64_run_el0_hello_test(void)
     syntra_uart_put_hex((stack.page_descriptor >> 8U) & 3U);
     syntra_uart_puts(" UXN=");
     syntra_uart_put_hex((stack.page_descriptor >> 54U) & 1U);
-    syntra_uart_puts("\\n");
+    syntra_uart_puts("\n");
     if (((code.page_descriptor >> 10U) & 1U) != 1U ||
         ((code.page_descriptor >> 6U) & 3U) != 3U ||
         ((code.page_descriptor >> 8U) & 3U) != 3U ||

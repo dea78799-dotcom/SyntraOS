@@ -290,6 +290,16 @@ int syntra_arm64_exception_has_last_context(void)
 }
 
 
+/*
+ * Called from vectors.S only after SP_EL1 has been changed to the selected
+ * successor frame. This publishes proof metadata; it never reclaims memory.
+ */
+void syntra_arm64_thread_switch_complete(void)
+{
+    /* No logging or allocation in this post-switch exception hook. */
+    (void)scheduler_complete_switch_away();
+}
+
 /* ARM64 exception-to-scheduler bridge. */
 #define SYNTRA_ARM64_BOOT_THREAD_ID 1U
 static int scheduler_context_switching_active;
@@ -339,6 +349,7 @@ syntra_arm64_exception_handle_and_select(
         if (scheduler_set_thread_context(
                 SYNTRA_ARM64_BOOT_THREAD_ID, context) != SYNTRA_STATUS_OK)
             return NULL;
+
         context->reserved = SYNTRA_ARM64_IRQ_RETURN_MAGIC;
         scheduler_context_switching_active = 1;
 
@@ -347,6 +358,18 @@ syntra_arm64_exception_handle_and_select(
             (void)scheduler_set_thread_state(
                 SYNTRA_ARM64_BOOT_THREAD_ID, THREAD_RUNNING);
             scheduler_context_switching_active = 0;
+            return context;
+        }
+
+        /*
+         * The boot TCB remains BLOCKED so round-robin scheduling cannot
+         * select it until both test workers wake it. The SVC is still running
+         * on the boot stack, so stage that exact handle explicitly before
+         * assembly installs the selected worker SP_EL1.
+         */
+        if (scheduler_prepare_switch_away(boot_snapshot.handle) != SYNTRA_STATUS_OK)
+        {
+            context->reserved = 0U;
             return context;
         }
         return (syntra_arm64_exception_context_t *)next_context;
@@ -361,13 +384,18 @@ syntra_arm64_exception_handle_and_select(
         if (scheduler_schedule_next_context(&next_context) != SYNTRA_STATUS_OK)
         {
             /*
-             * No runnable saved context exists. Returning the interrupted
-             * frame would resume a thread that has already terminated or
-             * blocked. Leave the return cookie invalid so vectors.S takes
-             * its non-returning exception-halt path instead.
-             *
-             * This is a deterministic prototype stop, not an idle thread.
+             * A full completion queue can reject a preemption before the
+             * scheduler changes current_slot. If the interrupted thread is
+             * still RUNNING, resume it without switching. If it was already
+             * blocked/terminated, no successor proof exists and we halt.
              */
+            if (scheduler_get_current_snapshot(&current_snapshot) == SYNTRA_STATUS_OK &&
+                current_snapshot.state == THREAD_RUNNING)
+            {
+                context->reserved = SYNTRA_ARM64_IRQ_RETURN_MAGIC;
+                return context;
+            }
+
             context->reserved = 0U;
             return context;
         }
