@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      # Run the full validation suite on the active stacked process-identity branch.
+      - design/process-identity-lifecycle-v1
 
   pull_request:
     branches:
