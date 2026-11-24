@@ -148,13 +148,24 @@ int main(void)
         SYNTRA_PAGE_OWNER_DRIVER) == SYNTRA_STATUS_OK);
     {
         syntra_page_owner_t owner = SYNTRA_PAGE_OWNER_NONE;
+        syntra_page_allocator_stats_t stats;
         assert(syntra_page_get_owner(first, &owner) == SYNTRA_STATUS_OK);
         assert(owner == SYNTRA_PAGE_OWNER_DRIVER);
         assert(syntra_page_get_owner(first + SYNTRA_PAGE_SIZE, &owner) == SYNTRA_STATUS_OK);
         assert(owner == SYNTRA_PAGE_OWNER_DRIVER);
+        assert(syntra_page_allocator_get_stats(&stats) == SYNTRA_STATUS_OK);
+        assert(stats.total_pages == 4U);
+        assert(stats.free_pages == 2U);
+        assert(stats.allocated_pages == 2U);
+        assert(stats.owner_pages[SYNTRA_PAGE_OWNER_DRIVER] == 2U);
+        assert(stats.owner_pages[SYNTRA_PAGE_OWNER_KERNEL] == 0U);
         assert(syntra_page_free_owned(first, SYNTRA_PAGE_OWNER_DRIVER) == SYNTRA_STATUS_OK);
         assert(syntra_page_free_owned(first + SYNTRA_PAGE_SIZE,
             SYNTRA_PAGE_OWNER_DRIVER) == SYNTRA_STATUS_OK);
+        assert(syntra_page_allocator_get_stats(&stats) == SYNTRA_STATUS_OK);
+        assert(stats.free_pages == 4U);
+        assert(stats.allocated_pages == 0U);
+        assert(stats.owner_pages[SYNTRA_PAGE_OWNER_DRIVER] == 0U);
     }
     assert(syntra_page_alloc_contiguous(2U, &first) == SYNTRA_STATUS_OK);
     assert(first == (uintptr_t)0x40000000U);
