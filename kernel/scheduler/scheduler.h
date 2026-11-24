@@ -191,6 +191,11 @@ syntra_status_t scheduler_prepare_switch_away(
  * successor context. It publishes a bounded event; it never frees memory.
  */
 syntra_status_t scheduler_complete_switch_away(void);
+/* Non-destructive FIFO head inspection and exact-event acknowledgement. */
+syntra_status_t scheduler_peek_switch_away_event(
+    syntra_thread_switch_event_t *event_out);
+syntra_status_t scheduler_ack_switch_away_event(
+    syntra_thread_switch_event_t event);
 syntra_status_t scheduler_take_switch_away_event(
     syntra_thread_switch_event_t *event_out);
 
