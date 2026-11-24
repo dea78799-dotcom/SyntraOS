@@ -18,6 +18,9 @@ syntra_status_t scheduler_create_owned_user_thread(
     void *kernel_stack, size_t kernel_stack_size,
     void *user_stack, size_t user_stack_size, void *cpu_context);
 
+syntra_status_t scheduler_terminate_process_threads(
+    syntra_process_handle_t owner);
+
 syntra_status_t scheduler_get_process_thread_count(
     syntra_process_handle_t owner, unsigned int *count_out);
 

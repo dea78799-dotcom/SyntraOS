@@ -44,6 +44,24 @@ terminated-process rejection, owner-specific enumeration, failed-create
 atomicity, and compatibility with unowned scheduler threads. Full CI also
 builds Debug and Release configurations and verifies the ARM64 ELF/QEMU path.
 
+## Process termination cascade V1
+
+Use `process_thread_terminate_process(handle)` as the canonical lifecycle
+operation. It validates the exact process handle, terminates every scheduler
+thread whose owner slot and generation both match, clears `current_slot` if
+the current thread belongs to that process, and then marks the process record
+terminated. A repeated call is permitted and still terminates leftover active
+threads when the process was previously marked terminated through a legacy
+metadata-only API.
+
+The lower-level `process_set_state_by_handle()`, `process_set_state()`, and
+`process_terminate()` APIs remain compatibility metadata operations; they do
+not perform a scheduler cascade. New lifecycle code must use the coordinator.
+
+The cascade does not remove thread records, free stacks or CPU contexts, or
+reuse process slots. It is serialized only for the current single-core ARM64
+target through local IRQ masking; it is not SMP-safe.
+
 ## Explicit limitations
 
 - No thread exit/reaping or slot reuse.

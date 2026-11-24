@@ -343,6 +343,11 @@ static syntra_status_t scheduler_set_thread_state_unlocked(
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
 
+    /* Terminated TCBs are terminal in this lifecycle phase. */
+    if (threads[(unsigned int)slot].state == THREAD_TERMINATED &&
+        new_state != THREAD_TERMINATED)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
     if (new_state == THREAD_RUNNING)
     {
         if (current_slot >= 0 && current_slot != slot &&
@@ -658,6 +663,44 @@ syntra_status_t scheduler_create_owned_user_thread(
     }
     syntra_irq_restore(irq);
     return status;
+}
+
+/*
+ * Mark every thread owned by the exact process generation as terminated.
+ * Thread records and caller-owned stacks remain reserved; no reaping occurs.
+ * If the current thread belongs to this process, clear current_slot so the
+ * scheduler cannot resume it. Caller holds the outer coordinator IRQ guard.
+ */
+syntra_status_t scheduler_terminate_process_threads(
+    syntra_process_handle_t owner)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    if (owner.generation == 0U || owner.slot >= SYNTRA_MAX_PROCESSES)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+    if (!scheduler_initialized)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    for (unsigned int i = 0U; i < thread_count; ++i)
+    {
+        syntra_thread_t *thread = &threads[i];
+        if (thread->has_process_owner != 0U &&
+            thread->owner_process.slot == owner.slot &&
+            thread->owner_process.generation == owner.generation)
+        {
+            thread->state = THREAD_TERMINATED;
+            if (current_slot == (int)i)
+                current_slot = -1;
+        }
+    }
+
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t scheduler_get_process_thread_count(

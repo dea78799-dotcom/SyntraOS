@@ -43,6 +43,7 @@ static syntra_status_t syntra_arm64_process_thread_ownership_test(void)
 {
     syntra_process_handle_t owner = {0U, 0U};
     syntra_thread_t snapshot;
+    syntra_process_t process_snapshot;
     unsigned int thread_count = 0U;
     syntra_status_t status;
 
@@ -73,7 +74,20 @@ static syntra_status_t syntra_arm64_process_thread_ownership_test(void)
         snapshot.owner_process.generation != owner.generation)
         return SYNTRA_STATUS_ERROR;
 
+    status = process_thread_terminate_process(owner);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    status = process_thread_get_snapshot(owner, 0U, &snapshot);
+    if (status != SYNTRA_STATUS_OK || snapshot.state != THREAD_TERMINATED)
+        return SYNTRA_STATUS_ERROR;
+    status = process_get_snapshot_by_handle(owner, &process_snapshot);
+    if (status != SYNTRA_STATUS_OK ||
+        process_snapshot.state != PROCESS_TERMINATED)
+        return SYNTRA_STATUS_ERROR;
+
     syntra_uart_puts("Process/thread ownership registration: PASS\n");
+    syntra_uart_puts("Process/thread termination cascade: PASS\n");
     return SYNTRA_STATUS_OK;
 }
 
