@@ -41,3 +41,18 @@ The IPC unit tests cover initialization, message enqueue/dequeue, sender and rec
 ## 6. V1 status
 
 The bounded message-queue prototype is implemented and unit-tested. Secure process-integrated IPC remains future work.
+
+
+## Synchronization
+
+The public IPC initialization, send, receive, and pending-count operations
+now preserve and mask local IRQ state around message-table access. This
+prevents local IRQ re-entry from observing a partially updated queue on the
+current single-core ARM64 target. It is not an SMP lock and does not provide
+cross-core synchronization.
+
+IPC still accepts caller-supplied nonzero sender and receiver IDs. It does
+not verify that either process exists, authenticate the sender, enforce
+endpoint permissions, or automatically remove messages when a process
+terminates. These are intentionally deferred until Process Manager identity,
+lifecycle, and cleanup contracts are designed.
