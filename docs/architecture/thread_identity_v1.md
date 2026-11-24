@@ -54,10 +54,8 @@ D1 implemented operations while retaining numeric-ID compatibility APIs:
 - `scheduler_get_thread_snapshot_by_handle` resolves an exact handle to a copy-out snapshot;
 - `scheduler_set_thread_state_by_handle` updates state only after exact-handle validation;
 - `scheduler_thread_handle_equal` compares both fields explicitly.
-- obtain current thread handle;
-- obtain owner-process handle from an exact thread snapshot.
 
-The handle-first APIs do not return a mutable TCB pointer. No current-thread-handle accessor is included in D1. Existing public APIs returning mutable TCB pointers remain compatibility-only and must not be used by the reaper or new lifecycle code. Existing legacy mutable-pointer APIs remain compatibility-only and must not be used by the reaper or new lifecycle code.
+The handle-first APIs do not return a mutable TCB pointer. No current-thread-handle accessor or owner-process convenience accessor is included in D1. Existing public APIs returning mutable TCB pointers remain compatibility-only and must not be used by the reaper or new lifecycle code.
 
 Handle resolution validates:
 1. non-null output pointer where required;
