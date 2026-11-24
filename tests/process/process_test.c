@@ -114,8 +114,8 @@ int main(void)
     process_snapshot.state = PROCESS_READY;
     check(
         "Snapshot mutation does not alter manager record",
-        process_get_snapshot(1U, &process) == SYNTRA_STATUS_OK &&
-        process.state == PROCESS_TERMINATED
+        process_get_snapshot(1U, &process_snapshot) == SYNTRA_STATUS_OK &&
+        process_snapshot.state == PROCESS_TERMINATED
     );
 
     printf("\n=================================\n");
