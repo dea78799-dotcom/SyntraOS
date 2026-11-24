@@ -1,4 +1,5 @@
 #include "scheduler.h"
+#include "../arch/irq.h"
 
 static syntra_thread_t threads[SYNTRA_MAX_THREADS];
 static unsigned int thread_count;
@@ -84,7 +85,7 @@ static syntra_status_t scheduler_insert_thread(
     return SYNTRA_STATUS_OK;
 }
 
-syntra_status_t scheduler_init(void)
+static syntra_status_t scheduler_init_unlocked(void)
 {
     if (scheduler_initialized)
     {
@@ -114,7 +115,7 @@ syntra_status_t scheduler_init(void)
     return SYNTRA_STATUS_OK;
 }
 
-syntra_status_t scheduler_add_thread(
+static syntra_status_t scheduler_add_thread_unlocked(
     unsigned int thread_id,
     unsigned int priority
 )
@@ -123,7 +124,7 @@ syntra_status_t scheduler_add_thread(
         thread_id, priority, NULL, NULL, NULL, 0U);
 }
 
-syntra_status_t scheduler_create_thread(
+static syntra_status_t scheduler_create_thread_unlocked(
     unsigned int thread_id,
     unsigned int priority,
     syntra_thread_entry_t entry,
@@ -160,7 +161,7 @@ syntra_status_t scheduler_create_thread(
 }
 
 
-syntra_status_t scheduler_create_user_thread(
+static syntra_status_t scheduler_create_user_thread_unlocked(
     unsigned int thread_id,
     unsigned int priority,
     syntra_thread_entry_t entry,
@@ -199,17 +200,17 @@ syntra_status_t scheduler_create_user_thread(
     if (status != SYNTRA_STATUS_OK) return status;
 
     {
-        syntra_thread_t *thread = scheduler_get_thread(thread_id);
-        if (thread == NULL) return SYNTRA_STATUS_ERROR;
-        thread->user_stack_base = user_base;
-        thread->user_stack_size = user_stack_size;
-        thread->is_user_thread = 1U;
-        thread->cpu_context = cpu_context;
+        int slot = scheduler_find_slot(thread_id);
+        if (slot < 0) return SYNTRA_STATUS_ERROR;
+        threads[(unsigned int)slot].user_stack_base = user_base;
+        threads[(unsigned int)slot].user_stack_size = user_stack_size;
+        threads[(unsigned int)slot].is_user_thread = 1U;
+        threads[(unsigned int)slot].cpu_context = cpu_context;
     }
     return SYNTRA_STATUS_OK;
 }
 
-syntra_thread_t *scheduler_get_next_ready(void)
+static syntra_thread_t *scheduler_get_next_ready_unlocked(void)
 {
     if (!scheduler_initialized || thread_count == 0U)
     {
@@ -228,7 +229,7 @@ syntra_thread_t *scheduler_get_next_ready(void)
     return NULL;
 }
 
-syntra_thread_t *scheduler_schedule_next(void)
+static syntra_thread_t *scheduler_schedule_next_unlocked(void)
 {
     if (!scheduler_initialized || thread_count == 0U)
     {
@@ -266,7 +267,7 @@ syntra_thread_t *scheduler_schedule_next(void)
  * Context-switch path: skip READY threads without saved CPU context.
  * Metadata-only threads remain eligible to scheduler_schedule_next().
  */
-syntra_thread_t *scheduler_schedule_next_with_context(void)
+static syntra_thread_t *scheduler_schedule_next_with_context_unlocked(void)
 {
     if (!scheduler_initialized || thread_count == 0U)
         return NULL;
@@ -305,7 +306,7 @@ syntra_thread_t *scheduler_schedule_next_with_context(void)
     return NULL;
 }
 
-syntra_thread_t *scheduler_get_current(void)
+static syntra_thread_t *scheduler_get_current_unlocked(void)
 {
     if (!scheduler_initialized || current_slot < 0)
     {
@@ -315,7 +316,7 @@ syntra_thread_t *scheduler_get_current(void)
     return &threads[(unsigned int)current_slot];
 }
 
-syntra_status_t scheduler_set_thread_state(
+static syntra_status_t scheduler_set_thread_state_unlocked(
     unsigned int thread_id,
     thread_state_t new_state
 )
@@ -354,46 +355,35 @@ syntra_status_t scheduler_set_thread_state(
     return SYNTRA_STATUS_OK;
 }
 
-syntra_status_t scheduler_wake_thread(unsigned int thread_id)
+static syntra_status_t scheduler_wake_thread_unlocked(unsigned int thread_id)
 {
-    syntra_thread_t *thread = scheduler_get_thread(thread_id);
-    if (thread == NULL || thread->state != THREAD_BLOCKED)
-    {
+    int slot = scheduler_find_slot(thread_id);
+    if (slot < 0 || threads[(unsigned int)slot].state != THREAD_BLOCKED)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
-    }
-
-    thread->state = THREAD_READY;
+    threads[(unsigned int)slot].state = THREAD_READY;
     return SYNTRA_STATUS_OK;
 }
 
-syntra_status_t scheduler_block_current(void)
+static syntra_status_t scheduler_block_current_unlocked(void)
 {
-    syntra_thread_t *current = scheduler_get_current();
-    if (current == NULL)
-    {
+    if (!scheduler_initialized || current_slot < 0)
         return SYNTRA_STATUS_ERROR;
-    }
-
-    current->state = THREAD_BLOCKED;
+    threads[(unsigned int)current_slot].state = THREAD_BLOCKED;
     current_slot = -1;
     return SYNTRA_STATUS_OK;
 }
 
-syntra_status_t scheduler_terminate_current(void)
+static syntra_status_t scheduler_terminate_current_unlocked(void)
 {
-    syntra_thread_t *current = scheduler_get_current();
-    if (current == NULL)
-    {
+    if (!scheduler_initialized || current_slot < 0)
         return SYNTRA_STATUS_ERROR;
-    }
-
-    current->state = THREAD_TERMINATED;
+    threads[(unsigned int)current_slot].state = THREAD_TERMINATED;
     current_slot = -1;
     return SYNTRA_STATUS_OK;
 }
 
 
-syntra_status_t scheduler_get_thread_snapshot(
+static syntra_status_t scheduler_get_thread_snapshot_unlocked(
     unsigned int thread_id,
     syntra_thread_t *snapshot)
 {
@@ -408,7 +398,7 @@ syntra_status_t scheduler_get_thread_snapshot(
     return SYNTRA_STATUS_OK;
 }
 
-syntra_status_t scheduler_get_current_snapshot(syntra_thread_t *snapshot)
+static syntra_status_t scheduler_get_current_snapshot_unlocked(syntra_thread_t *snapshot)
 {
     if (snapshot == NULL)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
@@ -418,7 +408,7 @@ syntra_status_t scheduler_get_current_snapshot(syntra_thread_t *snapshot)
     return SYNTRA_STATUS_OK;
 }
 
-syntra_status_t scheduler_set_thread_context(
+static syntra_status_t scheduler_set_thread_context_unlocked(
     unsigned int thread_id, void *cpu_context)
 {
     if (!scheduler_initialized)
@@ -430,20 +420,20 @@ syntra_status_t scheduler_set_thread_context(
     return SYNTRA_STATUS_OK;
 }
 
-syntra_status_t scheduler_schedule_next_context(void **cpu_context_out)
+static syntra_status_t scheduler_schedule_next_context_unlocked(void **cpu_context_out)
 {
     syntra_thread_t *selected;
     if (cpu_context_out == NULL)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     *cpu_context_out = NULL;
-    selected = scheduler_schedule_next_with_context();
+    selected = scheduler_schedule_next_with_context_unlocked();
     if (selected == NULL)
         return SYNTRA_STATUS_ERROR;
     *cpu_context_out = selected->cpu_context;
     return SYNTRA_STATUS_OK;
 }
 
-syntra_thread_t *scheduler_get_thread(unsigned int thread_id)
+static syntra_thread_t *scheduler_get_thread_unlocked(unsigned int thread_id)
 {
     if (!scheduler_initialized || thread_id == 0U)
     {
@@ -454,12 +444,12 @@ syntra_thread_t *scheduler_get_thread(unsigned int thread_id)
     return slot < 0 ? NULL : &threads[(unsigned int)slot];
 }
 
-unsigned int scheduler_get_thread_count(void)
+static unsigned int scheduler_get_thread_count_unlocked(void)
 {
     return scheduler_initialized ? thread_count : 0U;
 }
 
-syntra_status_t scheduler_validate(void)
+static syntra_status_t scheduler_validate_unlocked(void)
 {
     unsigned int running_count = 0U;
 
@@ -541,4 +531,171 @@ syntra_status_t scheduler_validate(void)
     }
 
     return SYNTRA_STATUS_OK;
+}
+
+
+/*
+ * Scheduler metadata is shared with the ARM64 timer/exception path. On the
+ * current single-core target, local IRQ masking makes each public operation
+ * atomic with respect to IRQ re-entry. This is not an SMP lock. Legacy pointer
+ * accessors remain unsafe after return; use snapshot APIs in new code.
+ */
+syntra_status_t scheduler_init(void)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = scheduler_init_unlocked();
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_add_thread(unsigned int id, unsigned int priority)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = scheduler_add_thread_unlocked(id, priority);
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_create_thread(
+    unsigned int id, unsigned int priority, syntra_thread_entry_t entry,
+    void *argument, void *stack, size_t stack_size)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = scheduler_create_thread_unlocked(
+        id, priority, entry, argument, stack, stack_size);
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_create_user_thread(
+    unsigned int id, unsigned int priority, syntra_thread_entry_t entry,
+    void *argument, void *kernel_stack, size_t kernel_stack_size,
+    void *user_stack, size_t user_stack_size, void *cpu_context)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = scheduler_create_user_thread_unlocked(
+        id, priority, entry, argument, kernel_stack, kernel_stack_size,
+        user_stack, user_stack_size, cpu_context);
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_thread_t *scheduler_get_next_ready(void)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_thread_t *thread = scheduler_get_next_ready_unlocked();
+    syntra_irq_restore(irq);
+    return thread;
+}
+
+syntra_thread_t *scheduler_schedule_next(void)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_thread_t *thread = scheduler_schedule_next_unlocked();
+    syntra_irq_restore(irq);
+    return thread;
+}
+
+syntra_thread_t *scheduler_schedule_next_with_context(void)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_thread_t *thread = scheduler_schedule_next_with_context_unlocked();
+    syntra_irq_restore(irq);
+    return thread;
+}
+
+syntra_thread_t *scheduler_get_current(void)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_thread_t *thread = scheduler_get_current_unlocked();
+    syntra_irq_restore(irq);
+    return thread;
+}
+
+syntra_status_t scheduler_set_thread_state(unsigned int id, thread_state_t state)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = scheduler_set_thread_state_unlocked(id, state);
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_wake_thread(unsigned int id)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = scheduler_wake_thread_unlocked(id);
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_block_current(void)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = scheduler_block_current_unlocked();
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_terminate_current(void)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = scheduler_terminate_current_unlocked();
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_get_thread_snapshot(unsigned int id, syntra_thread_t *out)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = scheduler_get_thread_snapshot_unlocked(id, out);
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_get_current_snapshot(syntra_thread_t *out)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = scheduler_get_current_snapshot_unlocked(out);
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_set_thread_context(unsigned int id, void *context)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = scheduler_set_thread_context_unlocked(id, context);
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_schedule_next_context(void **context_out)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = scheduler_schedule_next_context_unlocked(context_out);
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_thread_t *scheduler_get_thread(unsigned int id)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_thread_t *thread = scheduler_get_thread_unlocked(id);
+    syntra_irq_restore(irq);
+    return thread;
+}
+
+unsigned int scheduler_get_thread_count(void)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    unsigned int count = scheduler_get_thread_count_unlocked();
+    syntra_irq_restore(irq);
+    return count;
+}
+
+syntra_status_t scheduler_validate(void)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = scheduler_validate_unlocked();
+    syntra_irq_restore(irq);
+    return status;
 }
