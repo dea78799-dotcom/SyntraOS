@@ -5,8 +5,6 @@
 #include "../core/status.h"
 #include "process_handle.h"
 
-#define SYNTRA_MAX_PROCESSES 64
-
 typedef enum
 {
     PROCESS_READY,
