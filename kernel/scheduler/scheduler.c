@@ -343,6 +343,11 @@ static syntra_status_t scheduler_set_thread_state_unlocked(
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
 
+    /* Terminated TCBs are terminal in this lifecycle phase. */
+    if (threads[(unsigned int)slot].state == THREAD_TERMINATED &&
+        new_state != THREAD_TERMINATED)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
     if (new_state == THREAD_RUNNING)
     {
         if (current_slot >= 0 && current_slot != slot &&
