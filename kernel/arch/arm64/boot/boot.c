@@ -756,10 +756,6 @@ static void syntra_scheduler_test_worker(void *argument)
     unsigned int worker_index = worker_id - SYNTRA_SCHEDULER_TEST_WORKER_A_ID;
     uint64_t observed_tick = timer_get_ticks();
 
-    syntra_uart_puts(worker_id == SYNTRA_SCHEDULER_TEST_WORKER_A_ID
-        ? "Scheduler worker A: START\\n"
-        : "Scheduler worker B: START\\n");
-
     for (;;)
     {
         uint64_t current_tick;
@@ -810,6 +806,9 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
 {
     syntra_status_t status;
     syntra_arm64_exception_context_t *initial_context = NULL;
+    syntra_thread_switch_event_t switch_event;
+    unsigned int switch_proof_count = 0U;
+    uint64_t last_switch_sequence = 0U;
 
     scheduler_test_completed = 0U;
     scheduler_test_last_worker = 0U;
@@ -881,6 +880,29 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
     __asm__ volatile("isb" ::: "memory");
     (void)syntra_arm64_timer_disable();
     (void)interrupt_disable(30U);
+
+    /*
+     * Drain the bounded proof queue from the resumed boot thread, not from
+     * IRQ context. The post-SP hook itself performs metadata publication only.
+     */
+    while (scheduler_take_switch_away_event(&switch_event) == SYNTRA_STATUS_OK)
+    {
+        if (switch_event.handle.generation == 0U ||
+            switch_event.sequence == 0U ||
+            switch_event.sequence <= last_switch_sequence)
+        {
+            syntra_uart_puts("Thread switch-away proof validation: FAIL\n");
+            return SYNTRA_STATUS_ERROR;
+        }
+        last_switch_sequence = switch_event.sequence;
+        ++switch_proof_count;
+    }
+    if (switch_proof_count == 0U)
+    {
+        syntra_uart_puts("Thread switch-away proof validation: FAIL\n");
+        return SYNTRA_STATUS_ERROR;
+    }
+    syntra_uart_puts("Thread switch-away proof: PUBLISHED\n");
 
     {
         syntra_status_t validation_status = scheduler_validate();
