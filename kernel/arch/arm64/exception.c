@@ -349,6 +349,16 @@ syntra_arm64_exception_handle_and_select(
         if (scheduler_set_thread_context(
                 SYNTRA_ARM64_BOOT_THREAD_ID, context) != SYNTRA_STATUS_OK)
             return NULL;
+
+        /*
+         * The boot stack is still executing this SVC handler. Mark its
+         * scheduler record RUNNING before selecting a successor so the
+         * scheduler captures the exact outgoing boot-thread handle.
+         */
+        if (scheduler_set_thread_state(
+                SYNTRA_ARM64_BOOT_THREAD_ID, THREAD_RUNNING) != SYNTRA_STATUS_OK)
+            return NULL;
+
         context->reserved = SYNTRA_ARM64_IRQ_RETURN_MAGIC;
         scheduler_context_switching_active = 1;
 
