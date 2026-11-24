@@ -232,10 +232,24 @@ syntra_arm64_exception_entry:
      * The bridge may return a different valid frame when a thread switch
      * is required. IRQ/FIQ/SError policy remains owned by the C layer.
      */
+    /*
+     * Keep the outgoing frame address in a callee-saved register. The C
+     * bridge preserves x19, and the selected frame restores the real x19
+     * value before ERET.
+     */
+    mov x19, sp
     mov x0, sp
     bl syntra_arm64_exception_handle_and_select
     cbz x0, .Lexception_use_current_frame
+    cmp x0, x19
+    b.eq .Lexception_use_current_frame
     mov sp, x0
+
+    /*
+     * The outgoing stack is now inactive. This hook runs on the successor
+     * stack and only publishes a bounded switch-away event.
+     */
+    bl syntra_arm64_thread_switch_complete
 
 .Lexception_use_current_frame:
     /* Return only from validated SVC or acknowledged IRQ handlers. */
