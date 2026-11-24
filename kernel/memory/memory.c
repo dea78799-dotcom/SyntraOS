@@ -897,19 +897,15 @@ syntra_status_t memory_release(
     unsigned int index;
     syntra_status_t status = SYNTRA_STATUS_INVALID_ARGUMENT;
 
+    irq = syntra_irq_save();
     if (!initialized || address == NULL || blocks == 0U) {
         last_diagnostic_type = SYNTRA_MEMORY_DIAGNOSTIC_INVALID_RELEASE;
         add_history(SYNTRA_MEMORY_EVENT_FAILED, 0U, blocks, 0);
-        return SYNTRA_STATUS_INVALID_ARGUMENT;
-    }
-
-    irq = syntra_irq_save();
-    if (find_allocation_by_address(address, &index)) {
+    } else if (find_allocation_by_address(address, &index)) {
         if (allocations[index].block_count != blocks) {
             last_diagnostic_type = SYNTRA_MEMORY_DIAGNOSTIC_INVALID_RELEASE;
             add_history(SYNTRA_MEMORY_EVENT_FAILED,
                 allocations[index].start_block, blocks, 0);
-            status = SYNTRA_STATUS_INVALID_ARGUMENT;
         } else if (allocations[index].ownership_state !=
                    SYNTRA_MEMORY_ALLOCATION_LEGACY) {
             status = SYNTRA_STATUS_PERMISSION_DENIED;
