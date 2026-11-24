@@ -38,7 +38,7 @@ threads can still reference its handle.
 
 ## Validation
 
-The dedicated ProcessThreadOwnershipTest covers valid creation, multiple
+The dedicated ProcessThreadOwnershipTest covers valid kernel and user thread creation, multiple
 threads per process, exact slot+generation matching, invalid/stale handles,
 terminated-process rejection, owner-specific enumeration, failed-create
 atomicity, and compatibility with unowned scheduler threads. Full CI also
