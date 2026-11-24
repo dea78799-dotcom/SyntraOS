@@ -86,6 +86,7 @@ static syntra_status_t syntra_arm64_process_thread_ownership_test(void)
         process_snapshot.state != PROCESS_TERMINATED)
         return SYNTRA_STATUS_ERROR;
 
+    syntra_uart_puts("Process/thread ownership registration: PASS\n");
     syntra_uart_puts("Process/thread termination cascade: PASS\n");
     return SYNTRA_STATUS_OK;
 }
