@@ -1,5 +1,6 @@
 
 #include "memory.h"
+#include "../arch/irq.h"
 
 #include <stdint.h>
 #include <stddef.h>
@@ -238,7 +239,8 @@ static int find_free_slot(unsigned int *slot)
     }
 
     for (i = 0U; i < SYNTRA_MAX_MEMORY_BLOCKS; ++i) {
-        if (!allocations[i].active) {
+        if (!allocations[i].active &&
+            allocations[i].generation != UINT64_MAX) {
             *slot = i;
             return 1;
         }
@@ -267,6 +269,23 @@ static int find_allocation_by_address(
     }
 
     return 0;
+}
+
+static int find_allocation_by_handle(
+    syntra_memory_allocation_handle_t handle,
+    unsigned int *index
+)
+{
+    if (index == NULL ||
+        handle.slot >= SYNTRA_MAX_MEMORY_BLOCKS ||
+        handle.generation == 0U ||
+        !allocations[handle.slot].active ||
+        allocations[handle.slot].generation != handle.generation) {
+        return 0;
+    }
+
+    *index = handle.slot;
+    return 1;
 }
 
 static int find_active_slot(
@@ -374,7 +393,11 @@ static syntra_status_t validate_internal_state(void)
 
         if (!allocations[i].active) {
             if (allocations[i].address != NULL ||
-                allocations[i].block_count != 0U) {
+                allocations[i].block_count != 0U ||
+                allocations[i].ownership_state !=
+                    SYNTRA_MEMORY_ALLOCATION_FREE ||
+                allocations[i].owner.slot != 0U ||
+                allocations[i].owner.generation != 0U) {
                 return SYNTRA_STATUS_ERROR;
             }
 
@@ -386,6 +409,30 @@ static syntra_status_t validate_internal_state(void)
         }
 
         active_count++;
+
+        if (allocations[i].generation == 0U ||
+            allocations[i].ownership_state < SYNTRA_MEMORY_ALLOCATION_LEGACY ||
+            allocations[i].ownership_state >
+                SYNTRA_MEMORY_ALLOCATION_THREAD_OWNED) {
+            return SYNTRA_STATUS_ERROR;
+        }
+
+        if ((allocations[i].ownership_state ==
+                 SYNTRA_MEMORY_ALLOCATION_LEGACY ||
+             allocations[i].ownership_state ==
+                 SYNTRA_MEMORY_ALLOCATION_STAGED) &&
+            (allocations[i].owner.slot != 0U ||
+             allocations[i].owner.generation != 0U)) {
+            return SYNTRA_STATUS_ERROR;
+        }
+
+        if ((allocations[i].ownership_state ==
+                 SYNTRA_MEMORY_ALLOCATION_RESERVED ||
+             allocations[i].ownership_state ==
+                 SYNTRA_MEMORY_ALLOCATION_THREAD_OWNED) &&
+            allocations[i].owner.generation == 0U) {
+            return SYNTRA_STATUS_ERROR;
+        }
 
         if (!allocation_range_is_valid(
                 allocations[i].start_block,
@@ -492,6 +539,10 @@ syntra_status_t memory_init(void)
         allocations[i].start_block = 0U;
         allocations[i].block_count = 0U;
         allocations[i].active = 0;
+        allocations[i].generation = 0U;
+        allocations[i].ownership_state = SYNTRA_MEMORY_ALLOCATION_FREE;
+        allocations[i].owner.slot = 0U;
+        allocations[i].owner.generation = 0U;
 
         tags[i].allocation_index = i;
         tags[i].name[0] = '\0';
@@ -542,7 +593,11 @@ syntra_status_t memory_init(void)
    MEMORY ALLOCATION
    --------------------------------------------------------- */
 
-void *memory_allocate(unsigned int blocks)
+static void *memory_allocate_internal(
+    unsigned int blocks,
+    syntra_memory_allocation_state_t ownership_state,
+    syntra_memory_allocation_handle_t *handle_out
+)
 {
     unsigned int start_block;
     unsigned int slot;
@@ -551,37 +606,19 @@ void *memory_allocate(unsigned int blocks)
     if (!initialized ||
         blocks == 0U ||
         blocks > SYNTRA_MAX_MEMORY_BLOCKS) {
-
         failed_allocations++;
-
         last_diagnostic_type =
             SYNTRA_MEMORY_DIAGNOSTIC_INVALID_ALLOCATION;
-
-        add_history(
-            SYNTRA_MEMORY_EVENT_FAILED,
-            0U,
-            blocks,
-            0
-        );
-
+        add_history(SYNTRA_MEMORY_EVENT_FAILED, 0U, blocks, 0);
         return NULL;
     }
 
     if (!find_free_slot(&slot) ||
         !find_free_region(blocks, &start_block)) {
-
         failed_allocations++;
-
         last_diagnostic_type =
             SYNTRA_MEMORY_DIAGNOSTIC_INVALID_ALLOCATION;
-
-        add_history(
-            SYNTRA_MEMORY_EVENT_FAILED,
-            0U,
-            blocks,
-            0
-        );
-
+        add_history(SYNTRA_MEMORY_EVENT_FAILED, 0U, blocks, 0);
         return NULL;
     }
 
@@ -589,14 +626,39 @@ void *memory_allocate(unsigned int blocks)
         mark_block_used(start_block + i);
     }
 
-    allocations[slot].address =
-        &memory_pool[
-            start_block * SYNTRA_MEMORY_BLOCK_SIZE
-        ];
+    if (allocations[slot].generation == UINT64_MAX) {
+        /* Defensive: find_free_slot() must already exclude this slot. */
+        for (i = 0U; i < blocks; ++i) {
+            mark_block_free(start_block + i);
+        }
+        failed_allocations++;
+        return NULL;
+    }
 
+    allocations[slot].generation++;
+    if (allocations[slot].generation == 0U) {
+        /* Zero is never a valid generation. Retire this slot. */
+        allocations[slot].generation = UINT64_MAX;
+        for (i = 0U; i < blocks; ++i) {
+            mark_block_free(start_block + i);
+        }
+        failed_allocations++;
+        return NULL;
+    }
+
+    allocations[slot].address =
+        &memory_pool[start_block * SYNTRA_MEMORY_BLOCK_SIZE];
     allocations[slot].start_block = start_block;
     allocations[slot].block_count = blocks;
     allocations[slot].active = 1;
+    allocations[slot].ownership_state = ownership_state;
+    allocations[slot].owner.slot = 0U;
+    allocations[slot].owner.generation = 0U;
+
+    if (handle_out != NULL) {
+        handle_out->slot = slot;
+        handle_out->generation = allocations[slot].generation;
+    }
 
     tags[slot].allocation_index = slot;
     tags[slot].name[0] = '\0';
@@ -604,129 +666,49 @@ void *memory_allocate(unsigned int blocks)
 
     allocation_count++;
     active_allocations++;
-
     used_blocks += blocks;
     total_allocated_blocks += blocks;
-
-    peak_used_blocks = max_unsigned(
-        peak_used_blocks,
-        used_blocks
-    );
-
-    last_diagnostic_type =
-        SYNTRA_MEMORY_DIAGNOSTIC_NONE;
-
-    add_history(
-        SYNTRA_MEMORY_EVENT_ALLOCATE,
-        start_block,
-        blocks,
-        1
-    );
+    peak_used_blocks = max_unsigned(peak_used_blocks, used_blocks);
+    last_diagnostic_type = SYNTRA_MEMORY_DIAGNOSTIC_NONE;
+    add_history(SYNTRA_MEMORY_EVENT_ALLOCATE, start_block, blocks, 1);
 
     return allocations[slot].address;
 }
 
-/* ---------------------------------------------------------
-   MEMORY RELEASE
-   --------------------------------------------------------- */
-
-syntra_status_t memory_release(
-    void *address,
-    unsigned int blocks
-)
+static syntra_status_t memory_release_slot_internal(unsigned int index)
 {
-    unsigned int index;
     unsigned int start_block;
+    unsigned int blocks;
     unsigned int i;
 
-    if (!initialized || address == NULL || blocks == 0U) {
-        last_diagnostic_type =
-            SYNTRA_MEMORY_DIAGNOSTIC_INVALID_RELEASE;
-
-        add_history(
-            SYNTRA_MEMORY_EVENT_FAILED,
-            0U,
-            blocks,
-            0
-        );
-
+    if (index >= SYNTRA_MAX_MEMORY_BLOCKS || !allocations[index].active)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
-    }
-
-    if (!find_allocation_by_address(address, &index)) {
-        last_diagnostic_type =
-            SYNTRA_MEMORY_DIAGNOSTIC_INVALID_RELEASE;
-
-        add_history(
-            SYNTRA_MEMORY_EVENT_FAILED,
-            0U,
-            blocks,
-            0
-        );
-
-        return SYNTRA_STATUS_INVALID_ARGUMENT;
-    }
-
-    if (allocations[index].block_count != blocks) {
-        last_diagnostic_type =
-            SYNTRA_MEMORY_DIAGNOSTIC_INVALID_RELEASE;
-
-        add_history(
-            SYNTRA_MEMORY_EVENT_FAILED,
-            allocations[index].start_block,
-            blocks,
-            0
-        );
-
-        return SYNTRA_STATUS_INVALID_ARGUMENT;
-    }
 
     start_block = allocations[index].start_block;
+    blocks = allocations[index].block_count;
 
     if (!allocation_range_is_valid(start_block, blocks) ||
-        used_blocks < blocks ||
-        active_allocations == 0U) {
-
+        used_blocks < blocks || active_allocations == 0U) {
         integrity_errors++;
-
-        last_diagnostic_type =
-            SYNTRA_MEMORY_DIAGNOSTIC_INTEGRITY_FAILURE;
-
-        add_history(
-            SYNTRA_MEMORY_EVENT_FAILED,
-            start_block,
-            blocks,
-            0
-        );
-
+        last_diagnostic_type = SYNTRA_MEMORY_DIAGNOSTIC_INTEGRITY_FAILURE;
+        add_history(SYNTRA_MEMORY_EVENT_FAILED, start_block, blocks, 0);
         return SYNTRA_STATUS_ERROR;
     }
 
     for (i = 0U; i < blocks; ++i) {
         if (!block_is_used(start_block + i)) {
             integrity_errors++;
-
-            last_diagnostic_type =
-                SYNTRA_MEMORY_DIAGNOSTIC_INTEGRITY_FAILURE;
-
-            add_history(
-                SYNTRA_MEMORY_EVENT_FAILED,
-                start_block,
-                blocks,
-                0
-            );
-
+            last_diagnostic_type = SYNTRA_MEMORY_DIAGNOSTIC_INTEGRITY_FAILURE;
+            add_history(SYNTRA_MEMORY_EVENT_FAILED, start_block, blocks, 0);
             return SYNTRA_STATUS_ERROR;
         }
     }
 
-    for (i = 0U; i < blocks; ++i) {
+    for (i = 0U; i < blocks; ++i)
         mark_block_free(start_block + i);
-    }
 
     used_blocks -= blocks;
     active_allocations--;
-
     release_count++;
     total_released_blocks += blocks;
 
@@ -734,21 +716,209 @@ syntra_status_t memory_release(
     allocations[index].start_block = 0U;
     allocations[index].block_count = 0U;
     allocations[index].active = 0;
+    allocations[index].ownership_state = SYNTRA_MEMORY_ALLOCATION_FREE;
+    allocations[index].owner.slot = 0U;
+    allocations[index].owner.generation = 0U;
+    /* Keep generation so a later allocation cannot revive an old token. */
 
     tags[index].name[0] = '\0';
     tags[index].active = 0;
-
-    last_diagnostic_type =
-        SYNTRA_MEMORY_DIAGNOSTIC_NONE;
-
-    add_history(
-        SYNTRA_MEMORY_EVENT_RELEASE,
-        start_block,
-        blocks,
-        1
-    );
-
+    last_diagnostic_type = SYNTRA_MEMORY_DIAGNOSTIC_NONE;
+    add_history(SYNTRA_MEMORY_EVENT_RELEASE, start_block, blocks, 1);
     return SYNTRA_STATUS_OK;
+}
+
+void *memory_allocate(unsigned int blocks)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    void *address = memory_allocate_internal(
+        blocks, SYNTRA_MEMORY_ALLOCATION_LEGACY, NULL);
+    syntra_irq_restore(irq);
+    return address;
+}
+
+syntra_status_t memory_allocate_staged(
+    unsigned int blocks,
+    void **address_out,
+    syntra_memory_allocation_handle_t *handle_out
+)
+{
+    syntra_irq_state_t irq;
+    void *address;
+
+    if (address_out == NULL || handle_out == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    *address_out = NULL;
+    handle_out->slot = UINT32_MAX;
+    handle_out->generation = 0U;
+
+    if (blocks == 0U || blocks > SYNTRA_MAX_MEMORY_BLOCKS)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    irq = syntra_irq_save();
+    address = memory_allocate_internal(
+        blocks, SYNTRA_MEMORY_ALLOCATION_STAGED, handle_out);
+    syntra_irq_restore(irq);
+
+    if (address == NULL)
+        return SYNTRA_STATUS_OUT_OF_MEMORY;
+
+    *address_out = address;
+    return SYNTRA_STATUS_OK;
+}
+
+static int owner_handle_is_valid(syntra_memory_owner_handle_t owner)
+{
+    return owner.slot != UINT32_MAX && owner.generation != 0U;
+}
+
+syntra_status_t memory_bind_staged_allocation(
+    syntra_memory_allocation_handle_t allocation,
+    syntra_memory_owner_handle_t owner
+)
+{
+    syntra_irq_state_t irq;
+    unsigned int index;
+    syntra_status_t status = SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    if (!owner_handle_is_valid(owner))
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    irq = syntra_irq_save();
+    if (find_allocation_by_handle(allocation, &index)) {
+        if (allocations[index].ownership_state ==
+            SYNTRA_MEMORY_ALLOCATION_STAGED) {
+            allocations[index].ownership_state =
+                SYNTRA_MEMORY_ALLOCATION_RESERVED;
+            allocations[index].owner = owner;
+            status = SYNTRA_STATUS_OK;
+        } else {
+            status = SYNTRA_STATUS_PERMISSION_DENIED;
+        }
+    }
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t memory_commit_thread_allocation(
+    syntra_memory_allocation_handle_t allocation,
+    syntra_memory_owner_handle_t owner
+)
+{
+    syntra_irq_state_t irq;
+    unsigned int index;
+    syntra_status_t status = SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    irq = syntra_irq_save();
+    if (find_allocation_by_handle(allocation, &index)) {
+        if (allocations[index].ownership_state !=
+                SYNTRA_MEMORY_ALLOCATION_RESERVED ||
+            allocations[index].owner.slot != owner.slot ||
+            allocations[index].owner.generation != owner.generation) {
+            status = SYNTRA_STATUS_PERMISSION_DENIED;
+        } else {
+            allocations[index].ownership_state =
+                SYNTRA_MEMORY_ALLOCATION_THREAD_OWNED;
+            status = SYNTRA_STATUS_OK;
+        }
+    }
+    syntra_irq_restore(irq);
+    return status;
+}
+
+static syntra_status_t release_by_token(
+    syntra_memory_allocation_handle_t allocation,
+    syntra_memory_owner_handle_t owner,
+    syntra_memory_allocation_state_t required_state,
+    int check_owner
+)
+{
+    syntra_irq_state_t irq;
+    unsigned int index;
+    syntra_status_t status = SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    irq = syntra_irq_save();
+    if (find_allocation_by_handle(allocation, &index)) {
+        if (allocations[index].ownership_state != required_state) {
+            status = SYNTRA_STATUS_PERMISSION_DENIED;
+        } else if (check_owner &&
+                   (allocations[index].owner.slot != owner.slot ||
+                    allocations[index].owner.generation != owner.generation)) {
+            status = SYNTRA_STATUS_PERMISSION_DENIED;
+        } else {
+            status = memory_release_slot_internal(index);
+        }
+    }
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t memory_abort_staged_allocation(
+    syntra_memory_allocation_handle_t allocation
+)
+{
+    return release_by_token(
+        allocation, (syntra_memory_owner_handle_t){0U, 0U},
+        SYNTRA_MEMORY_ALLOCATION_STAGED, 0);
+}
+
+syntra_status_t memory_abort_reserved_allocation(
+    syntra_memory_allocation_handle_t allocation,
+    syntra_memory_owner_handle_t owner
+)
+{
+    if (!owner_handle_is_valid(owner))
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    return release_by_token(
+        allocation, owner, SYNTRA_MEMORY_ALLOCATION_RESERVED, 1);
+}
+
+syntra_status_t memory_release_owned_allocation(
+    syntra_memory_allocation_handle_t allocation,
+    syntra_memory_owner_handle_t owner
+)
+{
+    if (!owner_handle_is_valid(owner))
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    return release_by_token(
+        allocation, owner, SYNTRA_MEMORY_ALLOCATION_THREAD_OWNED, 1);
+}
+
+syntra_status_t memory_release(
+    void *address,
+    unsigned int blocks
+)
+{
+    syntra_irq_state_t irq;
+    unsigned int index;
+    syntra_status_t status = SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    if (!initialized || address == NULL || blocks == 0U) {
+        last_diagnostic_type = SYNTRA_MEMORY_DIAGNOSTIC_INVALID_RELEASE;
+        add_history(SYNTRA_MEMORY_EVENT_FAILED, 0U, blocks, 0);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    irq = syntra_irq_save();
+    if (find_allocation_by_address(address, &index)) {
+        if (allocations[index].block_count != blocks) {
+            last_diagnostic_type = SYNTRA_MEMORY_DIAGNOSTIC_INVALID_RELEASE;
+            add_history(SYNTRA_MEMORY_EVENT_FAILED,
+                allocations[index].start_block, blocks, 0);
+            status = SYNTRA_STATUS_INVALID_ARGUMENT;
+        } else if (allocations[index].ownership_state !=
+                   SYNTRA_MEMORY_ALLOCATION_LEGACY) {
+            status = SYNTRA_STATUS_PERMISSION_DENIED;
+        } else {
+            status = memory_release_slot_internal(index);
+        }
+    } else {
+        last_diagnostic_type = SYNTRA_MEMORY_DIAGNOSTIC_INVALID_RELEASE;
+        add_history(SYNTRA_MEMORY_EVENT_FAILED, 0U, blocks, 0);
+    }
+    syntra_irq_restore(irq);
+    return status;
 }
 
 /* ---------------------------------------------------------
