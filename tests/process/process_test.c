@@ -38,8 +38,13 @@ int main(void)
         process_create(1, 5) == SYNTRA_STATUS_OK
     );
 
-    /* Test 3: Get process */
-    syntra_process_t *process = process_get(1);
+    /* Test 3: Get process through a caller-owned snapshot. */
+    syntra_process_t process_snapshot;
+    syntra_process_t *process = &process_snapshot;
+    check(
+        "Copy process snapshot",
+        process_get_snapshot(1U, &process_snapshot) == SYNTRA_STATUS_OK
+    );
 
     check(
         "Get process ID 1",
@@ -67,7 +72,10 @@ int main(void)
     );
 
     /* Test 7: Verify state */
-    process = process_get(1);
+    check(
+        "Refresh process snapshot",
+        process_get_snapshot(1U, &process_snapshot) == SYNTRA_STATUS_OK
+    );
 
     check(
         "Verify RUNNING state",
@@ -88,12 +96,25 @@ int main(void)
     );
 
     /* Test 10: Verify termination */
-    process = process_get(1);
+    check(
+        "Refresh terminated process snapshot",
+        process_get_snapshot(1U, &process_snapshot) == SYNTRA_STATUS_OK
+    );
 
     check(
         "Verify TERMINATED state",
         process != NULL &&
         process->state == PROCESS_TERMINATED
+    );
+
+    check(
+        "Reject NULL process snapshot",
+        process_get_snapshot(1U, NULL) == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+    check(
+        "Snapshot is independent of manager storage",
+        process_snapshot.process_id == 1U &&
+        process_snapshot.state == PROCESS_TERMINATED
     );
 
     printf("\n=================================\n");
