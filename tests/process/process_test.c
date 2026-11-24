@@ -122,6 +122,15 @@ int main(void)
         process_snapshot.process_id == 2U
     );
     check(
+        "Terminate through legacy ID API",
+        process_terminate(2U) == SYNTRA_STATUS_OK
+    );
+    check(
+        "Legacy termination updates process metadata",
+        process_get_snapshot(2U, &process_snapshot) == SYNTRA_STATUS_OK &&
+        process_snapshot.state == PROCESS_TERMINATED
+    );
+    check(
         "Reject duplicate process ID",
         process_create(1U, 3U) != SYNTRA_STATUS_OK
     );
