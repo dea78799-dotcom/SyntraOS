@@ -120,7 +120,10 @@ A thread must not become REAPABLE merely because its TCB says TERMINATED.
   when all remaining entries are terminal or lack saved contexts.
 - [ ] Implement a real idle thread. Until then, no-successor behavior is a
   deliberate permanent halt and must not be described as idle scheduling.
-- [ ] Add a dedicated QEMU negative-path test for the no-successor halt.
+- [x] Add a host ARM64 exception-bridge test for no-successor return-cookie
+  invalidation.
+- [ ] Add a dedicated QEMU negative-path test for the assembly no-successor
+  halt path.
 
 ### Phase B — Resource ownership metadata
 - Introduce explicit borrowed-versus-owned resource descriptors.
