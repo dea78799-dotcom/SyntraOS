@@ -114,7 +114,7 @@ int main(void)
 
     memory_get_info(&before);
     check("Dispatch terminal proof into candidate queue",
-        thread_reaper_dispatch(1U, &processed) == SYNTRA_STATUS_OK &&
+        thread_reaper_dispatch(3U, &processed) == SYNTRA_STATUS_OK &&
         processed == 3U);
     check("Candidate queue contains one exact record",
         thread_reaper_get_candidate_count(&candidate_count) ==
