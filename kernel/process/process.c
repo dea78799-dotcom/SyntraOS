@@ -1,5 +1,6 @@
 
 #include "process.h"
+#include "../arch/irq.h"
 
 static syntra_process_t processes[SYNTRA_MAX_PROCESSES];
 
@@ -7,7 +8,7 @@ static unsigned int process_count = 0;
 static int process_initialized = 0;
 
 
-syntra_status_t process_init(void)
+static syntra_status_t process_init_unlocked(void)
 {
     if (process_initialized)
     {
@@ -21,7 +22,7 @@ syntra_status_t process_init(void)
 }
 
 
-syntra_status_t process_create(
+static syntra_status_t process_create_unlocked(
     unsigned int process_id,
     unsigned int priority
 )
@@ -60,7 +61,7 @@ syntra_status_t process_create(
 
 
 
-syntra_status_t process_get_snapshot(
+static syntra_status_t process_get_snapshot_unlocked(
     unsigned int process_id,
     syntra_process_t *snapshot)
 {
@@ -79,7 +80,7 @@ syntra_status_t process_get_snapshot(
     return SYNTRA_STATUS_INVALID_ARGUMENT;
 }
 
-syntra_process_t *process_get(unsigned int process_id)
+static syntra_process_t *process_get_unlocked(unsigned int process_id)
 {
     if (!process_initialized)
     {
@@ -98,7 +99,7 @@ syntra_process_t *process_get(unsigned int process_id)
 }
 
 
-syntra_status_t process_set_state(
+static syntra_status_t process_set_state_unlocked(
     unsigned int process_id,
     syntra_process_state_t state
 )
@@ -113,7 +114,7 @@ syntra_status_t process_set_state(
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
 
-    syntra_process_t *process = process_get(process_id);
+    syntra_process_t *process = process_get_unlocked(process_id);
 
     if (process == 0)
     {
@@ -126,7 +127,7 @@ syntra_status_t process_set_state(
 }
 
 
-syntra_status_t process_terminate(unsigned int process_id)
+static syntra_status_t process_terminate_unlocked(unsigned int process_id)
 {
     return process_set_state(
         process_id,
@@ -135,7 +136,70 @@ syntra_status_t process_terminate(unsigned int process_id)
 }
 
 
-unsigned int process_get_count(void)
+static unsigned int process_get_count_unlocked(void)
 {
     return process_count;
+}
+
+
+/*
+ * Process metadata is shared kernel state. Local IRQ masking serializes each
+ * public operation on the current single-core ARM64 target. This is not an
+ * SMP lock. process_get() remains a compatibility escape hatch and its
+ * returned pointer must not be retained or mutated by new kernel code.
+ */
+syntra_status_t process_init(void)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = process_init_unlocked();
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t process_create(unsigned int id, unsigned int priority)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = process_create_unlocked(id, priority);
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t process_get_snapshot(unsigned int id, syntra_process_t *out)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = process_get_snapshot_unlocked(id, out);
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_process_t *process_get(unsigned int id)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_process_t *process = process_get_unlocked(id);
+    syntra_irq_restore(irq);
+    return process;
+}
+
+syntra_status_t process_set_state(unsigned int id, syntra_process_state_t state)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = process_set_state_unlocked(id, state);
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t process_terminate(unsigned int id)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = process_terminate_unlocked(id);
+    syntra_irq_restore(irq);
+    return status;
+}
+
+unsigned int process_get_count(void)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    unsigned int count = process_get_count_unlocked();
+    syntra_irq_restore(irq);
+    return count;
 }
