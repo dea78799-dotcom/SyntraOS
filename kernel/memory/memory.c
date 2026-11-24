@@ -810,6 +810,9 @@ syntra_status_t memory_commit_thread_allocation(
     unsigned int index;
     syntra_status_t status = SYNTRA_STATUS_INVALID_ARGUMENT;
 
+    if (!owner_handle_is_valid(owner))
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
     irq = syntra_irq_save();
     if (find_allocation_by_handle(allocation, &index)) {
         if (allocations[index].ownership_state !=
