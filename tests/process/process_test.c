@@ -71,6 +71,24 @@ int main(void)
         process_set_state(1, PROCESS_RUNNING) == SYNTRA_STATUS_OK
     );
 
+    check(
+        "Block a RUNNING process",
+        process_set_state(1U, PROCESS_BLOCKED) == SYNTRA_STATUS_OK
+    );
+    check(
+        "Reject direct BLOCKED to RUNNING transition",
+        process_set_state(1U, PROCESS_RUNNING) ==
+            SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+    check(
+        "Wake BLOCKED process to READY",
+        process_set_state(1U, PROCESS_READY) == SYNTRA_STATUS_OK
+    );
+    check(
+        "Return READY process to RUNNING",
+        process_set_state(1U, PROCESS_RUNNING) == SYNTRA_STATUS_OK
+    );
+
     /* Test 7: Verify state */
     check(
         "Refresh process snapshot",
@@ -114,6 +132,17 @@ int main(void)
     process_snapshot.state = PROCESS_READY;
     check(
         "Snapshot mutation does not alter manager record",
+        process_get_snapshot(1U, &process_snapshot) == SYNTRA_STATUS_OK &&
+        process_snapshot.state == PROCESS_TERMINATED
+    );
+
+    check(
+        "Reject resurrection of TERMINATED process",
+        process_set_state(1U, PROCESS_RUNNING) ==
+            SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+    check(
+        "TERMINATED state remains unchanged",
         process_get_snapshot(1U, &process_snapshot) == SYNTRA_STATUS_OK &&
         process_snapshot.state == PROCESS_TERMINATED
     );
