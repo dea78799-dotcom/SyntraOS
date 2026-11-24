@@ -18,6 +18,7 @@ on:
       - feat/thread-handle-owned-api-v1
       - design/thread-switch-away-proof-v1
       - feat/thread-switch-away-proof-v1
+      - design/d3-resource-reclamation-audit-v1
 
   pull_request:
     branches:
