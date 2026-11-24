@@ -90,7 +90,8 @@ syntra_status_t thread_reaper_dispatch(
             syntra_reaper_candidate_t *existing =
                 &candidates[(unsigned int)existing_index];
 
-            if (existing->proof.sequence == event.sequence)
+            if (existing->proof.sequence == event.sequence &&
+                existing->proof.terminal == event.terminal)
             {
                 status = scheduler_ack_switch_away_event(event);
                 if (status != SYNTRA_STATUS_OK)
@@ -122,23 +123,37 @@ syntra_status_t thread_reaper_dispatch(
             ++candidate_count;
             candidate_inserted = 1;
 
-            status = scheduler_get_thread_snapshot_by_handle(
-                event.handle, &snapshot);
-            if (status != SYNTRA_STATUS_OK)
+            if (event.terminal == 0U)
             {
-                candidate->state = SYNTRA_REAPER_CANDIDATE_QUARANTINED;
-                candidate->reason = SYNTRA_REAPER_REASON_STALE_HANDLE;
-            }
-            else if (snapshot.state != THREAD_TERMINATED)
-            {
-                /* Preemption/blocking proof is not a terminal reap request. */
+                /*
+                 * The thread may have terminated after this older preemption
+                 * event was published. Event-time intent, not current TCB
+                 * state, decides whether this proof is a reap candidate.
+                 */
                 --candidate_count;
                 candidate->state = SYNTRA_REAPER_CANDIDATE_FREE;
                 candidate->proof.handle.slot = 0U;
                 candidate->proof.handle.generation = 0U;
                 candidate->proof.sequence = 0U;
+                candidate->proof.terminal = 0U;
                 candidate->reason = SYNTRA_REAPER_REASON_NONE;
                 candidate_inserted = 0;
+            }
+            else
+            {
+                status = scheduler_get_thread_snapshot_by_handle(
+                    event.handle, &snapshot);
+                if (status != SYNTRA_STATUS_OK)
+                {
+                    candidate->state = SYNTRA_REAPER_CANDIDATE_QUARANTINED;
+                    candidate->reason = SYNTRA_REAPER_REASON_STALE_HANDLE;
+                }
+                else if (snapshot.state != THREAD_TERMINATED)
+                {
+                    candidate->state = SYNTRA_REAPER_CANDIDATE_QUARANTINED;
+                    candidate->reason =
+                        SYNTRA_REAPER_REASON_TERMINAL_STATE_MISMATCH;
+                }
             }
         }
 
