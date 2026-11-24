@@ -20,6 +20,7 @@ on:
       - feat/thread-switch-away-proof-v1
       - design/d3-resource-reclamation-audit-v1
       - design/d3-resource-descriptor-api-v1
+      - design/d3-deferred-reaper-runtime-v1
 
   pull_request:
     branches:
