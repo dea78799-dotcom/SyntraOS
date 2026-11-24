@@ -107,6 +107,21 @@ static syntra_status_t process_get_handle_unlocked(
     return SYNTRA_STATUS_OK;
 }
 
+static syntra_status_t process_create_with_handle_unlocked(
+    unsigned int process_id,
+    unsigned int priority,
+    syntra_process_handle_t *handle)
+{
+    if (handle == 0)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    syntra_status_t status = process_create_unlocked(process_id, priority);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    return process_get_handle_unlocked(process_id, handle);
+}
+
 static syntra_process_slot_t *process_resolve_handle_unlocked(
     syntra_process_handle_t handle)
 {
@@ -240,6 +255,18 @@ syntra_status_t process_init(void)
 {
     syntra_irq_state_t irq = syntra_irq_save();
     syntra_status_t status = process_init_unlocked();
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t process_create_with_handle(
+    unsigned int id,
+    unsigned int priority,
+    syntra_process_handle_t *handle)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status =
+        process_create_with_handle_unlocked(id, priority, handle);
     syntra_irq_restore(irq);
     return status;
 }
