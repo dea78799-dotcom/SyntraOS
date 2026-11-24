@@ -1,44 +1,43 @@
 # SyntraOS Inter-Process Communication (IPC)
 
 Version: 0.1.0
-Status: Design Phase
+Implementation status: V1 bounded message-queue prototype
 
-## 1. Overview
+## 1. Purpose
 
-IPC allows processes and system services
-to communicate with each other.
+The current IPC module provides a small, fixed-capacity message queue as an early kernel prototype. It is not yet a secure, process-authenticated IPC subsystem.
 
-## 2. Main Responsibilities
+## 2. Implemented in V1
 
-- Send messages between processes.
-- Receive messages from other processes.
-- Manage communication endpoints.
-- Validate message permissions.
-- Handle communication errors.
+- Initialize a static queue with a capacity of 64 messages.
+- Copy message payloads into kernel-owned queue entries.
+- Support payloads from 1 through 256 bytes.
+- Record caller-supplied sender and receiver IDs.
+- Receive and remove the first queued message matching a receiver ID.
+- Reject zero IDs, null pointers, zero-length messages and oversized payloads.
+- Return an error when the queue is full or no matching message exists.
 
-## 3. Communication Model
+## 3. Not implemented yet
 
-SyntraOS plans to use message-based IPC.
+- Validation that sender and receiver IDs refer to live processes.
+- Authentication of the sender identity from the calling execution context.
+- Endpoint creation, ownership and access-control permissions.
+- Capabilities or policy-based authorization.
+- Per-process queues, blocking receive, wait queues or notifications.
+- Message prioritization, quotas or denial-of-service controls.
+- SMP-safe locking or interrupt-safe queue synchronization.
+- Lifecycle cleanup when a process terminates.
 
-Processes will communicate through
-controlled communication channels.
+The sender ID is currently caller-supplied metadata. It must not be trusted as proof of identity.
 
-## 4. Security
+## 4. Security model
 
-- Verify sender permissions.
-- Validate incoming messages.
-- Prevent unauthorized communication.
-- Isolate process communication.
+The current queue is suitable only for controlled prototype tests. It must not be used as a security boundary between mutually untrusted processes until identity binding, endpoint authorization, resource limits and synchronization are implemented and tested.
 
-## 5. Microkernel Integration
+## 5. Validation scope
 
-IPC will be a core microkernel service.
+The IPC unit tests cover initialization, message enqueue/dequeue, sender and receiver metadata, payload copying, queue count and rejection of a zero-length message. They do not demonstrate permission enforcement, process authentication, isolation, concurrency safety or resilience against malicious senders.
 
-It will provide communication between
-the kernel and user-space services.
+## 6. V1 status
 
-## 6. Current Status
-
-IPC is not implemented yet.
-
-This document describes the planned design.
+The bounded message-queue prototype is implemented and unit-tested. Secure process-integrated IPC remains future work.
