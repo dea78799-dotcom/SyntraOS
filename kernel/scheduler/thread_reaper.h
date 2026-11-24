@@ -38,10 +38,24 @@ typedef struct
     unsigned int discarded_nonterminal;
     unsigned int duplicate_events;
     unsigned int acknowledged_events;
+    unsigned int execution_context_bound;
+    unsigned int execution_context_dispatches;
+    unsigned int execution_context_rejections;
 } syntra_reaper_stats_t;
 
 /* Initialize after scheduler_init(); no resource reclamation is enabled. */
 syntra_status_t thread_reaper_init(void);
+
+/*
+ * Bind one permanent, borrowed EL1 stack and its exact scheduler identity.
+ * Once bound, dispatch is accepted only while executing on that thread and
+ * while the live SP_EL1 is inside the registered stack range.
+ */
+syntra_status_t thread_reaper_bind_execution_context(
+    syntra_thread_handle_t handle,
+    uintptr_t stack_base,
+    size_t stack_size
+);
 
 /*
  * Move at most max_events proof records from the scheduler FIFO into the
