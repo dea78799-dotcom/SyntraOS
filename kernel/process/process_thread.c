@@ -2,6 +2,7 @@
 #include "../scheduler/scheduler_process_internal.h"
 #include "process.h"
 #include "../arch/irq.h"
+#include "../memory/memory.h"
 
 static int process_thread_handle_is_structurally_valid(
     syntra_process_handle_t handle)
@@ -101,6 +102,125 @@ syntra_status_t process_thread_create_user_with_handle(
             kernel_stack, kernel_stack_size, user_stack,
             user_stack_size, cpu_context, handle_out);
     syntra_irq_restore(irq);
+    return status;
+}
+
+
+/*
+ * Canonical owned-kernel-thread transaction:
+ * STAGED allocation -> unpublished TCB -> exact owner bind -> descriptor
+ * attach -> THREAD_OWNED commit -> READY publication.
+ *
+ * The outer IRQ guard makes process validation and all transaction stages
+ * atomic with respect to local single-core interrupt-driven scheduling.
+ */
+syntra_status_t process_thread_create_kernel_owned_with_handle(
+    syntra_process_handle_t owner,
+    unsigned int thread_id,
+    unsigned int priority,
+    syntra_thread_entry_t entry,
+    void *argument,
+    size_t stack_size,
+    syntra_thread_handle_t *handle_out)
+{
+    syntra_irq_state_t irq;
+    syntra_process_t process;
+    syntra_thread_handle_t reserved_handle;
+    syntra_memory_allocation_handle_t allocation;
+    syntra_memory_owner_handle_t allocation_owner;
+    void *kernel_stack = NULL;
+    unsigned int blocks;
+    syntra_status_t status;
+    syntra_status_t cleanup_status = SYNTRA_STATUS_OK;
+    int reservation_created = 0;
+    int allocation_created = 0;
+    int allocation_reserved = 0;
+    int allocation_committed = 0;
+
+    if (!process_thread_handle_is_structurally_valid(owner) ||
+        thread_id == 0U || entry == NULL || handle_out == NULL ||
+        stack_size < SYNTRA_THREAD_MIN_STACK_SIZE ||
+        stack_size >
+            (size_t)SYNTRA_MAX_MEMORY_BLOCKS * SYNTRA_MEMORY_BLOCK_SIZE)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    blocks = (unsigned int)(
+        (stack_size + (SYNTRA_MEMORY_BLOCK_SIZE - 1U)) /
+        SYNTRA_MEMORY_BLOCK_SIZE);
+    if (blocks == 0U || blocks > SYNTRA_MAX_MEMORY_BLOCKS)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    irq = syntra_irq_save();
+
+    status = process_get_snapshot_by_handle(owner, &process);
+    if (status != SYNTRA_STATUS_OK)
+        goto rollback;
+    if (process.state == PROCESS_TERMINATED)
+    {
+        status = SYNTRA_STATUS_PERMISSION_DENIED;
+        goto rollback;
+    }
+
+    status = memory_allocate_staged(blocks, &kernel_stack, &allocation);
+    if (status != SYNTRA_STATUS_OK)
+        goto rollback;
+    allocation_created = 1;
+
+    status = scheduler_reserve_owned_thread(
+        owner, thread_id, priority, entry, argument,
+        kernel_stack, stack_size, &reserved_handle);
+    if (status != SYNTRA_STATUS_OK)
+        goto rollback;
+    reservation_created = 1;
+
+    allocation_owner.slot = reserved_handle.slot;
+    allocation_owner.generation = reserved_handle.generation;
+
+    status = memory_bind_staged_allocation(allocation, allocation_owner);
+    if (status != SYNTRA_STATUS_OK)
+        goto rollback;
+    allocation_reserved = 1;
+
+    status = scheduler_attach_owned_stack(reserved_handle, allocation);
+    if (status != SYNTRA_STATUS_OK)
+        goto rollback;
+
+    status = memory_commit_thread_allocation(allocation, allocation_owner);
+    if (status != SYNTRA_STATUS_OK)
+        goto rollback;
+    allocation_committed = 1;
+
+    status = scheduler_publish_owned_thread(reserved_handle);
+    if (status != SYNTRA_STATUS_OK)
+        goto rollback;
+
+    *handle_out = reserved_handle;
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
+
+rollback:
+    /*
+     * Never release an allocation while its reservation may still exist.
+     * If exact TCB abort fails, leave the allocation quarantined.
+     */
+    if (reservation_created)
+        cleanup_status = scheduler_abort_reserved_thread(reserved_handle);
+
+    if (cleanup_status == SYNTRA_STATUS_OK && allocation_created)
+    {
+        if (allocation_committed)
+            cleanup_status = memory_release_owned_allocation(
+                allocation, allocation_owner);
+        else if (allocation_reserved)
+            cleanup_status = memory_abort_reserved_allocation(
+                allocation, allocation_owner);
+        else
+            cleanup_status = memory_abort_staged_allocation(allocation);
+    }
+
+    syntra_irq_restore(irq);
+    if (cleanup_status != SYNTRA_STATUS_OK)
+        return SYNTRA_STATUS_ERROR;
     return status;
 }
 
