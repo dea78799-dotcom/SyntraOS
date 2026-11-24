@@ -266,3 +266,57 @@ syntra_status_t syntra_desktop_render(syntra_framebuffer_t *framebuffer)
 
     return render_desktop(framebuffer);
 }
+
+/*
+ * GUI v2 focus feedback. This is deliberately a render overlay: input
+ * transport remains separate, so the same session can be driven by host
+ * tests or a future QEMU VirtIO input backend.
+ */
+syntra_status_t syntra_desktop_render_session(
+    syntra_framebuffer_t *framebuffer,
+    const syntra_desktop_session_t *session)
+{
+    uint32_t x;
+    uint32_t y;
+    uint32_t width;
+    uint32_t height;
+    const uint32_t border = 2U;
+    const uint32_t color = 0xFFFFFFFFU;
+    syntra_status_t status;
+
+    if (session == NULL || session->initialized != 1 ||
+        session->focused_app >= SYNTRA_DESKTOP_APP_COUNT)
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    status = syntra_desktop_render(framebuffer);
+    if (status != SYNTRA_STATUS_OK) return status;
+
+    if (framebuffer->width < 640U || framebuffer->height < 480U)
+    {
+        width = (framebuffer->width - 48U) / SYNTRA_DESKTOP_APP_COUNT;
+        height = 52U;
+        x = 12U + session->focused_app * (width + 8U);
+        y = 112U;
+    }
+    else
+    {
+        width = 64U;
+        height = 64U;
+        x = 24U + session->focused_app * 80U;
+        y = 180U;
+    }
+
+    status = syntra_framebuffer_fill_rect(
+        framebuffer, x, y, width, border, color);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_framebuffer_fill_rect(
+        framebuffer, x, y + height - border, width, border, color);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = syntra_framebuffer_fill_rect(
+        framebuffer, x, y, border, height, color);
+    if (status != SYNTRA_STATUS_OK) return status;
+    return syntra_framebuffer_fill_rect(
+        framebuffer, x + width - border, y, border, height, color);
+}

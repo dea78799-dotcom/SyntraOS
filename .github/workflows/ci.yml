@@ -8,6 +8,7 @@ on:
   pull_request:
     branches:
       - main
+      - feat/gui-v2-v5-roadmap
 
   # Run a health check every day at 02:00 UTC (09:00 Vietnam time).
   schedule:
