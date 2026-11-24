@@ -32,17 +32,26 @@ int main(void)
         process_init() == SYNTRA_STATUS_OK
     );
 
-    /* Test 2: Create process */
-    check(
-        "Create process ID 1",
-        process_create(1, 5) == SYNTRA_STATUS_OK
-    );
-
-    /* Test 3: Resolve and validate a generation-aware process handle. */
+    /* Test 2: Create process through the new handle-first API. */
     syntra_process_handle_t process_handle = {0U, 0U};
     check(
-        "Resolve process handle",
-        process_get_handle(1U, &process_handle) == SYNTRA_STATUS_OK
+        "Create process ID 1 and return handle",
+        process_create_with_handle(1U, 5U, &process_handle) ==
+            SYNTRA_STATUS_OK
+    );
+    check(
+        "Reject NULL create-handle output",
+        process_create_with_handle(2U, 3U, NULL) ==
+            SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+
+    /* Test 3: Validate the returned generation-aware process handle. */
+    syntra_process_handle_t resolved_handle = {0U, 0U};
+    check(
+        "Resolve legacy ID to same handle",
+        process_get_handle(1U, &resolved_handle) == SYNTRA_STATUS_OK &&
+        resolved_handle.slot == process_handle.slot &&
+        resolved_handle.generation == process_handle.generation
     );
     check(
         "Handle slot is in range and generation is nonzero",
@@ -102,10 +111,19 @@ int main(void)
         process->process_id == 1
     );
 
-    /* Test 5: Reject duplicate ID */
+    /* Test 5: Keep the legacy ID-based creation API compatible. */
+    check(
+        "Create process through legacy ID API",
+        process_create(2U, 3U) == SYNTRA_STATUS_OK
+    );
+    check(
+        "Read legacy-created process snapshot",
+        process_get_snapshot(2U, &process_snapshot) == SYNTRA_STATUS_OK &&
+        process_snapshot.process_id == 2U
+    );
     check(
         "Reject duplicate process ID",
-        process_create(1, 3) != SYNTRA_STATUS_OK
+        process_create(1U, 3U) != SYNTRA_STATUS_OK
     );
 
     /* Test 6: Check initial state */
@@ -118,25 +136,25 @@ int main(void)
     /* Test 7: Change state */
     check(
         "Change state to RUNNING",
-        process_set_state(1, PROCESS_RUNNING) == SYNTRA_STATUS_OK
+        process_set_state_by_handle(process_handle, PROCESS_RUNNING) == SYNTRA_STATUS_OK
     );
 
     check(
         "Block a RUNNING process",
-        process_set_state(1U, PROCESS_BLOCKED) == SYNTRA_STATUS_OK
+        process_set_state_by_handle(process_handle, PROCESS_BLOCKED) == SYNTRA_STATUS_OK
     );
     check(
         "Reject direct BLOCKED to RUNNING transition",
-        process_set_state(1U, PROCESS_RUNNING) ==
+        process_set_state_by_handle(process_handle, PROCESS_RUNNING) ==
             SYNTRA_STATUS_INVALID_ARGUMENT
     );
     check(
         "Wake BLOCKED process to READY",
-        process_set_state(1U, PROCESS_READY) == SYNTRA_STATUS_OK
+        process_set_state_by_handle(process_handle, PROCESS_READY) == SYNTRA_STATUS_OK
     );
     check(
         "Return READY process to RUNNING",
-        process_set_state(1U, PROCESS_RUNNING) == SYNTRA_STATUS_OK
+        process_set_state_by_handle(process_handle, PROCESS_RUNNING) == SYNTRA_STATUS_OK
     );
 
     /* Test 8: Verify state */
@@ -160,7 +178,7 @@ int main(void)
     /* Test 10: Terminate process */
     check(
         "Terminate process",
-        process_terminate(1) == SYNTRA_STATUS_OK
+        process_set_state_by_handle(process_handle, PROCESS_TERMINATED) == SYNTRA_STATUS_OK
     );
 
     /* Test 11: Verify termination */
