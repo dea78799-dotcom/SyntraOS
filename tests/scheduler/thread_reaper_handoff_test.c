@@ -151,6 +151,20 @@ int main(void)
         stats.queued == 1U && stats.discarded_nonterminal == 1U &&
         stats.acknowledged_events == 2U);
 
+    check("Terminate final runnable thread with no successor",
+        scheduler_terminate_current() == SYNTRA_STATUS_OK);
+    check("No-successor scheduling fails closed",
+        scheduler_schedule_next_context(&selected_context) ==
+            SYNTRA_STATUS_ERROR && selected_context == NULL);
+    check("No-successor path cannot publish switch-away proof",
+        scheduler_complete_switch_away() == SYNTRA_STATUS_ERROR);
+    processed = 99U;
+    check("No-successor path creates no candidate",
+        thread_reaper_dispatch(1U, &processed) == SYNTRA_STATUS_OK &&
+        processed == 0U &&
+        thread_reaper_get_candidate_count(&candidate_count) ==
+            SYNTRA_STATUS_OK && candidate_count == 1U);
+
     memory_get_info(&after);
     check("Dispatcher never releases candidate stack memory",
         before.active_allocations == after.active_allocations &&
