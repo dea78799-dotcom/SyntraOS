@@ -755,6 +755,16 @@ static void syntra_scheduler_test_worker(void *argument)
     unsigned int worker_id = (unsigned int)(uintptr_t)argument;
     unsigned int worker_index = worker_id - SYNTRA_SCHEDULER_TEST_WORKER_A_ID;
     uint64_t observed_tick = timer_get_ticks();
+    uint64_t initial_daif;
+
+    __asm__ volatile("mrs %0, daif" : "=r"(initial_daif));
+    syntra_uart_puts(worker_id == SYNTRA_SCHEDULER_TEST_WORKER_A_ID
+        ? "Scheduler worker A entered; DAIF="
+        : "Scheduler worker B entered; DAIF=");
+    syntra_uart_put_hex(initial_daif);
+    syntra_uart_puts(" tick=");
+    syntra_uart_put_hex(observed_tick);
+    syntra_uart_puts("\\n");
 
     for (;;)
     {
