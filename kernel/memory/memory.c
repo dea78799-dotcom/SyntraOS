@@ -888,6 +888,26 @@ syntra_status_t memory_release_owned_allocation(
         allocation, owner, SYNTRA_MEMORY_ALLOCATION_THREAD_OWNED, 1);
 }
 
+syntra_status_t memory_get_allocation_by_handle(
+    syntra_memory_allocation_handle_t allocation,
+    syntra_memory_allocation_t *snapshot_out)
+{
+    syntra_irq_state_t irq;
+    unsigned int index;
+    syntra_status_t status = SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    if (snapshot_out == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    irq = syntra_irq_save();
+    if (find_allocation_by_handle(allocation, &index)) {
+        *snapshot_out = allocations[index];
+        status = SYNTRA_STATUS_OK;
+    }
+    syntra_irq_restore(irq);
+    return status;
+}
+
 syntra_status_t memory_release(
     void *address,
     unsigned int blocks
@@ -933,7 +953,23 @@ void memory_get_info(syntra_memory_info_t *info)
     }
 
     if (!initialized) {
-        *info = (syntra_memory_info_t){0};
+        info->total_blocks = 0U;
+        info->used_blocks = 0U;
+        info->free_blocks = 0U;
+        info->allocation_count = 0U;
+        info->release_count = 0U;
+        info->active_allocations = 0U;
+        info->failed_allocations = 0U;
+        info->largest_free_block = 0U;
+        info->free_regions = 0U;
+        info->fragmentation_blocks = 0U;
+        info->usage_percent = 0U;
+        info->integrity_errors = 0U;
+        info->validation_errors = 0U;
+        info->peak_used_blocks = 0U;
+        info->peak_usage_percent = 0U;
+        info->leak_count = 0U;
+        info->leak_blocks = 0U;
         return;
     }
 

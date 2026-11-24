@@ -7,6 +7,33 @@ static unsigned int next_slot;
 static int current_slot;
 static int scheduler_initialized;
 
+/* One unpublished reservation is sufficient for the single-core coordinator. */
+static syntra_thread_t reserved_thread;
+static int reserved_thread_valid;
+
+static void scheduler_clear_reserved_thread(void)
+{
+    reserved_thread.handle.slot = 0U;
+    reserved_thread.handle.generation = 0U;
+    reserved_thread.thread_id = 0U;
+    reserved_thread.priority = 0U;
+    reserved_thread.state = THREAD_TERMINATED;
+    reserved_thread.entry = NULL;
+    reserved_thread.argument = NULL;
+    reserved_thread.stack_base = 0U;
+    reserved_thread.stack_size = 0U;
+    reserved_thread.stack_ownership = SYNTRA_THREAD_STACK_BORROWED;
+    reserved_thread.stack_allocation.slot = 0U;
+    reserved_thread.stack_allocation.generation = 0U;
+    reserved_thread.user_stack_base = 0U;
+    reserved_thread.user_stack_size = 0U;
+    reserved_thread.is_user_thread = 0U;
+    reserved_thread.cpu_context = NULL;
+    reserved_thread.owner_process.slot = 0U;
+    reserved_thread.owner_process.generation = 0U;
+    reserved_thread.has_process_owner = 0U;
+}
+
 #define SYNTRA_SWITCH_COMPLETION_CAPACITY 128U
 
 typedef struct
@@ -91,6 +118,10 @@ static syntra_status_t scheduler_insert_thread(
         return SYNTRA_STATUS_ERROR;
     }
 
+    /* Keep the reserved append-only slot stable until publish or abort. */
+    if (reserved_thread_valid)
+        return SYNTRA_STATUS_ERROR;
+
     if (thread_id == 0U || scheduler_find_slot(thread_id) >= 0)
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
@@ -134,6 +165,8 @@ static syntra_status_t scheduler_init_unlocked(void)
     }
 
     thread_count = 0U;
+    scheduler_clear_reserved_thread();
+    reserved_thread_valid = 0;
     next_slot = 0U;
     current_slot = -1;
     pending_switch.handle.slot = 0U;
@@ -705,6 +738,43 @@ static syntra_status_t scheduler_validate_unlocked(void)
         }
     }
 
+    if (reserved_thread_valid)
+    {
+        if (reserved_thread.handle.slot != thread_count ||
+            reserved_thread.handle.generation == 0U ||
+            reserved_thread.thread_id == 0U ||
+            reserved_thread.state != THREAD_BLOCKED ||
+            reserved_thread.has_process_owner != 1U ||
+            reserved_thread.owner_process.generation == 0U ||
+            reserved_thread.owner_process.slot >= SYNTRA_MAX_PROCESSES ||
+            reserved_thread.is_user_thread != 0U ||
+            reserved_thread.user_stack_base != 0U ||
+            reserved_thread.user_stack_size != 0U ||
+            reserved_thread.cpu_context != NULL ||
+            reserved_thread.stack_base == 0U ||
+            reserved_thread.stack_size < SYNTRA_THREAD_MIN_STACK_SIZE)
+            return SYNTRA_STATUS_ERROR;
+
+        if (reserved_thread.stack_ownership == SYNTRA_THREAD_STACK_BORROWED)
+        {
+            if (reserved_thread.stack_allocation.slot != 0U ||
+                reserved_thread.stack_allocation.generation != 0U)
+                return SYNTRA_STATUS_ERROR;
+        }
+        else if (reserved_thread.stack_ownership == SYNTRA_THREAD_STACK_OWNED)
+        {
+            if (reserved_thread.stack_allocation.generation == 0U)
+                return SYNTRA_STATUS_ERROR;
+        }
+        else
+            return SYNTRA_STATUS_ERROR;
+
+        if (scheduler_find_slot(reserved_thread.thread_id) >= 0 ||
+            scheduler_stack_range_conflicts(
+                reserved_thread.stack_base, reserved_thread.stack_size))
+            return SYNTRA_STATUS_ERROR;
+    }
+
     if (running_count > 1U ||
         (current_slot < 0 && running_count != 0U) ||
         (current_slot >= 0 &&
@@ -882,6 +952,171 @@ syntra_status_t scheduler_create_owned_user_thread_with_handle(
             *handle_out = threads[(unsigned int)slot].handle;
         }
     }
+    syntra_irq_restore(irq);
+    return status;
+}
+
+/*
+ * Private reserve/attach/publish protocol. The reserved TCB lives outside the
+ * published array, so neither scheduler selection path nor public snapshots
+ * can observe it. The single pending slot matches the current single-core,
+ * append-only scheduler model; this is not an SMP reservation primitive.
+ */
+syntra_status_t scheduler_reserve_owned_thread(
+    syntra_process_handle_t owner, unsigned int id, unsigned int priority,
+    syntra_thread_entry_t entry, void *argument, void *stack,
+    size_t stack_size, syntra_thread_handle_t *handle_out)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    uintptr_t base = (uintptr_t)stack;
+    syntra_status_t status = SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    if (owner.generation == 0U || owner.slot >= SYNTRA_MAX_PROCESSES ||
+        id == 0U || entry == NULL || stack == NULL || handle_out == NULL ||
+        stack_size < SYNTRA_THREAD_MIN_STACK_SIZE ||
+        (base & (SYNTRA_THREAD_STACK_ALIGNMENT - 1U)) != 0U ||
+        base > UINTPTR_MAX - stack_size)
+        goto done;
+
+    if (!scheduler_initialized || reserved_thread_valid)
+    {
+        status = SYNTRA_STATUS_ERROR;
+        goto done;
+    }
+    if (scheduler_find_slot(id) >= 0)
+        goto done;
+    if (thread_count >= SYNTRA_MAX_THREADS)
+    {
+        status = SYNTRA_STATUS_OUT_OF_MEMORY;
+        goto done;
+    }
+    if (scheduler_stack_range_conflicts(base, stack_size))
+        goto done;
+
+    scheduler_clear_reserved_thread();
+    reserved_thread.handle.slot = thread_count;
+    reserved_thread.handle.generation = 1U;
+    reserved_thread.thread_id = id;
+    reserved_thread.priority = priority;
+    reserved_thread.state = THREAD_BLOCKED;
+    reserved_thread.entry = entry;
+    reserved_thread.argument = argument;
+    reserved_thread.stack_base = base;
+    reserved_thread.stack_size = stack_size;
+    reserved_thread.stack_ownership = SYNTRA_THREAD_STACK_BORROWED;
+    reserved_thread.owner_process = owner;
+    reserved_thread.has_process_owner = 1U;
+    reserved_thread_valid = 1;
+    *handle_out = reserved_thread.handle;
+    status = SYNTRA_STATUS_OK;
+
+done:
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_attach_owned_stack(
+    syntra_thread_handle_t handle,
+    syntra_memory_allocation_handle_t allocation)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_memory_allocation_t snapshot;
+    syntra_memory_owner_handle_t expected_owner;
+    syntra_status_t status = SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    if (!reserved_thread_valid ||
+        !scheduler_thread_handle_equal(handle, reserved_thread.handle) ||
+        allocation.generation == 0U)
+        goto done;
+
+    expected_owner.slot = handle.slot;
+    expected_owner.generation = handle.generation;
+    status = memory_get_allocation_by_handle(allocation, &snapshot);
+    if (status != SYNTRA_STATUS_OK)
+        goto done;
+
+    if (snapshot.ownership_state != SYNTRA_MEMORY_ALLOCATION_RESERVED ||
+        snapshot.owner.slot != expected_owner.slot ||
+        snapshot.owner.generation != expected_owner.generation ||
+        snapshot.address != (void *)reserved_thread.stack_base ||
+        snapshot.block_count >
+            UINT32_MAX / SYNTRA_MEMORY_BLOCK_SIZE ||
+        snapshot.block_count * SYNTRA_MEMORY_BLOCK_SIZE <
+            reserved_thread.stack_size)
+    {
+        status = SYNTRA_STATUS_PERMISSION_DENIED;
+        goto done;
+    }
+
+    reserved_thread.stack_ownership = SYNTRA_THREAD_STACK_OWNED;
+    reserved_thread.stack_allocation = allocation;
+    status = SYNTRA_STATUS_OK;
+
+done:
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_publish_owned_thread(syntra_thread_handle_t handle)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_memory_allocation_t snapshot;
+    syntra_memory_owner_handle_t expected_owner;
+    syntra_status_t status = SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    if (!reserved_thread_valid ||
+        !scheduler_thread_handle_equal(handle, reserved_thread.handle) ||
+        reserved_thread.stack_ownership != SYNTRA_THREAD_STACK_OWNED ||
+        reserved_thread.stack_allocation.generation == 0U ||
+        thread_count >= SYNTRA_MAX_THREADS)
+        goto done;
+
+    expected_owner.slot = handle.slot;
+    expected_owner.generation = handle.generation;
+    status = memory_get_allocation_by_handle(
+        reserved_thread.stack_allocation, &snapshot);
+    if (status != SYNTRA_STATUS_OK)
+        goto done;
+
+    if (snapshot.ownership_state != SYNTRA_MEMORY_ALLOCATION_THREAD_OWNED ||
+        snapshot.owner.slot != expected_owner.slot ||
+        snapshot.owner.generation != expected_owner.generation ||
+        snapshot.address != (void *)reserved_thread.stack_base ||
+        snapshot.block_count >
+            UINT32_MAX / SYNTRA_MEMORY_BLOCK_SIZE ||
+        snapshot.block_count * SYNTRA_MEMORY_BLOCK_SIZE <
+            reserved_thread.stack_size)
+    {
+        status = SYNTRA_STATUS_PERMISSION_DENIED;
+        goto done;
+    }
+
+    /* Final visibility point: copy complete TCB, then increment published count. */
+    reserved_thread.state = THREAD_READY;
+    threads[thread_count] = reserved_thread;
+    ++thread_count;
+    scheduler_clear_reserved_thread();
+    reserved_thread_valid = 0;
+    status = SYNTRA_STATUS_OK;
+
+done:
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_abort_reserved_thread(syntra_thread_handle_t handle)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    if (reserved_thread_valid &&
+        scheduler_thread_handle_equal(handle, reserved_thread.handle))
+    {
+        scheduler_clear_reserved_thread();
+        reserved_thread_valid = 0;
+        status = SYNTRA_STATUS_OK;
+    }
+
     syntra_irq_restore(irq);
     return status;
 }
