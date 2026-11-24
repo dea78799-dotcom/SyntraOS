@@ -48,6 +48,8 @@ syntra_status_t process_get_snapshot_by_handle(
     syntra_process_t *snapshot
 );
 
+/* Metadata-only state mutation. For PROCESS_TERMINATED, new lifecycle code
+ * must call process_thread_terminate_process() to cascade to owned threads. */
 syntra_status_t process_set_state_by_handle(
     syntra_process_handle_t handle,
     syntra_process_state_t state
