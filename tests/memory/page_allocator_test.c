@@ -38,14 +38,27 @@ int main(void)
     /* Ownership tags reject cross-subsystem frees and clear on release. */
     {
         syntra_page_owner_t owner = SYNTRA_PAGE_OWNER_NONE;
+        syntra_page_allocator_stats_t stats;
         assert(syntra_page_alloc_owned(&third, SYNTRA_PAGE_OWNER_PAGE_TABLE) == SYNTRA_STATUS_OK);
         assert(syntra_page_get_owner(third, &owner) == SYNTRA_STATUS_OK);
         assert(owner == SYNTRA_PAGE_OWNER_PAGE_TABLE);
         assert(syntra_page_free_owned(third, SYNTRA_PAGE_OWNER_PROCESS) == SYNTRA_STATUS_PERMISSION_DENIED);
+        assert(syntra_page_allocator_get_stats(&stats) == SYNTRA_STATUS_OK);
+        assert(stats.valid == 1);
+        assert(stats.total_pages == 2U);
+        assert(stats.free_pages == 1U);
+        assert(stats.allocated_pages == 1U);
+        assert(stats.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] == 1U);
+        assert(stats.owner_pages[SYNTRA_PAGE_OWNER_KERNEL] == 0U);
         assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
         assert(syntra_page_free_owned(third, SYNTRA_PAGE_OWNER_PAGE_TABLE) == SYNTRA_STATUS_OK);
         assert(syntra_page_get_owner(third, &owner) == SYNTRA_STATUS_ERROR);
+        assert(syntra_page_allocator_get_stats(&stats) == SYNTRA_STATUS_OK);
+        assert(stats.free_pages == 2U);
+        assert(stats.allocated_pages == 0U);
+        assert(stats.owner_pages[SYNTRA_PAGE_OWNER_PAGE_TABLE] == 0U);
         assert(syntra_page_allocator_validate() == SYNTRA_STATUS_OK);
+        assert(syntra_page_allocator_get_stats(NULL) == SYNTRA_STATUS_INVALID_ARGUMENT);
         assert(syntra_page_alloc_owned(&third, SYNTRA_PAGE_OWNER_NONE) == SYNTRA_STATUS_INVALID_ARGUMENT);
         assert(syntra_page_alloc_owned(&third, SYNTRA_PAGE_OWNER_MAX) == SYNTRA_STATUS_INVALID_ARGUMENT);
     }
