@@ -39,7 +39,7 @@ int main(void)
     );
 
     /* Test 3: Resolve and validate a generation-aware process handle. */
-    syntra_process_handle_t process_handle;
+    syntra_process_handle_t process_handle = {0U, 0U};
     check(
         "Resolve process handle",
         process_get_handle(1U, &process_handle) == SYNTRA_STATUS_OK
