@@ -146,6 +146,15 @@ syntra_status_t scheduler_create_thread(
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
 
+    /*
+     * Every live thread owns a distinct stack range. Check both EL1 and
+     * EL0 ranges so a kernel thread cannot alias another thread's stack.
+     */
+    if (scheduler_stack_range_conflicts(stack_address, stack_size))
+    {
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
     return scheduler_insert_thread(
         thread_id, priority, entry, argument, stack, stack_size);
 }
