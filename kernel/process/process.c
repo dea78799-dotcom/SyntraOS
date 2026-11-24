@@ -99,6 +99,33 @@ static syntra_process_t *process_get_unlocked(unsigned int process_id)
 }
 
 
+
+static int process_transition_allowed(
+    syntra_process_state_t current,
+    syntra_process_state_t next)
+{
+    if (current == next)
+        return 1;
+
+    switch (current)
+    {
+        case PROCESS_READY:
+            return next == PROCESS_RUNNING ||
+                next == PROCESS_BLOCKED ||
+                next == PROCESS_TERMINATED;
+        case PROCESS_RUNNING:
+            return next == PROCESS_READY ||
+                next == PROCESS_BLOCKED ||
+                next == PROCESS_TERMINATED;
+        case PROCESS_BLOCKED:
+            return next == PROCESS_READY ||
+                next == PROCESS_TERMINATED;
+        case PROCESS_TERMINATED:
+        default:
+            return 0;
+    }
+}
+
 static syntra_status_t process_set_state_unlocked(
     unsigned int process_id,
     syntra_process_state_t state
@@ -120,6 +147,9 @@ static syntra_status_t process_set_state_unlocked(
     {
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
+
+    if (!process_transition_allowed(process->state, state))
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
 
     process->state = state;
 
