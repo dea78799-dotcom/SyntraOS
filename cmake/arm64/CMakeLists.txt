@@ -38,6 +38,7 @@ add_executable(syntraos_arm64
     "${SYNTRAOS_ARM64_DIR}/boot/memory_map.c"
     "${SYNTRAOS_ROOT}/kernel/memory/memory_region.c"
     "${SYNTRAOS_ROOT}/kernel/memory/page_allocator.c"
+    "${SYNTRAOS_ROOT}/kernel/memory/memory.c"
 
     "${SYNTRAOS_ARM64_DIR}/arch.c"
     "${SYNTRAOS_ARM64_DIR}/exception.c"
