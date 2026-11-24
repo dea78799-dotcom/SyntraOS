@@ -57,6 +57,19 @@ int main(void)
         thread->stack_base == (uintptr_t)stack_a &&
         thread->stack_size == sizeof(stack_a));
 
+    {
+        syntra_thread_t snapshot;
+        check("Read thread through copy-out snapshot",
+            scheduler_get_thread_snapshot(2U, &snapshot) == SYNTRA_STATUS_OK);
+        snapshot.state = THREAD_TERMINATED;
+        check("Snapshot mutation does not alter scheduler record",
+            scheduler_get_thread_snapshot(2U, &snapshot) == SYNTRA_STATUS_OK &&
+            snapshot.state == THREAD_READY);
+        check("Reject NULL thread snapshot",
+            scheduler_get_thread_snapshot(2U, NULL) ==
+                SYNTRA_STATUS_INVALID_ARGUMENT);
+    }
+
     thread = scheduler_schedule_next();
     check("Round-robin selects first READY thread",
         thread != NULL && thread->thread_id == 1U &&
@@ -166,6 +179,29 @@ int main(void)
             selected != NULL && selected->thread_id == 4U &&
             selected->cpu_context != NULL &&
             selected->state == THREAD_RUNNING);
+    }
+
+    {
+        syntra_thread_t *user_thread = scheduler_get_thread(4U);
+
+        check("Reject a second thread using the exact same stack",
+            scheduler_create_thread(5U, 1U, dummy_thread, NULL,
+                stack_a, sizeof(stack_a)) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+        check("Reject partially overlapping thread stacks",
+            scheduler_create_thread(6U, 1U, dummy_thread, NULL,
+                &stack_a[1024], 1024U) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+        check("Reject kernel thread stack overlapping a user stack",
+            user_thread != NULL &&
+            scheduler_create_thread(7U, 1U, dummy_thread, NULL,
+                (void *)user_thread->user_stack_base,
+                user_thread->user_stack_size) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+        check("Reject stack range overflowing uintptr_t",
+            scheduler_create_thread(8U, 1U, dummy_thread, NULL,
+                (void *)(UINTPTR_MAX - 15U), 1024U)
+                == SYNTRA_STATUS_INVALID_ARGUMENT);
     }
 
     printf("\n=================================\n");

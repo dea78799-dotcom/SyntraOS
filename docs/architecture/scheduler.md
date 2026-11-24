@@ -1,52 +1,82 @@
 # SyntraOS Scheduler
 
-Version: 1.0.0
-Status: Core implementation in progress; ARM64 context switching pending.
+Version: 0.1.0
+Implementation status: V1 scheduler prototype; ARM64 context-switch path validated in QEMU
 
 ## 1. Responsibilities
 
-The scheduler tracks runnable threads, selects the next thread, and maintains
-thread lifecycle state. Architecture code is responsible for saving and
-restoring CPU registers. Stack allocation is owned by the memory subsystem.
+The scheduler maintains a bounded set of thread records, selects runnable
+threads, and tracks READY, RUNNING, BLOCKED, and TERMINATED states. The
+architecture layer owns exception-frame construction, saving, and restoration.
+Stack memory is caller-owned; the scheduler records its address ranges but
+does not allocate or free stack memory.
 
 ## 2. Thread Control Block
 
-Each TCB contains:
-- Thread ID and priority metadata.
-- READY, RUNNING, BLOCKED, or TERMINATED state.
+Each V1 thread record contains:
+- A nonzero thread ID and priority metadata.
+- Thread lifecycle state.
 - Entry function and argument.
-- Caller-owned stack base and size.
-- Architecture-owned saved CPU context pointer.
+- Caller-provided EL1 stack base and size.
+- Optional EL0 stack base and size for a user thread.
+- An architecture-owned saved CPU-context pointer.
 
-Thread creation currently accepts a caller-provided stack. Dynamic stack
-allocation is intentionally deferred until Memory Management provides it.
+The table is fixed at 32 thread records. Stack sizes must be at least 1024
+bytes and stack bases must be 16-byte aligned. Registered EL1 and EL0 stack
+ranges are checked for overlap and remain reserved until scheduler reset.
+There is no thread-reaping or stack-release API yet.
 
 ## 3. Scheduling policy
 
-Scheduler V1 uses deterministic round-robin selection across READY threads.
-The priority field is retained as metadata but does not influence V1 ordering.
-A scheduling operation moves the previous RUNNING thread back to READY unless
-it has been blocked or terminated, then selects the next READY thread.
+V1 uses deterministic round-robin selection across READY threads. Priority is
+stored as metadata and does not affect selection order. The context-aware
+selection path skips READY records that do not have a saved CPU context;
+metadata-only records remain available to the policy-only test API.
 
-## 4. Lifecycle
+## 4. Lifecycle and limitations
 
-- READY: eligible for CPU time.
-- RUNNING: selected as the current thread.
-- BLOCKED: temporarily ineligible until explicitly woken.
-- TERMINATED: no longer eligible for scheduling.
+- READY: eligible for selection.
+- RUNNING: currently selected by the scheduler.
+- BLOCKED: not eligible until explicitly woken.
+- TERMINATED: no longer eligible for selection.
 
-## 5. Architecture integration
+V1 does not reclaim terminated thread records or stack ranges. The scheduler
+does not yet own process membership, thread resources, or address spaces.
 
-The generic scheduler does not manipulate ARM64 registers. The ARM64 port must
-save the complete exception frame into the current TCB and restore the selected
-thread's frame before exception return. New-thread frames must be initialized
-with a valid entry PC, stack, processor state, and ABI-aligned stack pointer.
+## 5. ARM64 integration and synchronization
 
-## 6. Validation status
+The ARM64 exception bridge saves the interrupted context and selects a
+thread context for exception return. The QEMU ARM64 CI path exercises the
+context-switch test and verifies the expected boot/worker behavior.
 
-The host test suite covers round-robin order, state transitions, duplicate IDs,
-caller-provided stack validation, and scheduler invariants.
+The scheduler now exposes copy-out inspection APIs
+(scheduler_get_thread_snapshot and scheduler_get_current_snapshot) and
+controlled context mutation/selection APIs. The ARM64 boot and exception
+bridge use these APIs instead of retaining mutable thread-record pointers.
+Legacy mutable-pointer accessors remain for compatibility and must not be used
+by new kernel code.
 
-Preemptive ARM64 switching, idle-thread behavior, and QEMU task alternation are
-not complete until the architecture context-switch path is implemented and
-verified.
+Public scheduler operations now save and mask local IRQ state with
+syntra_irq_save()/syntra_irq_restore() around metadata reads and mutations.
+This follows the existing single-core ARM64 page-allocator critical-section
+pattern and is safe for nested calls because each operation restores the
+caller's previous DAIF state.
+
+This is local interrupt exclusion, not an SMP lock. It does not serialize
+multiple CPU cores, FIQ handlers, or arbitrary concurrent execution. Legacy
+mutable-pointer accessors return after IRQ state is restored; callers must not
+retain or mutate those pointers. New kernel code must use snapshot and
+controlled-mutation APIs. QEMU validation is not an SMP-safety proof. Before
+enabling multiple cores or broader exception classes, define and test a
+separate cross-core synchronization contract.
+
+## 6. Validation scope
+
+Host unit tests cover round-robin order, state transitions, duplicate IDs,
+stack alignment and size checks, stack overlap and overflow rejection,
+user/kernel stack separation, context-aware selection, and scheduler
+invariants. ARM64 CI additionally validates the kernel ELF, QEMU boot, and
+the current context-switch test path.
+
+These tests do not establish SMP safety, complete thread cleanup, dynamic
+stack allocation, process isolation, or production readiness.

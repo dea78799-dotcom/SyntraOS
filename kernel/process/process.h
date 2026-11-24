@@ -30,10 +30,14 @@ syntra_status_t process_create(
     unsigned int priority
 );
 
-/* Find a process */
-syntra_process_t *process_get(
-    unsigned int process_id
+/* Copy process metadata into caller-owned storage. */
+syntra_status_t process_get_snapshot(
+    unsigned int process_id,
+    syntra_process_t *snapshot
 );
+
+/* Legacy mutable-pointer accessor; new code should use process_get_snapshot. */
+syntra_process_t *process_get(unsigned int process_id);
 
 /* Change process state */
 syntra_status_t process_set_state(

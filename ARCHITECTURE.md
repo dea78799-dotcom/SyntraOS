@@ -1,91 +1,69 @@
-SYNTRAOS ARCHITECTURE
+# SYNTRA OS Architecture
 
-1. Overview
+Version: 0.1.0
+Status: Early development — ARM64 virtual-machine prototype
 
-SyntraOS is an independent mobile operating system built around a custom microkernel architecture.
+## 1. Overview
 
-The system is designed to support multiple CPU architectures and mobile hardware platforms.
+SYNTRA OS is an independent operating-system project exploring a modular
+kernel with a microkernel-oriented architecture. The current implementation
+is an early prototype, not a production-ready mobile operating system.
 
-2. System Architecture
+## 2. Current implementation scope
 
-SyntraOS consists of the following layers:
+The current automated validation target is ARM64 running in QEMU. Implemented
+and tested foundations include:
 
-1. Bootloader
-2. Microkernel
-3. Memory Manager
-4. Process Manager
-5. IPC System
-6. Hardware Drivers
-7. System Services
-8. Application Runtime
-9. Application Framework
-10. Syntra UI
+- Freestanding ARM64 kernel build and ELF validation.
+- QEMU boot and early platform discovery.
+- Exception handling, GIC and Generic Timer interrupt paths.
+- MMU validation in the emulated environment.
+- V1 round-robin scheduler and ARM64 context-switch test path.
+- Memory Region Manager and physical Page Allocator V1.
+- Memory Manager V1 fixed-pool allocator.
+- Process Manager V1 metadata table.
+- IPC V1 bounded message-queue prototype.
+- HAL and RAM framebuffer desktop validation.
 
-3. Microkernel
+The exact scope and limitations of each subsystem are documented in
+`docs/architecture/`.
 
-The SyntraOS Microkernel is responsible for core system operations:
+## 3. Architecture direction
 
-- Process scheduling
-- Memory management
-- Inter-process communication (IPC)
-- Interrupt handling
-- Capability-based security
+The long-term design is organized around these responsibilities:
 
-Drivers and higher-level services will run outside the kernel whenever practical.
+1. Boot and platform initialization.
+2. Kernel core, exceptions, interrupts, and scheduler.
+3. Memory management.
+4. Process and thread management.
+5. Inter-process communication.
+6. Hardware abstraction and device drivers.
+7. System services.
+8. Application runtime and native applications.
+9. SYNTRA UI and desktop/mobile shell.
+10. Security, capabilities, and isolation.
 
-4. Supported Architectures
+Some of these components are prototypes or design targets rather than
+completed subsystems. In particular, current Process Manager records do not
+create isolated address spaces, and current IPC sender IDs are not authenticated
+identities.
 
-Initial architecture targets:
+## 4. CPU architectures and hardware
 
-- ARM64
-- x86_64
-- RISC-V 64
+ARM64 in QEMU is the current validation target. x86_64, RISC-V, and physical
+mobile-device support are long-term goals, not currently supported or
+validated platforms. Android version alone does not guarantee hardware
+compatibility.
 
-ARM64 is the primary target for mobile devices.
+## 5. Application ecosystem
 
-5. Application Ecosystem
+Native applications and a possible Android-application compatibility layer
+are long-term goals. Android compatibility is not implemented by the current
+prototype and requires a separate runtime and framework.
 
-SyntraOS will support two application environments:
+## 6. Development and safety
 
-Native Applications
-
-Applications developed specifically for SyntraOS.
-
-Android Compatibility
-
-A future compatibility layer intended to support Android applications.
-
-Android compatibility is a long-term goal and requires separate runtime and framework components.
-
-6. Hardware Support
-
-Hardware support will be developed through platform-specific drivers and hardware abstraction layers.
-
-Android version alone does not guarantee device compatibility.
-
-7. Development Strategy
-
-Development will proceed in stages:
-
-1. Foundation
-2. Boot Process
-3. Microkernel
-4. Memory Management
-5. Process Management
-6. IPC
-7. Drivers
-8. System Services
-9. Graphics
-10. Application Runtime
-11. Android Compatibility
-12. Mobile Integration
-
-8. Safety and Testing
-
-Early development will use controlled development environments and virtual machines.
-
-Experimental system images will not be installed on the primary development phone.
-
----
-
-SyntraOS Architecture - Version 0.1.0
+Development and automated testing use controlled virtual environments.
+SyntraOS has not been validated for installation on physical phones and must
+not be treated as a daily-driver operating system. Do not flash experimental
+images to a primary device.

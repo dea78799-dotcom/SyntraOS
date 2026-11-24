@@ -38,8 +38,13 @@ int main(void)
         process_create(1, 5) == SYNTRA_STATUS_OK
     );
 
-    /* Test 3: Get process */
-    syntra_process_t *process = process_get(1);
+    /* Test 3: Get process through a caller-owned snapshot. */
+    syntra_process_t process_snapshot;
+    syntra_process_t *process = &process_snapshot;
+    check(
+        "Copy process snapshot",
+        process_get_snapshot(1U, &process_snapshot) == SYNTRA_STATUS_OK
+    );
 
     check(
         "Get process ID 1",
@@ -66,8 +71,29 @@ int main(void)
         process_set_state(1, PROCESS_RUNNING) == SYNTRA_STATUS_OK
     );
 
+    check(
+        "Block a RUNNING process",
+        process_set_state(1U, PROCESS_BLOCKED) == SYNTRA_STATUS_OK
+    );
+    check(
+        "Reject direct BLOCKED to RUNNING transition",
+        process_set_state(1U, PROCESS_RUNNING) ==
+            SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+    check(
+        "Wake BLOCKED process to READY",
+        process_set_state(1U, PROCESS_READY) == SYNTRA_STATUS_OK
+    );
+    check(
+        "Return READY process to RUNNING",
+        process_set_state(1U, PROCESS_RUNNING) == SYNTRA_STATUS_OK
+    );
+
     /* Test 7: Verify state */
-    process = process_get(1);
+    check(
+        "Refresh process snapshot",
+        process_get_snapshot(1U, &process_snapshot) == SYNTRA_STATUS_OK
+    );
 
     check(
         "Verify RUNNING state",
@@ -88,12 +114,37 @@ int main(void)
     );
 
     /* Test 10: Verify termination */
-    process = process_get(1);
+    check(
+        "Refresh terminated process snapshot",
+        process_get_snapshot(1U, &process_snapshot) == SYNTRA_STATUS_OK
+    );
 
     check(
         "Verify TERMINATED state",
         process != NULL &&
         process->state == PROCESS_TERMINATED
+    );
+
+    check(
+        "Reject NULL process snapshot",
+        process_get_snapshot(1U, NULL) == SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+    process_snapshot.state = PROCESS_READY;
+    check(
+        "Snapshot mutation does not alter manager record",
+        process_get_snapshot(1U, &process_snapshot) == SYNTRA_STATUS_OK &&
+        process_snapshot.state == PROCESS_TERMINATED
+    );
+
+    check(
+        "Reject resurrection of TERMINATED process",
+        process_set_state(1U, PROCESS_RUNNING) ==
+            SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+    check(
+        "TERMINATED state remains unchanged",
+        process_get_snapshot(1U, &process_snapshot) == SYNTRA_STATUS_OK &&
+        process_snapshot.state == PROCESS_TERMINATED
     );
 
     printf("\n=================================\n");

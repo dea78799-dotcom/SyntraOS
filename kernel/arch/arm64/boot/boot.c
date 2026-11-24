@@ -738,7 +738,6 @@ static void syntra_scheduler_test_worker(void *argument)
 static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
 {
     syntra_status_t status;
-    syntra_thread_t *thread;
     syntra_arm64_exception_context_t *initial_context = NULL;
 
     scheduler_test_completed = 0U;
@@ -759,15 +758,15 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
         (void *)(uintptr_t)SYNTRA_SCHEDULER_TEST_WORKER_A_ID,
         scheduler_worker_a_stack, sizeof(scheduler_worker_a_stack));
     if (status != SYNTRA_STATUS_OK) return status;
-    thread = scheduler_get_thread(SYNTRA_SCHEDULER_TEST_WORKER_A_ID);
-    if (thread == NULL) return SYNTRA_STATUS_ERROR;
     status = syntra_arm64_context_initialize(
         scheduler_worker_a_stack, sizeof(scheduler_worker_a_stack),
         syntra_scheduler_test_worker,
         (void *)(uintptr_t)SYNTRA_SCHEDULER_TEST_WORKER_A_ID,
         &initial_context);
     if (status != SYNTRA_STATUS_OK) return status;
-    thread->cpu_context = initial_context;
+    status = scheduler_set_thread_context(
+        SYNTRA_SCHEDULER_TEST_WORKER_A_ID, initial_context);
+    if (status != SYNTRA_STATUS_OK) return status;
 
     status = scheduler_create_thread(
         SYNTRA_SCHEDULER_TEST_WORKER_B_ID, 0U,
@@ -775,8 +774,6 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
         (void *)(uintptr_t)SYNTRA_SCHEDULER_TEST_WORKER_B_ID,
         scheduler_worker_b_stack, sizeof(scheduler_worker_b_stack));
     if (status != SYNTRA_STATUS_OK) return status;
-    thread = scheduler_get_thread(SYNTRA_SCHEDULER_TEST_WORKER_B_ID);
-    if (thread == NULL) return SYNTRA_STATUS_ERROR;
     initial_context = NULL;
     status = syntra_arm64_context_initialize(
         scheduler_worker_b_stack, sizeof(scheduler_worker_b_stack),
@@ -784,7 +781,9 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
         (void *)(uintptr_t)SYNTRA_SCHEDULER_TEST_WORKER_B_ID,
         &initial_context);
     if (status != SYNTRA_STATUS_OK) return status;
-    thread->cpu_context = initial_context;
+    status = scheduler_set_thread_context(
+        SYNTRA_SCHEDULER_TEST_WORKER_B_ID, initial_context);
+    if (status != SYNTRA_STATUS_OK) return status;
 
     status = scheduler_add_thread(SYNTRA_SCHEDULER_TEST_BOOT_ID, 0U);
     if (status != SYNTRA_STATUS_OK) return status;
