@@ -219,7 +219,7 @@ int main(void)
             check("Context-aware selection skips metadata-only READY thread",
                 scheduler_schedule_next_context(&selected_context) ==
                     SYNTRA_STATUS_OK &&
-                selected_context == fake_context &&
+                selected_context == context_thread->cpu_context &&
                 scheduler_get_current() != NULL &&
                 scheduler_get_current()->thread_id == 4U);
             check("Publish outgoing thread proof after simulated stack handoff",
