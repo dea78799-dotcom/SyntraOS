@@ -384,13 +384,18 @@ syntra_arm64_exception_handle_and_select(
         if (scheduler_schedule_next_context(&next_context) != SYNTRA_STATUS_OK)
         {
             /*
-             * No runnable saved context exists. Returning the interrupted
-             * frame would resume a thread that has already terminated or
-             * blocked. Leave the return cookie invalid so vectors.S takes
-             * its non-returning exception-halt path instead.
-             *
-             * This is a deterministic prototype stop, not an idle thread.
+             * A full completion queue can reject a preemption before the
+             * scheduler changes current_slot. If the interrupted thread is
+             * still RUNNING, resume it without switching. If it was already
+             * blocked/terminated, no successor proof exists and we halt.
              */
+            if (scheduler_get_current_snapshot(&current_snapshot) == SYNTRA_STATUS_OK &&
+                current_snapshot.state == THREAD_RUNNING)
+            {
+                context->reserved = SYNTRA_ARM64_IRQ_RETURN_MAGIC;
+                return context;
+            }
+
             context->reserved = 0U;
             return context;
         }
