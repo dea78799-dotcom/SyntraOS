@@ -18,7 +18,7 @@ The scheduler stores one pending outgoing record:
 - monotonically increasing nonzero 64-bit sequence;
 - pending-valid state.
 
-After the assembly handoff, the completion hook moves that record into a fixed 128-entry FIFO event ring. Each event contains the same exact handle and sequence.
+After the assembly handoff, the completion hook moves that record into a fixed 128-entry FIFO event ring. Each event contains the exact handle, sequence, and a terminal-intent bit captured when the outgoing transition is staged. The terminal bit distinguishes an exit handoff from ordinary preemption or blocking even if the TCB is inspected later, after its state has changed.
 
 The queue is bounded. It does not overwrite old events. The scheduler refuses to stage a new context switch when the queue has no capacity. For an ordinary preemption where the current thread is still RUNNING, the ARM64 bridge resumes the current frame without switching. If the executing thread has already been blocked or terminated and no successor can be selected, the bridge keeps the return cookie invalid and enters the existing fail-closed halt path.
 
