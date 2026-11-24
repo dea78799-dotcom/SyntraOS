@@ -116,7 +116,20 @@ Do not claim SMP safety until real cross-core synchronization and tests exist.
 
 Each phase must have focused tests and full Debug/Release plus ARM64 QEMU CI validation before proceeding.
 
-## 8. Required regression tests
+## 8. Phase 1 implementation status
+
+The first identity-primitives increment is implemented alongside the V1 ID API:
+
+- A process-table slot now carries a 32-bit generation and an occupied flag.
+- The public `syntra_process_handle_t` contains a 32-bit slot and generation.
+- `process_get_handle()` resolves an existing legacy ID to its current handle.
+- `process_get_snapshot_by_handle()` and `process_set_state_by_handle()` validate both fields before accessing metadata.
+- Legacy ID-based APIs remain available and route through the same slot table.
+- Initial generation is one. Slot reuse and generation advancement are intentionally unavailable because safe reaping and resource ownership are not implemented.
+
+This increment prevents a mismatched or zero generation from resolving to a live record, but it does not yet demonstrate stale-handle rejection after slot reuse. That test belongs to the later reaping/reuse phase and must not be simulated by exposing an unsafe production API.
+
+## 9. Required regression tests
 
 At minimum:
 
@@ -133,11 +146,11 @@ At minimum:
 - Ensure a new process reusing a slot never receives an old process's messages.
 - Exercise lifecycle and IPC operations under the documented synchronization model.
 
-## 9. Explicit non-goals
+## 10. Explicit non-goals
 
 This design does not implement address-space isolation, user credentials, capability security, file descriptors, a full process loader, SMP scheduling, or production-grade IPC. Those require separate designs and validation.
 
-## 10. Acceptance criteria
+## 11. Acceptance criteria
 
 V2 is not complete until identity, lifecycle, scheduler ownership, IPC authentication, cleanup, and reaping work together with regression coverage. A passing metadata unit test alone is insufficient.
 
