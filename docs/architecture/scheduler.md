@@ -49,7 +49,16 @@ The ARM64 exception bridge saves the interrupted context and selects a
 thread context for exception return. The QEMU ARM64 CI path exercises the
 context-switch test and verifies the expected boot/worker behavior.
 
-The scheduler data structure currently has no internal lock or IRQ-save
+The scheduler now exposes copy-out inspection APIs
+(scheduler_get_thread_snapshot and scheduler_get_current_snapshot) and
+controlled context mutation/selection APIs. The ARM64 boot and exception
+bridge use these APIs instead of retaining mutable thread-record pointers.
+Legacy mutable-pointer accessors remain for compatibility and must not be used
+by new kernel code.
+
+These copy-out APIs prevent callers from mutating scheduler records through
+an inspection result; they do not themselves provide synchronization. The
+scheduler data structure currently has no internal lock or IRQ-save
 critical-section wrapper. Do not assume its APIs are safe against arbitrary
 concurrent callers or SMP execution. The current QEMU validation is not an
 SMP-safety proof. Before enabling broader preemption or multiple cores, define
