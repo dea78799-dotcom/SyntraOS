@@ -56,9 +56,9 @@ int main(void)
         process_thread_get_count(owner, &count) == SYNTRA_STATUS_OK &&
         count == 3U);
     count = 99U;
-    check("Other process has no threads",
+    check("Other process has exactly its own thread",
         process_thread_get_count(other, &count) == SYNTRA_STATUS_OK &&
-        count == 0U);
+        count == 1U);
     check("Read owner thread snapshot",
         process_thread_get_snapshot(owner, 1U, &snapshot) == SYNTRA_STATUS_OK &&
         snapshot.thread_id == 101U && snapshot.has_process_owner == 1U &&
@@ -116,6 +116,9 @@ int main(void)
         snapshot.state == THREAD_TERMINATED);
     check("Current thread pointer is cleared after current-owner termination",
         scheduler_get_current() == NULL);
+    check("Terminated thread cannot be made runnable again",
+        scheduler_set_thread_state(100U, THREAD_READY) ==
+            SYNTRA_STATUS_INVALID_ARGUMENT);
     check("Second process thread remains unaffected by owner cascade",
         scheduler_get_thread_snapshot(201U, &snapshot) == SYNTRA_STATUS_OK &&
         snapshot.state == THREAD_READY);
