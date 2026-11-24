@@ -13,6 +13,7 @@ on:
       - feat/arm64-thread-exit-v1
       - design/thread-resource-ownership-v1
       - design/deferred-thread-reaper-v1
+      - design/thread-identity-v1
 
   pull_request:
     branches:
