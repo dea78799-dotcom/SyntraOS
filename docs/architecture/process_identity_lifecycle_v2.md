@@ -223,3 +223,102 @@ No implicit ownership may be inferred from a raw pointer. No stack may be releas
 Phase 2 is design-only at this point. Do not add owner fields, change scheduler ABI, release stacks, add thread removal, terminate processes through Scheduler, or enable process reaping until the API and synchronization design is reviewed and the required tests can be implemented together.
 
 The project version remains 0.1.0.
+
+
+## 13. Phase 2 API and synchronization proposal
+
+This section refines the next implementation boundary. It remains a proposal; no runtime API is added by this document update.
+
+### 13.1 Shared handle type
+
+Move the existing `syntra_process_handle_t` definition unchanged into `kernel/process/process_handle.h`. Both `process.h` and the scheduler's internal ownership interface include that header. `process.h` remains the owner of process lifecycle APIs. The scheduler must not include `process.h` or call Process Manager functions directly.
+
+This is a source-organization change only. The handle layout remains two `uint32_t` fields and the current v0.1.0 ABI is not advertised as stable.
+
+### 13.2 One coordinator owns process-to-thread registration
+
+Add a small Process/Thread coordinator (proposed files: `kernel/process/process_thread.h` and `kernel/process/process_thread.c`). New process-owned thread creation must enter through this coordinator, not through a public Scheduler API that accepts an unchecked owner value.
+
+Proposed public operations:
+
+```c
+syntra_status_t process_thread_create_kernel(
+    syntra_process_handle_t owner,
+    unsigned int thread_id,
+    unsigned int priority,
+    syntra_thread_entry_t entry,
+    void *argument,
+    void *kernel_stack,
+    size_t kernel_stack_size
+);
+
+syntra_status_t process_thread_create_user(
+    syntra_process_handle_t owner,
+    unsigned int thread_id,
+    unsigned int priority,
+    syntra_thread_entry_t entry,
+    void *argument,
+    void *kernel_stack,
+    size_t kernel_stack_size,
+    void *user_stack,
+    size_t user_stack_size,
+    void *cpu_context
+);
+```
+
+The coordinator performs the following sequence:
+
+1. Reject structurally invalid handles (zero generation or out-of-range slot).
+2. Enter one outer local-IRQ critical section.
+3. Resolve the exact handle through Process Manager and copy a process snapshot.
+4. Reject a process whose state is TERMINATED.
+5. Call a scheduler-internal insertion routine that records the exact owner handle and performs all existing thread, stack-alignment, stack-overlap, capacity, and context checks.
+6. Restore the original IRQ state and return the scheduler result.
+
+The existing IRQ helper saves DAIF and restores the caller's prior state, so nested calls preserve an already-masked state on the current single-core ARM64 target. The outer critical section prevents a process-state change between handle validation and TCB insertion on that target. This is not an SMP solution; do not carry this assumption into a multicore build.
+
+The scheduler-internal insertion entry points must not be exposed as general public APIs. Existing `scheduler_create_thread()` and `scheduler_create_user_thread()` remain compatibility/bootstrap paths and create unowned threads.
+
+### 13.3 TCB ownership representation
+
+Add to `syntra_thread_t`:
+
+- `syntra_process_handle_t owner_process`.
+- `uint8_t has_process_owner`.
+
+For every TCB, `has_process_owner == 0` means a kernel/bootstrap or legacy thread with no process association; its owner fields must be zeroed. `has_process_owner == 1` means the handle is a reference to the exact process identity. Never infer ownership from `thread_id`, stack address, or a legacy integer process ID.
+
+The scheduler's owner query must compare both handle fields. A slot-only comparison is invalid. The first increment should provide a count/snapshot query only; it must not delete threads or reclaim resources.
+
+### 13.4 Creation failure atomicity
+
+A failed process-owned create must leave all of the following unchanged:
+
+- `thread_count` and scheduler slot contents.
+- Existing current-thread and round-robin selection state.
+- Every existing stack reservation.
+- Process ownership counts (which should be derived from TCBs, not maintained as a second mutable counter in Phase 2).
+
+Perform all validation possible before committing the new TCB. For user threads, validate both stack ranges against each other and all registered kernel/user stack ranges before incrementing the scheduler count. Once the TCB is committed, initialize every owner and context field before making it eligible for scheduling.
+
+### 13.5 Termination remains separate
+
+Phase 2 does not make `process_set_state_by_handle(..., PROCESS_TERMINATED)` automatically terminate or remove threads. Until Phase 3/4 defines a coordinated stop protocol, process termination with owned threads must remain prohibited at the coordinator boundary or be explicitly documented as metadata-only and unsafe for execution. Prefer rejecting the transition in a future coordinated API rather than pretending the Scheduler has stopped the process.
+
+No owner-count result by itself authorizes reaping: the count does not yet include IPC, open objects, callbacks, or other future references.
+
+### 13.6 Phase 2 implementation acceptance
+
+- Shared handle header preserves the exact struct layout and compiles in host and ARM64 builds.
+- All legacy/bootstrap thread constructors initialize owner fields to the unowned zero state.
+- Process-owned kernel and user creation route through the coordinator.
+- Invalid, stale, out-of-range, zero-generation, and terminated handles are rejected.
+- Two threads can register against one process handle; a handle with the same slot but a different generation matches neither.
+- Owner snapshots/counts exclude unowned threads and compare slot plus generation.
+- Failed create operations leave scheduler validation, count, current slot, round-robin index, and stack reservations unchanged.
+- Existing scheduler and ARM64 QEMU boot tests continue to pass.
+- Debug and Release unit tests plus ARM64 ELF, EL0, QEMU boot, and framebuffer CI all pass.
+
+### 13.7 Explicit non-goals for Phase 2
+
+No scheduler thread removal, stack deallocation, context deallocation, process termination cascade, IPC identity migration, process reaping, slot reuse, SMP locking, or production-readiness claim.
