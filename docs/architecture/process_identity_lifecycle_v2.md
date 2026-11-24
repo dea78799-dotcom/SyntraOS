@@ -108,7 +108,7 @@ Do not claim SMP safety until real cross-core synchronization and tests exist.
 ## 7. Required implementation phases
 
 1. **Identity primitives:** define the handle type, slot occupancy, generation initialization, validation, and generation exhaustion behavior. Add unit tests without changing IPC.
-2. **Process API migration:** add create-by-handle and lookup-by-handle APIs; inventory and migrate every internal caller. Keep compatibility wrappers only where required.
+2. **Process API migration:** migrate internal callers to handle-first creation and lookup APIs; inventory and migrate remaining ID-based callers. Keep compatibility wrappers only where required.
 3. **Ownership contract:** define how scheduler threads belong to processes and how stacks/contexts are released. Do not implement reaping before this exists.
 4. **Termination cleanup:** add an explicit termination sequence and prove that scheduler execution cannot continue for a terminated process.
 5. **IPC V2:** use generation-aware endpoints, derive sender identity from trusted execution context, authorize receivers, and purge stale messages.
@@ -122,6 +122,7 @@ The first identity-primitives increment is implemented alongside the V1 ID API:
 
 - A process-table slot now carries a 32-bit generation and an occupied flag.
 - The public `syntra_process_handle_t` value contains a 32-bit slot and generation.
+- `process_create_with_handle()` creates a record and returns its handle atomically.
 - `process_get_handle()` resolves an existing legacy ID to its current handle.
 - `process_get_snapshot_by_handle()` and `process_set_state_by_handle()` validate both fields before accessing metadata.
 - Legacy ID-based APIs remain available and route through the same slot table.
