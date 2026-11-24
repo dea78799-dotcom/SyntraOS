@@ -290,6 +290,16 @@ int syntra_arm64_exception_has_last_context(void)
 }
 
 
+/*
+ * Called from vectors.S only after SP_EL1 has been changed to the selected
+ * successor frame. This publishes proof metadata; it never reclaims memory.
+ */
+void syntra_arm64_thread_switch_complete(void)
+{
+    if (scheduler_complete_switch_away() == SYNTRA_STATUS_OK)
+        syntra_exception_uart_puts("Thread switch-away proof: PUBLISHED\\n");
+}
+
 /* ARM64 exception-to-scheduler bridge. */
 #define SYNTRA_ARM64_BOOT_THREAD_ID 1U
 static int scheduler_context_switching_active;
