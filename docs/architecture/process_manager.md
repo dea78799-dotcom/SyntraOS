@@ -55,3 +55,16 @@ record and cannot be used to mutate manager state. The legacy
 `process_get()` mutable-pointer accessor remains for compatibility only and
 must not be used by new code. Snapshot copying does not provide synchronization;
 the Process Manager still has no concurrency protection.
+
+
+## Synchronization
+
+Public Process Manager operations now mask local IRQ exceptions while
+reading or mutating the fixed process table, using the same nested
+DAIF-preserving pattern as the page allocator. This only serializes access
+against local IRQ re-entry on the current single-core ARM64 target. It is not
+an SMP lock and does not protect FIQ or multiple CPU cores.
+
+New code should use `process_get_snapshot()`. The compatibility
+`process_get()` accessor returns a pointer after IRQ state has been restored;
+do not retain or mutate that pointer.
