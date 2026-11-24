@@ -350,15 +350,6 @@ syntra_arm64_exception_handle_and_select(
                 SYNTRA_ARM64_BOOT_THREAD_ID, context) != SYNTRA_STATUS_OK)
             return NULL;
 
-        /*
-         * The boot stack is still executing this SVC handler. Mark its
-         * scheduler record RUNNING before selecting a successor so the
-         * scheduler captures the exact outgoing boot-thread handle.
-         */
-        if (scheduler_set_thread_state(
-                SYNTRA_ARM64_BOOT_THREAD_ID, THREAD_RUNNING) != SYNTRA_STATUS_OK)
-            return NULL;
-
         context->reserved = SYNTRA_ARM64_IRQ_RETURN_MAGIC;
         scheduler_context_switching_active = 1;
 
@@ -367,6 +358,18 @@ syntra_arm64_exception_handle_and_select(
             (void)scheduler_set_thread_state(
                 SYNTRA_ARM64_BOOT_THREAD_ID, THREAD_RUNNING);
             scheduler_context_switching_active = 0;
+            return context;
+        }
+
+        /*
+         * The boot TCB remains BLOCKED so round-robin scheduling cannot
+         * select it until both test workers wake it. The SVC is still running
+         * on the boot stack, so stage that exact handle explicitly before
+         * assembly installs the selected worker SP_EL1.
+         */
+        if (scheduler_prepare_switch_away(boot_snapshot.handle) != SYNTRA_STATUS_OK)
+        {
+            context->reserved = 0U;
             return context;
         }
         return (syntra_arm64_exception_context_t *)next_context;
