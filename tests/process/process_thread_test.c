@@ -168,6 +168,26 @@ int main(void)
     check("Reject thread creation for terminated process",
         process_thread_create_kernel(other, 200U, 1U, thread_entry, NULL,
             stack_c, sizeof(stack_c)) == SYNTRA_STATUS_PERMISSION_DENIED);
+    {
+        syntra_memory_info_t before;
+        syntra_memory_info_t after;
+        owned_handle.slot = 77U;
+        owned_handle.generation = 88U;
+        memory_get_info(&before);
+        check("Reject owned-thread creation for terminated process",
+            process_thread_create_kernel_owned_with_handle(
+                other, 202U, 1U, thread_entry, NULL, 2048U,
+                &owned_handle) == SYNTRA_STATUS_PERMISSION_DENIED &&
+            owned_handle.slot == 77U && owned_handle.generation == 88U);
+        memory_get_info(&after);
+        check("Terminated-process rejection allocates no stack",
+            before.active_allocations == after.active_allocations);
+    }
+    check("Reject undersized owned kernel stack before allocation",
+        process_thread_create_kernel_owned_with_handle(
+            owner, 203U, 1U, thread_entry, NULL, 512U,
+            &owned_handle) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
 
     check("Current handle is unavailable before scheduling and output is unchanged",
         scheduler_get_current_handle(&current_handle) == SYNTRA_STATUS_ERROR &&
