@@ -266,6 +266,12 @@ syntra_status_t memory_release_owned_allocation(
     syntra_memory_owner_handle_t owner
 );
 
+/* Copy-out lookup by exact token; never returns a mutable allocator record. */
+syntra_status_t memory_get_allocation_by_handle(
+    syntra_memory_allocation_handle_t allocation,
+    syntra_memory_allocation_t *snapshot_out
+);
+
 void memory_get_info(syntra_memory_info_t *info);
 
 unsigned int memory_get_allocation_count(void);
