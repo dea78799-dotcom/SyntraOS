@@ -93,6 +93,11 @@ int main(void)
         interrupt_controller_attach(&gic, NULL) == SYNTRA_STATUS_OK &&
         interrupt_controller_init() == SYNTRA_STATUS_OK);
 
+    syntra_thread_t boot_snapshot;
+    syntra_thread_switch_event_t switch_event;
+    check("Capture boot thread identity before scheduler start",
+        scheduler_get_thread_snapshot(1U, &boot_snapshot) == SYNTRA_STATUS_OK);
+
     start_frame.vector_index = SYNTRA_ARM64_VECTOR_CURRENT_SPX_SYNC;
     start_frame.spsr_el1 = 0x5U;
     start_frame.esr_el1 = (0x15ULL << SYNTRA_ARM64_EXCEPTION_CLASS_SHIFT) |
@@ -103,6 +108,12 @@ int main(void)
     check("Worker becomes current",
         scheduler_get_current() != NULL &&
         scheduler_get_current()->thread_id == 2U);
+    if (selected != NULL && selected != &start_frame)
+        syntra_arm64_thread_switch_complete();
+    check("Post-switch hook publishes exact boot-thread event",
+        scheduler_take_switch_away_event(&switch_event) == SYNTRA_STATUS_OK &&
+        scheduler_thread_handle_equal(switch_event.handle, boot_snapshot.handle) &&
+        switch_event.sequence != 0U);
 
     check("Terminate selected worker",
         scheduler_set_thread_state(2U, THREAD_TERMINATED) == SYNTRA_STATUS_OK);
@@ -119,6 +130,8 @@ int main(void)
         irq_frame.reserved == 0U);
     check("No terminated worker remains current",
         scheduler_get_current() == NULL);
+    check("No-successor path emits no switch-away event",
+        scheduler_take_switch_away_event(&switch_event) == SYNTRA_STATUS_ERROR);
     check("Terminated worker stays terminal",
         scheduler_get_thread(2U) != NULL &&
         scheduler_get_thread(2U)->state == THREAD_TERMINATED);
