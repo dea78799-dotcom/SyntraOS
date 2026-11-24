@@ -45,3 +45,13 @@ The process unit tests cover initialization, record creation and lookup, duplica
 ## 7. V1 status
 
 The metadata prototype is implemented and unit-tested. Full process creation, isolation, resource ownership, cleanup and security enforcement remain future work.
+
+
+## Snapshot API
+
+New code should use `process_get_snapshot()` to copy process metadata into
+caller-owned storage. The snapshot is independent of the manager's internal
+record and cannot be used to mutate manager state. The legacy
+`process_get()` mutable-pointer accessor remains for compatibility only and
+must not be used by new code. Snapshot copying does not provide synchronization;
+the Process Manager still has no concurrency protection.
