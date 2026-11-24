@@ -56,6 +56,11 @@ int main(void)
             SYNTRA_STATUS_OK &&
         handle_snapshot.process_id == 1U
     );
+    check(
+        "Accept idempotent state update through valid handle",
+        process_set_state_by_handle(process_handle, PROCESS_READY) ==
+            SYNTRA_STATUS_OK
+    );
     syntra_process_handle_t invalid_handle = process_handle;
     invalid_handle.generation = 0U;
     check(
