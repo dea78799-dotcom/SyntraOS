@@ -111,10 +111,11 @@ int main(void)
         "Reject NULL process snapshot",
         process_get_snapshot(1U, NULL) == SYNTRA_STATUS_INVALID_ARGUMENT
     );
+    process_snapshot.state = PROCESS_READY;
     check(
-        "Snapshot is independent of manager storage",
-        process_snapshot.process_id == 1U &&
-        process_snapshot.state == PROCESS_TERMINATED
+        "Snapshot mutation does not alter manager record",
+        process_get_snapshot(1U, &process) == SYNTRA_STATUS_OK &&
+        process.state == PROCESS_TERMINATED
     );
 
     printf("\n=================================\n");
