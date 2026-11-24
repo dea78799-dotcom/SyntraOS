@@ -939,6 +939,7 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
         reaper_stats.queued != candidate_count)
         return SYNTRA_STATUS_ERROR;
 
+    syntra_uart_puts("Thread switch-away proof: PUBLISHED\n");
     syntra_uart_puts("Thread switch-away proof dispatcher: PASS candidates=");
     syntra_uart_put_hex(candidate_count);
     syntra_uart_puts(" events=");
