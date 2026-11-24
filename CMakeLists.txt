@@ -148,6 +148,13 @@ add_executable(scheduler_test
 target_link_libraries(scheduler_test PRIVATE syntra_kernel)
 add_test(NAME SchedulerTest COMMAND scheduler_test)
 
+# Generation-aware scheduler thread handle tests
+add_executable(thread_handle_test
+    tests/scheduler/thread_handle_test.c
+)
+target_link_libraries(thread_handle_test PRIVATE syntra_kernel)
+add_test(NAME SchedulerThreadHandleV1Test COMMAND thread_handle_test)
+
 # Memory Region Manager Test
 add_executable(memory_region_test
     tests/memory/memory_region_test.c
