@@ -72,19 +72,26 @@ int main(void)
     check("Prepare successor context",
         scheduler_set_thread_context(702U, &successor_context_marker) ==
             SYNTRA_STATUS_OK);
-    check("Prepare later context",
-        scheduler_set_thread_context(703U, &later_context_marker) ==
-            SYNTRA_STATUS_OK);
 
-    check("Select owned thread as current",
-        scheduler_set_thread_state_by_handle(
-            owned_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
-    check("Terminate current owned thread",
-        scheduler_terminate_current() == SYNTRA_STATUS_OK);
-    check("Select successor context",
+    check("Select owned thread context first",
+        scheduler_schedule_next_context(&selected_context) == SYNTRA_STATUS_OK &&
+        selected_context == &owned_context_marker);
+    check("Preempt owned thread to successor",
         scheduler_schedule_next_context(&selected_context) == SYNTRA_STATUS_OK &&
         selected_context == &successor_context_marker);
-    check("Publish post-stack-switch proof",
+    check("Publish nonterminal owned-thread preemption proof",
+        scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+    check("Preempt successor back to owned thread",
+        scheduler_schedule_next_context(&selected_context) == SYNTRA_STATUS_OK &&
+        selected_context == &owned_context_marker);
+    check("Publish nonterminal successor preemption proof",
+        scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+    check("Terminate current owned thread",
+        scheduler_terminate_current() == SYNTRA_STATUS_OK);
+    check("Select successor after terminal exit",
+        scheduler_schedule_next_context(&selected_context) == SYNTRA_STATUS_OK &&
+        selected_context == &successor_context_marker);
+    check("Publish terminal post-stack-switch proof",
         scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
 
     {
@@ -94,7 +101,7 @@ int main(void)
         check("Peek returns exact proof without consuming it",
             scheduler_peek_switch_away_event(&proof) == SYNTRA_STATUS_OK &&
             scheduler_thread_handle_equal(proof.handle, owned_handle) &&
-            proof.sequence != 0U);
+            proof.sequence != 0U && proof.terminal == 0U);
         wrong_proof = proof;
         ++wrong_proof.sequence;
         check("Wrong sequence cannot acknowledge FIFO head",
@@ -108,7 +115,7 @@ int main(void)
     memory_get_info(&before);
     check("Dispatch terminal proof into candidate queue",
         thread_reaper_dispatch(1U, &processed) == SYNTRA_STATUS_OK &&
-        processed == 1U);
+        processed == 3U);
     check("Candidate queue contains one exact record",
         thread_reaper_get_candidate_count(&candidate_count) ==
             SYNTRA_STATUS_OK && candidate_count == 1U);
@@ -117,6 +124,7 @@ int main(void)
         scheduler_thread_handle_equal(
             candidate.proof.handle, owned_handle) &&
         candidate.proof.sequence != 0U &&
+        candidate.proof.terminal == 1U &&
         candidate.state == SYNTRA_REAPER_CANDIDATE_QUEUED &&
         candidate.reason == SYNTRA_REAPER_REASON_NONE);
     check("Candidate still resolves to terminated TCB",
@@ -134,6 +142,9 @@ int main(void)
 
     check("Block successor to produce a nonterminal proof",
         scheduler_block_current() == SYNTRA_STATUS_OK);
+    check("Prepare later thread context",
+        scheduler_set_thread_context(703U, &later_context_marker) ==
+            SYNTRA_STATUS_OK);
     check("Select later thread",
         scheduler_schedule_next_context(&selected_context) == SYNTRA_STATUS_OK &&
         selected_context == &later_context_marker);
@@ -148,8 +159,8 @@ int main(void)
             SYNTRA_STATUS_OK && candidate_count == 1U);
     check("Dispatcher statistics distinguish terminal and nonterminal events",
         thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
-        stats.queued == 1U && stats.discarded_nonterminal == 1U &&
-        stats.acknowledged_events == 2U);
+        stats.queued == 1U && stats.discarded_nonterminal == 3U &&
+        stats.acknowledged_events == 4U);
 
     check("Terminate final runnable thread with no successor",
         scheduler_terminate_current() == SYNTRA_STATUS_OK);
