@@ -878,15 +878,31 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
     (void)syntra_arm64_timer_disable();
     (void)interrupt_disable(30U);
 
-    if (scheduler_test_completed != 2U ||
-        scheduler_test_worker_slices[0] == 0U ||
-        scheduler_test_worker_slices[1] == 0U ||
-        scheduler_test_switches < 2U ||
-        scheduler_test_trace_length < 4U ||
-        scheduler_validate() != SYNTRA_STATUS_OK)
     {
-        syntra_uart_puts("FAIL: ARM64 Scheduler context switch validation\n");
-        return SYNTRA_STATUS_ERROR;
+        syntra_status_t validation_status = scheduler_validate();
+        if (scheduler_test_completed != 2U ||
+            scheduler_test_worker_slices[0] == 0U ||
+            scheduler_test_worker_slices[1] == 0U ||
+            scheduler_test_switches < 2U ||
+            scheduler_test_trace_length < 4U ||
+            validation_status != SYNTRA_STATUS_OK)
+        {
+            syntra_uart_puts("Scheduler diagnostics: completed=");
+            syntra_uart_put_hex(scheduler_test_completed);
+            syntra_uart_puts(" slicesA=");
+            syntra_uart_put_hex(scheduler_test_worker_slices[0]);
+            syntra_uart_puts(" slicesB=");
+            syntra_uart_put_hex(scheduler_test_worker_slices[1]);
+            syntra_uart_puts(" switches=");
+            syntra_uart_put_hex(scheduler_test_switches);
+            syntra_uart_puts(" trace_length=");
+            syntra_uart_put_hex(scheduler_test_trace_length);
+            syntra_uart_puts(" validate=");
+            syntra_uart_put_hex((uint64_t)validation_status);
+            syntra_uart_puts("\\n");
+            syntra_uart_puts("FAIL: ARM64 Scheduler context switch validation\n");
+            return SYNTRA_STATUS_ERROR;
+        }
     }
 
     for (unsigned int i = 1U; i < scheduler_test_trace_length; ++i)
