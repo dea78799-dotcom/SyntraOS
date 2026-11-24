@@ -26,6 +26,8 @@ static size_t syntra_fw_cfg_size;
 #include "../../../process/process.h"
 #include "../../../process/process_thread.h"
 
+static void syntra_uart_puts(const char *message);
+
 static _Alignas(16) uint8_t syntra_process_thread_probe_stack[4096];
 
 static void syntra_process_thread_probe_entry(void *argument)
