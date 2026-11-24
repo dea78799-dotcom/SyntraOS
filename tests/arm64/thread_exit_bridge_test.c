@@ -114,6 +114,8 @@ int main(void)
         scheduler_take_switch_away_event(&switch_event) == SYNTRA_STATUS_OK &&
         scheduler_thread_handle_equal(switch_event.handle, boot_snapshot.handle) &&
         switch_event.sequence != 0U);
+    check("Retire boot thread to construct a true no-successor case",
+        scheduler_set_thread_state(1U, THREAD_TERMINATED) == SYNTRA_STATUS_OK);
 
     check("Terminate selected worker",
         scheduler_set_thread_state(2U, THREAD_TERMINATED) == SYNTRA_STATUS_OK);
