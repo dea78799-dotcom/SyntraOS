@@ -1,48 +1,78 @@
-# SyntraOS Thread Management
+# SYNTRA OS Thread Management
 
 Version: 0.1.0
-Status: Design Phase
+Status: Scheduler prototype implemented; complete lifecycle and reclamation remain in design.
 
 ## 1. Overview
 
-A Thread is the smallest unit of CPU execution
-managed by the SyntraOS Scheduler.
+A thread is the smallest unit of CPU execution managed by the SYNTRA OS
+scheduler. The current scheduler prototype stores bounded TCB records,
+supports READY/RUNNING/BLOCKED/TERMINATED metadata, and integrates an ARM64
+exception-context selection path.
 
-## 2. Thread Information
+## 2. Current thread information
 
-Each thread will contain:
+The current TCB stores:
+- Thread ID and priority metadata.
+- Thread lifecycle state.
+- Entry function and argument.
+- Caller-provided kernel stack bounds.
+- Optional user stack bounds.
+- Saved architecture CPU-context pointer.
+- Optional generation-aware process owner handle.
 
-- Thread ID
-- Thread name
-- Thread state
-- Priority
-- CPU context
-- Stack information
+The scheduler table is fixed at 32 entries. Registered stack ranges remain
+reserved until scheduler reset. Thread records and stack resources are not
+currently reaped or reused.
 
-## 3. Thread States
+## 3. Thread states
 
-- READY: Waiting for CPU time.
-- RUNNING: Currently executing.
-- BLOCKED: Waiting for an event.
-- TERMINATED: Execution has ended.
+- READY: eligible for scheduler selection.
+- RUNNING: selected as the current scheduler thread.
+- BLOCKED: waiting for an explicit wake operation.
+- TERMINATED: no longer eligible for scheduling.
 
-## 4. Thread Management
+TERMINATED does not mean that stack memory is immediately safe to release.
+The CPU may still be executing on that stack until an architecture scheduling
+boundary switches to another saved context.
 
-The Thread Manager will be responsible for:
+## 4. Current exit behavior
 
-- Creating threads.
-- Tracking thread states.
-- Updating thread information.
-- Terminating threads.
-- Communicating with the Scheduler.
+ARM64 initial kernel contexts use `syntra_arm64_thread_exit()` as their return
+trampoline. It marks the current TCB terminated and waits for the timer/exception
+bridge to select another context. This is prototype behavior; it is not yet a
+complete synchronous exit or deferred-reaping protocol.
 
-## 5. Security
+Process termination cascade marks all threads with the exact owner handle
+terminated. It does not free stacks, saved contexts, or TCB records.
 
-Each thread must be isolated
-according to its assigned permissions.
+## 5. Resource ownership
 
-## 6. Current Status
+Thread creation currently accepts caller-owned buffers. The scheduler records
+their ranges but does not allocate or free them. There is no allocator token or
+resource-release callback for kernel stacks, user stacks, or CPU contexts.
+The kernel must not free a resource unless ownership was explicitly transferred
+to a compatible allocator.
 
-Thread management is not implemented yet.
+## 6. Next lifecycle design
 
-This document describes the planned design.
+The separate design audit
+[`thread_exit_reclamation_v1.md`](thread_exit_reclamation_v1.md) defines the
+required two-stage lifecycle:
+
+1. TERMINATED: the thread is no longer runnable.
+2. REAPABLE: the architecture has switched away and no active or saved context
+   can reference the thread's resources.
+
+A future reaper must run on a different stable kernel stack, validate
+switch-away completion, release only explicitly owned resources, and retain
+retry metadata if cleanup fails. Generation-aware thread handles are required
+before TCB slots or thread IDs can be reused.
+
+## 7. Security and limitations
+
+This prototype does not establish full process isolation, SMP safety, automatic
+resource reclamation, or production readiness. See
+[`scheduler.md`](scheduler.md) and
+[`thread_exit_reclamation_v1.md`](thread_exit_reclamation_v1.md) for the
+current architecture constraints and implementation gates.
