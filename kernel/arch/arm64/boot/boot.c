@@ -738,7 +738,6 @@ static void syntra_scheduler_test_worker(void *argument)
 static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
 {
     syntra_status_t status;
-    syntra_thread_t *thread;
     syntra_arm64_exception_context_t *initial_context = NULL;
 
     scheduler_test_completed = 0U;
