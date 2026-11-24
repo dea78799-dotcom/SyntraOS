@@ -903,6 +903,8 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
         syntra_uart_putc(scheduler_test_trace[i]);
     syntra_uart_puts("\n");
     syntra_uart_puts("PASS: ARM64 Scheduler switched between two threads\n");
+    syntra_uart_puts(
+        "PASS: ARM64 natural thread return handed off to successor\n");
     return SYNTRA_STATUS_OK;
 }
 
