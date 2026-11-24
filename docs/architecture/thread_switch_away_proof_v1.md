@@ -76,6 +76,7 @@ The hook may publish a bounded completion record containing:
 
 - exact `syntra_thread_handle_t`;
 - matching switch sequence/token;
+- event-time terminal intent captured before scheduler state changes;
 - a completion state indicating that the successor stack is active.
 
 The hook must not free memory, remove the TCB, call the general allocator, or run the reaper. It is an evidence-publication step only.
