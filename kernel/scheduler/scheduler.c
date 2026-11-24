@@ -261,7 +261,8 @@ static syntra_thread_t *scheduler_schedule_next_unlocked(void)
         {
             threads[(unsigned int)current_slot].state = THREAD_RUNNING;
             return &threads[(unsigned int)current_slot];
-        }        current_slot = -1;
+        }
+        current_slot = -1;
         return NULL;
     }
 
@@ -562,7 +563,8 @@ static syntra_status_t scheduler_validate_unlocked(void)
                 thread->user_stack_size < SYNTRA_THREAD_MIN_STACK_SIZE ||
                 (thread->user_stack_base &
                     (SYNTRA_THREAD_STACK_ALIGNMENT - 1U)) != 0U ||
-                thread->stack_base > UINTPTR_MAX - thread->stack_size ||                thread->user_stack_base >
+                thread->stack_base > UINTPTR_MAX - thread->stack_size ||
+                thread->user_stack_base >
                     UINTPTR_MAX - thread->user_stack_size ||
                 scheduler_ranges_overlap(
                     thread->stack_base, thread->stack_size,
