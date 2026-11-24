@@ -14,7 +14,7 @@ The Process Manager currently tracks a bounded set of process records. It is an 
 - Reject duplicate process IDs and capacity overflow.
 - Look up a process by ID.
 - Track READY, RUNNING, BLOCKED and TERMINATED metadata states.
-- Change a process state and mark a process TERMINATED.
+- Enforce basic state transitions among READY, RUNNING, BLOCKED and TERMINATED; TERMINATED records cannot be restarted.
 
 ## 3. Not implemented yet
 
