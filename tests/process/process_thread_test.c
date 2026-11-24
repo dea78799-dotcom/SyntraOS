@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
-#include "../..//kernel/process/process.h"
+#include "../../kernel/process/process.h"
 #include "../../kernel/process/process_thread.h"
 #include "../../kernel/scheduler/scheduler.h"
 
@@ -44,6 +44,10 @@ int main(void)
     check("Count exact owner threads",
         process_thread_get_count(owner, &count) == SYNTRA_STATUS_OK &&
         count == 2U);
+    count = 99U;
+    check("Other process has no threads",
+        process_thread_get_count(other, &count) == SYNTRA_STATUS_OK &&
+        count == 0U);
     check("Read owner thread snapshot",
         process_thread_get_snapshot(owner, 1U, &snapshot) == SYNTRA_STATUS_OK &&
         snapshot.thread_id == 101U && snapshot.has_process_owner == 1U &&
