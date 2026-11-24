@@ -87,6 +87,24 @@ int main(void)
     check("Publish post-stack-switch proof",
         scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
 
+    {
+        syntra_thread_switch_event_t proof;
+        syntra_thread_switch_event_t wrong_proof;
+        syntra_thread_switch_event_t still_head;
+        check("Peek returns exact proof without consuming it",
+            scheduler_peek_switch_away_event(&proof) == SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(proof.handle, owned_handle) &&
+            proof.sequence != 0U);
+        wrong_proof = proof;
+        ++wrong_proof.sequence;
+        check("Wrong sequence cannot acknowledge FIFO head",
+            scheduler_ack_switch_away_event(wrong_proof) ==
+                SYNTRA_STATUS_INVALID_ARGUMENT &&
+            scheduler_peek_switch_away_event(&still_head) == SYNTRA_STATUS_OK &&
+            still_head.sequence == proof.sequence &&
+            scheduler_thread_handle_equal(still_head.handle, proof.handle));
+    }
+
     memory_get_info(&before);
     check("Dispatch terminal proof into candidate queue",
         thread_reaper_dispatch(1U, &processed) == SYNTRA_STATUS_OK &&
