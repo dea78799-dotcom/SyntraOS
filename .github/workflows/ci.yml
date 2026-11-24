@@ -7,6 +7,7 @@ on:
       # Run the full validation suite on active stacked process-identity branches.
       - design/process-identity-lifecycle-v1
       - design/process-thread-ownership-v1
+      - feat/process-thread-ownership-v1
 
   pull_request:
     branches:
