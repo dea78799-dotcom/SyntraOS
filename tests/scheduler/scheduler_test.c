@@ -260,6 +260,22 @@ int main(void)
     }
 
     {
+        void *resumed_context = NULL;
+        syntra_thread_t *context_thread = scheduler_get_thread(4U);
+
+        check("Block current thread for wake-before-switch case",
+            scheduler_block_current() == SYNTRA_STATUS_OK);
+        check("Wake thread before a successor stack is installed",
+            scheduler_wake_thread(4U) == SYNTRA_STATUS_OK);
+        check("Scheduler may resume the same exact thread context",
+            scheduler_schedule_next_context(&resumed_context) == SYNTRA_STATUS_OK &&
+            context_thread != NULL &&
+            resumed_context == context_thread->cpu_context);
+        check("Same-thread resume cancels stale switch-away proof",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_ERROR);
+    }
+
+    {
         syntra_thread_t snapshot_a;
         syntra_thread_t snapshot_b;
 
