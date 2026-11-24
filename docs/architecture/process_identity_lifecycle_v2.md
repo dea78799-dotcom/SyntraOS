@@ -1,7 +1,7 @@
 # SYNTRA OS Process Identity and Lifecycle V2 — Design
 
 Version baseline: 0.1.0
-Status: Design proposal; not implemented
+Status: Design proposal; Phase 1 identity primitives implemented
 Base implementation: Process Manager V1 metadata prototype and IPC V1 bounded queue
 
 ## 1. Purpose and scope
@@ -22,7 +22,7 @@ The current modules are metadata and queue prototypes. They do not yet provide a
 
 ### 3.1 Generation-aware handles
 
-V2 should introduce an opaque process handle composed of two fixed-width fields:
+V2 uses a generation-aware process handle composed of two fixed-width public fields. The C struct is not opaque; callers can inspect or construct values, but only the Process Manager can validate them:
 
 - `slot`: index into the fixed process table, in the range 0 through 63.
 - `generation`: monotonically advanced generation value associated with that slot.
@@ -121,7 +121,7 @@ Each phase must have focused tests and full Debug/Release plus ARM64 QEMU CI val
 The first identity-primitives increment is implemented alongside the V1 ID API:
 
 - A process-table slot now carries a 32-bit generation and an occupied flag.
-- The public `syntra_process_handle_t` contains a 32-bit slot and generation.
+- The public `syntra_process_handle_t` value contains a 32-bit slot and generation.
 - `process_get_handle()` resolves an existing legacy ID to its current handle.
 - `process_get_snapshot_by_handle()` and `process_set_state_by_handle()` validate both fields before accessing metadata.
 - Legacy ID-based APIs remain available and route through the same slot table.
