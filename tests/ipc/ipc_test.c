@@ -85,6 +85,50 @@ int main(void)
         ipc_send(1, 2, message, 0) != SYNTRA_STATUS_OK
     );
 
+    check(
+        "Reject NULL payload",
+        ipc_send(1, 2, NULL, sizeof(message)) ==
+            SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+    check(
+        "Reject zero sender ID",
+        ipc_send(0, 2, message, sizeof(message)) ==
+            SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+    check(
+        "Reject oversized payload",
+        ipc_send(1, 2, message, SYNTRA_IPC_MAX_MESSAGE_SIZE + 1U) ==
+            SYNTRA_STATUS_INVALID_ARGUMENT
+    );
+
+    /* Fill the fixed queue and verify its capacity boundary. */
+    int fill_ok = 1;
+    for (unsigned int i = 0U; i < SYNTRA_IPC_MAX_MESSAGES; ++i)
+    {
+        if (ipc_send(1U, 2U, message, sizeof(message)) != SYNTRA_STATUS_OK)
+        {
+            fill_ok = 0;
+            break;
+        }
+    }
+    check("Fill all queue slots", fill_ok &&
+        ipc_get_message_count() == SYNTRA_IPC_MAX_MESSAGES);
+    check("Reject send when queue is full",
+        ipc_send(1U, 2U, message, sizeof(message)) ==
+            SYNTRA_STATUS_OUT_OF_MEMORY);
+
+    int drained = 1;
+    for (unsigned int i = 0U; i < SYNTRA_IPC_MAX_MESSAGES; ++i)
+    {
+        if (ipc_receive(2U, &received) != SYNTRA_STATUS_OK)
+        {
+            drained = 0;
+            break;
+        }
+    }
+    check("Drain full queue", drained && ipc_get_message_count() == 0U);
+
+
     printf("\n=================================\n");
     printf(" Total failures: %d\n", failures);
     printf("=================================\n");
