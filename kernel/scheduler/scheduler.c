@@ -111,6 +111,9 @@ static syntra_status_t scheduler_insert_thread(
     thread->argument = argument;
     thread->stack_base = (uintptr_t)stack;
     thread->stack_size = stack_size;
+    thread->stack_ownership = SYNTRA_THREAD_STACK_BORROWED;
+    thread->stack_allocation.slot = 0U;
+    thread->stack_allocation.generation = 0U;
     thread->user_stack_base = 0U;
     thread->user_stack_size = 0U;
     thread->is_user_thread = 0U;
@@ -153,6 +156,9 @@ static syntra_status_t scheduler_init_unlocked(void)
         threads[i].argument = NULL;
         threads[i].stack_base = 0U;
         threads[i].stack_size = 0U;
+        threads[i].stack_ownership = SYNTRA_THREAD_STACK_BORROWED;
+        threads[i].stack_allocation.slot = 0U;
+        threads[i].stack_allocation.generation = 0U;
         threads[i].user_stack_base = 0U;
         threads[i].user_stack_size = 0U;
         threads[i].is_user_thread = 0U;
@@ -640,6 +646,22 @@ static syntra_status_t scheduler_validate_unlocked(void)
         }
 
         if (thread->is_user_thread > 1U || thread->has_process_owner > 1U)
+            return SYNTRA_STATUS_ERROR;
+
+        if (thread->stack_ownership == SYNTRA_THREAD_STACK_BORROWED)
+        {
+            if (thread->stack_allocation.slot != 0U ||
+                thread->stack_allocation.generation != 0U)
+                return SYNTRA_STATUS_ERROR;
+        }
+        else if (thread->stack_ownership == SYNTRA_THREAD_STACK_OWNED)
+        {
+            if (thread->stack_allocation.generation == 0U ||
+                thread->stack_base == 0U ||
+                thread->stack_size < SYNTRA_THREAD_MIN_STACK_SIZE)
+                return SYNTRA_STATUS_ERROR;
+        }
+        else
             return SYNTRA_STATUS_ERROR;
         if (thread->has_process_owner == 0U &&
             (thread->owner_process.slot != 0U ||
