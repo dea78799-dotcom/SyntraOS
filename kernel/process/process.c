@@ -129,7 +129,7 @@ static syntra_status_t process_set_state_unlocked(
 
 static syntra_status_t process_terminate_unlocked(unsigned int process_id)
 {
-    return process_set_state(
+    return process_set_state_unlocked(
         process_id,
         PROCESS_TERMINATED
     );
