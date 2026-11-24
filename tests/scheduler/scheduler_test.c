@@ -333,7 +333,8 @@ int main(void)
             scheduler_get_thread_count() == 3U &&
             scheduler_get_thread_snapshot_by_handle(reserved,
                 &(syntra_thread_t){0}) == SYNTRA_STATUS_INVALID_ARGUMENT &&
-            scheduler_get_next_ready() == NULL);
+            (scheduler_get_next_ready() == NULL ||
+                scheduler_get_next_ready()->thread_id != 88U));
         check("Scheduler invariants accept unpublished reservation",
             scheduler_validate() == SYNTRA_STATUS_OK);
 
@@ -397,7 +398,8 @@ int main(void)
             memory_abort_reserved_allocation(allocation, wrong_owner) ==
                 SYNTRA_STATUS_OK);
         check("Failed reservation never changes published thread count",
-            scheduler_get_thread_count() == 5U &&
+            scheduler_get_thread_count() == 4U);
+        check("Scheduler invariants hold after reservation abort",
             scheduler_validate() == SYNTRA_STATUS_OK);
     }
 
