@@ -11,6 +11,29 @@ static int scheduler_initialized;
 static syntra_thread_t reserved_thread;
 static int reserved_thread_valid;
 
+static void scheduler_clear_reserved_thread(void)
+{
+    reserved_thread.handle.slot = 0U;
+    reserved_thread.handle.generation = 0U;
+    reserved_thread.thread_id = 0U;
+    reserved_thread.priority = 0U;
+    reserved_thread.state = THREAD_TERMINATED;
+    reserved_thread.entry = NULL;
+    reserved_thread.argument = NULL;
+    reserved_thread.stack_base = 0U;
+    reserved_thread.stack_size = 0U;
+    reserved_thread.stack_ownership = SYNTRA_THREAD_STACK_BORROWED;
+    reserved_thread.stack_allocation.slot = 0U;
+    reserved_thread.stack_allocation.generation = 0U;
+    reserved_thread.user_stack_base = 0U;
+    reserved_thread.user_stack_size = 0U;
+    reserved_thread.is_user_thread = 0U;
+    reserved_thread.cpu_context = NULL;
+    reserved_thread.owner_process.slot = 0U;
+    reserved_thread.owner_process.generation = 0U;
+    reserved_thread.has_process_owner = 0U;
+}
+
 #define SYNTRA_SWITCH_COMPLETION_CAPACITY 128U
 
 typedef struct
@@ -138,7 +161,7 @@ static syntra_status_t scheduler_init_unlocked(void)
     }
 
     thread_count = 0U;
-    reserved_thread = (syntra_thread_t){0};
+    scheduler_clear_reserved_thread();
     reserved_thread_valid = 0;
     next_slot = 0U;
     current_slot = -1;
