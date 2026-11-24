@@ -110,6 +110,14 @@ int main(void)
             scheduler_peek_switch_away_event(&still_head) == SYNTRA_STATUS_OK &&
             still_head.sequence == proof.sequence &&
             scheduler_thread_handle_equal(still_head.handle, proof.handle));
+        wrong_proof = proof;
+        wrong_proof.terminal = 1U;
+        check("Wrong terminal intent cannot acknowledge FIFO head",
+            scheduler_ack_switch_away_event(wrong_proof) ==
+                SYNTRA_STATUS_INVALID_ARGUMENT &&
+            scheduler_peek_switch_away_event(&still_head) == SYNTRA_STATUS_OK &&
+            still_head.sequence == proof.sequence &&
+            still_head.terminal == proof.terminal);
     }
 
     memory_get_info(&before);
