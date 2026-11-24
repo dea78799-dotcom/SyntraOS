@@ -169,8 +169,6 @@ int main(void)
     }
 
     {
-        static _Alignas(16) unsigned char overlapping_stack[2048];
-        static _Alignas(16) unsigned char overlapping_stack_2[2048];
         syntra_thread_t *user_thread = scheduler_get_thread(4U);
 
         check("Reject a second thread using the exact same stack",
