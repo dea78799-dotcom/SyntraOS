@@ -3,6 +3,7 @@
 #define SYNTRA_MEMORY_H
 
 #include "../core/status.h"
+#include <stdint.h>
 
 #define SYNTRA_MEMORY_BLOCK_SIZE 4096
 #define SYNTRA_MAX_MEMORY_BLOCKS 1024
@@ -62,10 +63,35 @@ typedef struct
 
 typedef struct
 {
+    uint32_t slot;
+    uint64_t generation;
+} syntra_memory_allocation_handle_t;
+
+/* Generic exact owner identity; the process/thread coordinator supplies it. */
+typedef struct
+{
+    uint32_t slot;
+    uint32_t generation;
+} syntra_memory_owner_handle_t;
+
+typedef enum
+{
+    SYNTRA_MEMORY_ALLOCATION_FREE = 0,
+    SYNTRA_MEMORY_ALLOCATION_LEGACY = 1,
+    SYNTRA_MEMORY_ALLOCATION_STAGED = 2,
+    SYNTRA_MEMORY_ALLOCATION_RESERVED = 3,
+    SYNTRA_MEMORY_ALLOCATION_THREAD_OWNED = 4
+} syntra_memory_allocation_state_t;
+
+typedef struct
+{
     void *address;
     unsigned int start_block;
     unsigned int block_count;
     int active;
+    uint64_t generation;
+    syntra_memory_allocation_state_t ownership_state;
+    syntra_memory_owner_handle_t owner;
 
 } syntra_memory_allocation_t;
 
@@ -203,6 +229,41 @@ void *memory_allocate(unsigned int blocks);
 syntra_status_t memory_release(
     void *address,
     unsigned int blocks
+);
+
+/*
+ * Internal kernel lifecycle API. Allocation tokens are generation-aware and
+ * must never be exposed to user mode. Legacy memory_release() cannot release
+ * STAGED, RESERVED, or THREAD_OWNED allocations.
+ */
+syntra_status_t memory_allocate_staged(
+    unsigned int blocks,
+    void **address_out,
+    syntra_memory_allocation_handle_t *handle_out
+);
+
+syntra_status_t memory_bind_staged_allocation(
+    syntra_memory_allocation_handle_t allocation,
+    syntra_memory_owner_handle_t owner
+);
+
+syntra_status_t memory_commit_thread_allocation(
+    syntra_memory_allocation_handle_t allocation,
+    syntra_memory_owner_handle_t owner
+);
+
+syntra_status_t memory_abort_staged_allocation(
+    syntra_memory_allocation_handle_t allocation
+);
+
+syntra_status_t memory_abort_reserved_allocation(
+    syntra_memory_allocation_handle_t allocation,
+    syntra_memory_owner_handle_t owner
+);
+
+syntra_status_t memory_release_owned_allocation(
+    syntra_memory_allocation_handle_t allocation,
+    syntra_memory_owner_handle_t owner
 );
 
 void memory_get_info(syntra_memory_info_t *info);
