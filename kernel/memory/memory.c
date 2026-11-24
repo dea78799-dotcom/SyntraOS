@@ -888,6 +888,26 @@ syntra_status_t memory_release_owned_allocation(
         allocation, owner, SYNTRA_MEMORY_ALLOCATION_THREAD_OWNED, 1);
 }
 
+syntra_status_t memory_get_allocation_by_handle(
+    syntra_memory_allocation_handle_t allocation,
+    syntra_memory_allocation_t *snapshot_out)
+{
+    syntra_irq_state_t irq;
+    unsigned int index;
+    syntra_status_t status = SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    if (snapshot_out == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    irq = syntra_irq_save();
+    if (find_allocation_by_handle(allocation, &index)) {
+        *snapshot_out = allocations[index];
+        status = SYNTRA_STATUS_OK;
+    }
+    syntra_irq_restore(irq);
+    return status;
+}
+
 syntra_status_t memory_release(
     void *address,
     unsigned int blocks
