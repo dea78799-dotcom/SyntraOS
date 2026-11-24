@@ -510,6 +510,14 @@ add_executable(arm64_exception_origin_test
 target_link_libraries(arm64_exception_origin_test PRIVATE syntra_kernel)
 add_test(NAME ARM64ExceptionOriginTest COMMAND arm64_exception_origin_test)
 
+# ARM64 thread-exit scheduler bridge no-successor policy test
+add_executable(arm64_thread_exit_bridge_test
+    tests/arm64/thread_exit_bridge_test.c
+)
+target_link_libraries(arm64_thread_exit_bridge_test PRIVATE syntra_kernel)
+add_test(NAME ARM64ThreadExitBridgeTest
+         COMMAND arm64_thread_exit_bridge_test)
+
 # ARM64 Current Exception Level decoder tests
 add_executable(arm64_registers_test
     tests/arm64/registers_test.c
