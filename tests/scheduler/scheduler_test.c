@@ -57,6 +57,19 @@ int main(void)
         thread->stack_base == (uintptr_t)stack_a &&
         thread->stack_size == sizeof(stack_a));
 
+    {
+        syntra_thread_t snapshot;
+        check("Read thread through copy-out snapshot",
+            scheduler_get_thread_snapshot(2U, &snapshot) == SYNTRA_STATUS_OK);
+        snapshot.state = THREAD_TERMINATED;
+        check("Snapshot mutation does not alter scheduler record",
+            scheduler_get_thread_snapshot(2U, &snapshot) == SYNTRA_STATUS_OK &&
+            snapshot.state == THREAD_READY);
+        check("Reject NULL thread snapshot",
+            scheduler_get_thread_snapshot(2U, NULL) ==
+                SYNTRA_STATUS_INVALID_ARGUMENT);
+    }
+
     thread = scheduler_schedule_next();
     check("Round-robin selects first READY thread",
         thread != NULL && thread->thread_id == 1U &&
