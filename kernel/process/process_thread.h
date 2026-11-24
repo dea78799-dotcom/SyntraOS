@@ -33,6 +33,15 @@ syntra_status_t process_thread_create_user(
     void *cpu_context
 );
 
+/*
+ * Terminate a process and all scheduler threads carrying its exact handle.
+ * This is the canonical process-termination path. It does not reclaim stacks,
+ * remove TCBs, or make process slots reusable.
+ */
+syntra_status_t process_thread_terminate_process(
+    syntra_process_handle_t owner
+);
+
 syntra_status_t process_thread_get_count(
     syntra_process_handle_t owner,
     unsigned int *count_out
