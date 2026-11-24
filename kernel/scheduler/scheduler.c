@@ -989,7 +989,7 @@ syntra_status_t scheduler_reserve_owned_thread(
     if (scheduler_stack_range_conflicts(base, stack_size))
         goto done;
 
-    reserved_thread = (syntra_thread_t){0};
+    scheduler_clear_reserved_thread();
     reserved_thread.handle.slot = thread_count;
     reserved_thread.handle.generation = 1U;
     reserved_thread.thread_id = id;
@@ -1091,7 +1091,7 @@ syntra_status_t scheduler_publish_owned_thread(syntra_thread_handle_t handle)
     reserved_thread.state = THREAD_READY;
     threads[thread_count] = reserved_thread;
     ++thread_count;
-    reserved_thread = (syntra_thread_t){0};
+    scheduler_clear_reserved_thread();
     reserved_thread_valid = 0;
     status = SYNTRA_STATUS_OK;
 
@@ -1108,7 +1108,7 @@ syntra_status_t scheduler_abort_reserved_thread(syntra_thread_handle_t handle)
     if (reserved_thread_valid &&
         scheduler_thread_handle_equal(handle, reserved_thread.handle))
     {
-        reserved_thread = (syntra_thread_t){0};
+        scheduler_clear_reserved_thread();
         reserved_thread_valid = 0;
         status = SYNTRA_STATUS_OK;
     }
