@@ -559,6 +559,20 @@ static syntra_status_t scheduler_schedule_next_context_unlocked(void **cpu_conte
     if (selected == NULL)
         return SYNTRA_STATUS_ERROR;
 
+    /*
+     * A blocked thread may be woken before the architecture has switched
+     * away from its stack. If round-robin selects that exact generation,
+     * cancel the pending ticket: the outgoing stack is still active.
+     */
+    if (pending_switch.valid &&
+        scheduler_thread_handle_equal(pending_switch.handle, selected->handle))
+    {
+        pending_switch.valid = 0;
+        pending_switch.handle.slot = 0U;
+        pending_switch.handle.generation = 0U;
+        pending_switch.sequence = 0U;
+    }
+
     if (!pending_switch.valid && had_outgoing &&
         !scheduler_thread_handle_equal(outgoing_handle, selected->handle))
     {
