@@ -36,6 +36,8 @@ The scheduler captures outgoing identity before clearing or replacing `current_s
 
 The ARM64 scheduler-start SVC is a special bootstrap case. The boot TCB is intentionally BLOCKED so round-robin selection cannot resume it before workers wake it. The exception bridge saves its current exception frame, selects a worker, then explicitly stages the exact blocked boot-thread handle before returning the worker context to assembly.
 
+A blocked thread can be woken before the architecture installs a successor stack. If context-aware scheduling selects that same exact handle again, the scheduler cancels its pending proof ticket. This prevents a later unrelated context switch from incorrectly publishing proof for a thread that never left the CPU.
+
 ## 4. ARM64 proof boundary
 
 The vector entry saves the outgoing frame and calls `syntra_arm64_exception_handle_and_select()` on the outgoing stack.
