@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "../../kernel/scheduler/scheduler.h"
+#include "../../kernel/scheduler/scheduler_process_internal.h"
 
 static int failures;
 
@@ -307,6 +308,96 @@ int main(void)
             snapshot_a.state == THREAD_TERMINATED &&
             snapshot_b.state == THREAD_TERMINATED);
         check("Scheduler invariants hold with no runnable context",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+    }
+
+    {
+        void *owned_stack = NULL;
+        syntra_memory_allocation_handle_t allocation = {UINT32_MAX, 0U};
+        syntra_thread_handle_t reserved = {0U, 0U};
+        syntra_memory_owner_handle_t owner;
+
+        check("Initialize memory manager for owned-stack transaction",
+            memory_init() == SYNTRA_STATUS_OK);
+        check("Stage allocation for unpublished thread",
+            memory_allocate_staged(1U, &owned_stack, &allocation) ==
+                SYNTRA_STATUS_OK && owned_stack != NULL &&
+                allocation.generation != 0U);
+
+        owner.slot = 0U;
+        owner.generation = 1U;
+        check("Reserve owned thread without publishing it",
+            scheduler_reserve_owned_thread(owner, 88U, 3U, dummy_thread,
+                NULL, owned_stack, 2048U, &reserved) == SYNTRA_STATUS_OK);
+        check("Reservation is invisible to published thread count and selection",
+            scheduler_get_thread_count() == 4U &&
+            scheduler_get_thread_snapshot_by_handle(reserved,
+                &(syntra_thread_t){0}) == SYNTRA_STATUS_INVALID_ARGUMENT &&
+            scheduler_get_next_ready() == NULL);
+        check("Scheduler invariants accept unpublished reservation",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+
+        owner.slot = reserved.slot;
+        owner.generation = reserved.generation;
+        check("Bind staged allocation to exact reserved thread",
+            memory_bind_staged_allocation(allocation, owner) ==
+                SYNTRA_STATUS_OK);
+        check("Attach exact reserved allocation descriptor",
+            scheduler_attach_owned_stack(reserved, allocation) ==
+                SYNTRA_STATUS_OK);
+        check("Commit allocator ownership before scheduler publication",
+            memory_commit_thread_allocation(allocation, owner) ==
+                SYNTRA_STATUS_OK);
+        check("Publish complete owned thread as final visibility step",
+            scheduler_publish_owned_thread(reserved) == SYNTRA_STATUS_OK);
+        {
+            syntra_thread_t published;
+            check("Published thread exposes exact OWNED token",
+                scheduler_get_thread_snapshot_by_handle(reserved,
+                    &published) == SYNTRA_STATUS_OK &&
+                published.state == THREAD_READY &&
+                published.stack_ownership == SYNTRA_THREAD_STACK_OWNED &&
+                published.stack_allocation.slot == allocation.slot &&
+                published.stack_allocation.generation ==
+                    allocation.generation);
+        }
+        check("Published owned thread preserves scheduler invariants",
+            scheduler_get_thread_count() == 5U &&
+            scheduler_validate() == SYNTRA_STATUS_OK);
+        check("Allocator snapshot resolves exact THREAD_OWNED token",
+            memory_get_allocation_by_handle(allocation,
+                &(syntra_memory_allocation_t){0}) == SYNTRA_STATUS_OK);
+    }
+
+    {
+        void *owned_stack = NULL;
+        syntra_memory_allocation_handle_t allocation = {UINT32_MAX, 0U};
+        syntra_thread_handle_t reserved = {0U, 0U};
+        syntra_memory_owner_handle_t wrong_owner;
+
+        check("Stage allocation for owner-mismatch rollback",
+            memory_allocate_staged(1U, &owned_stack, &allocation) ==
+                SYNTRA_STATUS_OK);
+        check("Reserve second unpublished thread",
+            scheduler_reserve_owned_thread(
+                (syntra_process_handle_t){0U, 1U}, 89U, 1U,
+                dummy_thread, NULL, owned_stack, 2048U, &reserved) ==
+                SYNTRA_STATUS_OK);
+        wrong_owner.slot = reserved.slot + 1U;
+        wrong_owner.generation = reserved.generation;
+        check("Bind token to deliberately wrong thread identity",
+            memory_bind_staged_allocation(allocation, wrong_owner) ==
+                SYNTRA_STATUS_OK);
+        check("Reject descriptor attachment for owner mismatch",
+            scheduler_attach_owned_stack(reserved, allocation) ==
+                SYNTRA_STATUS_PERMISSION_DENIED);
+        check("Abort unpublished reservation after failed attachment",
+            scheduler_abort_reserved_thread(reserved) == SYNTRA_STATUS_OK);
+        check("Abort exact reserved allocation during rollback",
+            memory_abort_reserved_allocation(allocation, wrong_owner) ==
+                SYNTRA_STATUS_OK);
+        check("Failed reservation never changes published thread count",
+            scheduler_get_thread_count() == 5U &&
             scheduler_validate() == SYNTRA_STATUS_OK);
     }
 
