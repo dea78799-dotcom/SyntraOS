@@ -204,6 +204,29 @@ int main(void)
                 == SYNTRA_STATUS_INVALID_ARGUMENT);
     }
 
+    {
+        syntra_thread_t snapshot_a;
+        syntra_thread_t snapshot_b;
+
+        check("Terminate remaining context-aware thread",
+            scheduler_set_thread_state(4U, THREAD_TERMINATED) ==
+                SYNTRA_STATUS_OK);
+        check("Terminate remaining metadata-only thread",
+            scheduler_set_thread_state(1U, THREAD_TERMINATED) ==
+                SYNTRA_STATUS_OK);
+        check("No-successor context selection returns no context",
+            scheduler_schedule_next_with_context() == NULL);
+        check("No-successor leaves no current thread",
+            scheduler_get_current() == NULL);
+        check("Terminated threads remain terminal after empty selection",
+            scheduler_get_thread_snapshot(1U, &snapshot_a) == SYNTRA_STATUS_OK &&
+            scheduler_get_thread_snapshot(4U, &snapshot_b) == SYNTRA_STATUS_OK &&
+            snapshot_a.state == THREAD_TERMINATED &&
+            snapshot_b.state == THREAD_TERMINATED);
+        check("Scheduler invariants hold with no runnable context",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+    }
+
     printf("\n=================================\n");
     printf(" Total failures: %d\n", failures);
     printf("=================================\n");
