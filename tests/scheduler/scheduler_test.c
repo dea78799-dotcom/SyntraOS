@@ -335,6 +335,9 @@ int main(void)
                 &(syntra_thread_t){0}) == SYNTRA_STATUS_INVALID_ARGUMENT &&
             (scheduler_get_next_ready() == NULL ||
                 scheduler_get_next_ready()->thread_id != 88U));
+        check("Public insertion cannot steal reserved append-only slot",
+            scheduler_add_thread(90U, 1U) == SYNTRA_STATUS_ERROR &&
+            scheduler_get_thread_count() == 3U);
         check("Scheduler invariants accept unpublished reservation",
             scheduler_validate() == SYNTRA_STATUS_OK);
 
