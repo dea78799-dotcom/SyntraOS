@@ -1357,7 +1357,7 @@ syntra_status_t scheduler_complete_switch_away(void)
     return SYNTRA_STATUS_OK;
 }
 
-syntra_status_t scheduler_take_switch_away_event(
+syntra_status_t scheduler_peek_switch_away_event(
     syntra_thread_switch_event_t *event_out)
 {
     syntra_irq_state_t irq = syntra_irq_save();
@@ -1374,12 +1374,47 @@ syntra_status_t scheduler_take_switch_away_event(
     }
 
     *event_out = switch_events[switch_event_head];
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t scheduler_ack_switch_away_event(
+    syntra_thread_switch_event_t event)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+
+    if (switch_event_count == 0U ||
+        event.handle.generation == 0U ||
+        event.sequence == 0U ||
+        !scheduler_thread_handle_equal(
+            switch_events[switch_event_head].handle, event.handle) ||
+        switch_events[switch_event_head].sequence != event.sequence)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
     switch_event_head =
         (switch_event_head + 1U) % SYNTRA_SWITCH_COMPLETION_CAPACITY;
     --switch_event_count;
 
     syntra_irq_restore(irq);
     return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t scheduler_take_switch_away_event(
+    syntra_thread_switch_event_t *event_out)
+{
+    syntra_status_t status;
+
+    if (event_out == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    status = scheduler_peek_switch_away_event(event_out);
+    if (status != SYNTRA_STATUS_OK)
+        return status;
+
+    return scheduler_ack_switch_away_event(*event_out);
 }
 
 syntra_status_t scheduler_get_thread_snapshot_by_handle(
