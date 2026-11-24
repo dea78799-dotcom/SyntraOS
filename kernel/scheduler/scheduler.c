@@ -1357,6 +1357,63 @@ syntra_status_t scheduler_complete_switch_away(void)
     return SYNTRA_STATUS_OK;
 }
 
+syntra_status_t scheduler_peek_switch_away_event(
+    syntra_thread_switch_event_t *event_out)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+
+    if (event_out == NULL)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+    if (switch_event_count == 0U)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    *event_out = switch_events[switch_event_head];
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t scheduler_ack_switch_away_event(
+    const syntra_thread_switch_event_t *expected_event)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    const syntra_thread_switch_event_t *head;
+
+    if (expected_event == NULL ||
+        expected_event->handle.generation == 0U ||
+        expected_event->sequence == 0U)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+    if (switch_event_count == 0U)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    head = &switch_events[switch_event_head];
+    if (head->handle.slot != expected_event->handle.slot ||
+        head->handle.generation != expected_event->handle.generation ||
+        head->sequence != expected_event->sequence)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+    }
+
+    switch_event_head =
+        (switch_event_head + 1U) % SYNTRA_SWITCH_COMPLETION_CAPACITY;
+    --switch_event_count;
+
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_status_t scheduler_take_switch_away_event(
     syntra_thread_switch_event_t *event_out)
 {
