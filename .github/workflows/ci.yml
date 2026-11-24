@@ -11,6 +11,7 @@ on:
       - feat/process-termination-cascade-v1
       - design/thread-exit-reclamation-v1
       - feat/arm64-thread-exit-v1
+      - design/thread-resource-ownership-v1
 
   pull_request:
     branches:
