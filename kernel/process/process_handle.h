@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define SYNTRA_MAX_PROCESSES 64U
+
 /*
  * Stable value identity for one occupied process-table slot.
  * A handle is valid only when both slot and generation match the manager.
