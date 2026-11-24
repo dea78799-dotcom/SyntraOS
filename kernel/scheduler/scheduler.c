@@ -1051,9 +1051,21 @@ syntra_status_t scheduler_prepare_switch_away(
 syntra_status_t scheduler_complete_switch_away(void)
 {
     syntra_irq_state_t irq = syntra_irq_save();
+    int outgoing_slot;
 
     if (!pending_switch.valid ||
-        switch_event_count >= SYNTRA_SWITCH_COMPLETION_CAPACITY)
+        switch_event_count >= SYNTRA_SWITCH_COMPLETION_CAPACITY ||
+        current_slot < 0 ||
+        (unsigned int)current_slot >= thread_count)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    outgoing_slot = scheduler_resolve_handle_unlocked(pending_switch.handle);
+    if (outgoing_slot < 0 || outgoing_slot == current_slot ||
+        threads[(unsigned int)current_slot].state != THREAD_RUNNING ||
+        threads[(unsigned int)outgoing_slot].state == THREAD_RUNNING)
     {
         syntra_irq_restore(irq);
         return SYNTRA_STATUS_ERROR;
