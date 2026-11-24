@@ -408,8 +408,6 @@ static syntra_status_t scheduler_set_thread_state_unlocked(
         {
             threads[(unsigned int)current_slot].state = THREAD_READY;
         }
-        if (current_slot < 0 && thread_count != 0U)
-            next_slot = ((unsigned int)slot + 1U) % thread_count;
         current_slot = slot;
     }
     else if (current_slot == slot)
@@ -1025,6 +1023,27 @@ syntra_status_t scheduler_terminate_current(void)
 {
     syntra_irq_state_t irq = syntra_irq_save();
     syntra_status_t status = scheduler_terminate_current_unlocked();
+    syntra_irq_restore(irq);
+    return status;
+}
+
+syntra_status_t scheduler_prepare_switch_away(
+    syntra_thread_handle_t handle)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    int slot = scheduler_resolve_handle_unlocked(handle);
+    syntra_status_t status;
+
+    if (slot < 0 ||
+        (threads[(unsigned int)slot].state != THREAD_BLOCKED &&
+         threads[(unsigned int)slot].state != THREAD_TERMINATED) ||
+        current_slot == slot)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    status = scheduler_stage_switch_unlocked(handle);
     syntra_irq_restore(irq);
     return status;
 }
