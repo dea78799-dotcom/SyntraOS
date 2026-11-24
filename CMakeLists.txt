@@ -45,6 +45,7 @@ add_library(syntra_kernel STATIC
     kernel/arch/arm64/context.c
 
     kernel/scheduler/scheduler.c
+    kernel/scheduler/thread_reaper.c
     kernel/memory/memory.c
     kernel/process/process.c
     kernel/process/process_thread.c
@@ -154,6 +155,13 @@ add_executable(thread_handle_test
 )
 target_link_libraries(thread_handle_test PRIVATE syntra_kernel)
 add_test(NAME SchedulerThreadHandleV1Test COMMAND thread_handle_test)
+
+# Deferred reaper proof-event handoff and bounded candidate queue
+add_executable(thread_reaper_handoff_test
+    tests/scheduler/thread_reaper_handoff_test.c
+)
+target_link_libraries(thread_reaper_handoff_test PRIVATE syntra_kernel)
+add_test(NAME ThreadReaperHandoffV1Test COMMAND thread_reaper_handoff_test)
 
 # Memory Region Manager Test
 add_executable(memory_region_test
