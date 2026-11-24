@@ -22,6 +22,9 @@ int main(void)
     static _Alignas(16) unsigned char stack_a[2048];
     static _Alignas(16) unsigned char stack_b[2048];
     static _Alignas(16) unsigned char stack_c[2048];
+    static _Alignas(16) unsigned char user_kernel_stack[2048];
+    static _Alignas(16) unsigned char user_stack[2048];
+    static unsigned char user_cpu_context[256];
     syntra_process_handle_t owner = {0U, 0U};
     syntra_process_handle_t other = {0U, 0U};
     syntra_process_handle_t invalid;
@@ -41,9 +44,13 @@ int main(void)
     check("Create second thread for same process",
         process_thread_create_kernel(owner, 101U, 3U, thread_entry, NULL,
             stack_b, sizeof(stack_b)) == SYNTRA_STATUS_OK);
+    check("Create process-owned user thread",
+        process_thread_create_user(owner, 102U, 2U, thread_entry, NULL,
+            user_kernel_stack, sizeof(user_kernel_stack),
+            user_stack, sizeof(user_stack), user_cpu_context) == SYNTRA_STATUS_OK);
     check("Count exact owner threads",
         process_thread_get_count(owner, &count) == SYNTRA_STATUS_OK &&
-        count == 2U);
+        count == 3U);
     count = 99U;
     check("Other process has no threads",
         process_thread_get_count(other, &count) == SYNTRA_STATUS_OK &&
@@ -51,6 +58,13 @@ int main(void)
     check("Read owner thread snapshot",
         process_thread_get_snapshot(owner, 1U, &snapshot) == SYNTRA_STATUS_OK &&
         snapshot.thread_id == 101U && snapshot.has_process_owner == 1U &&
+        snapshot.owner_process.slot == owner.slot &&
+        snapshot.owner_process.generation == owner.generation);
+    check("User thread retains context and owner identity",
+        process_thread_get_snapshot(owner, 2U, &snapshot) == SYNTRA_STATUS_OK &&
+        snapshot.thread_id == 102U && snapshot.is_user_thread == 1U &&
+        snapshot.cpu_context == user_cpu_context &&
+        snapshot.has_process_owner == 1U &&
         snapshot.owner_process.slot == owner.slot &&
         snapshot.owner_process.generation == owner.generation);
 
@@ -71,7 +85,7 @@ int main(void)
     count = 0U;
     check("Failed creation leaves owner count unchanged",
         process_thread_get_count(owner, &count) == SYNTRA_STATUS_OK &&
-        count == 2U);
+        count == 3U);
 
     check("Terminate second process",
         process_set_state_by_handle(other, PROCESS_TERMINATED) == SYNTRA_STATUS_OK);
