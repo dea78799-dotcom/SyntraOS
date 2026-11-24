@@ -15,8 +15,9 @@ typedef enum
 } syntra_process_state_t;
 
 /*
- * Opaque identity for one occupied process-table slot.
- * A handle is valid only while both slot and generation match.
+ * Generation-aware value handle for one occupied process-table slot.
+ * Its fields are public; validity is determined by the manager only when
+ * both slot and generation match.
  */
 typedef struct
 {
