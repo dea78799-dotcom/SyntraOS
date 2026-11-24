@@ -59,6 +59,26 @@ syntra_status_t process_create(
 }
 
 
+
+syntra_status_t process_get_snapshot(
+    unsigned int process_id,
+    syntra_process_t *snapshot)
+{
+    if (snapshot == 0 || process_id == 0U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    if (!process_initialized)
+        return SYNTRA_STATUS_ERROR;
+    for (unsigned int i = 0U; i < process_count; ++i)
+    {
+        if (processes[i].process_id == process_id)
+        {
+            *snapshot = processes[i];
+            return SYNTRA_STATUS_OK;
+        }
+    }
+    return SYNTRA_STATUS_INVALID_ARGUMENT;
+}
+
 syntra_process_t *process_get(unsigned int process_id)
 {
     if (!process_initialized)
