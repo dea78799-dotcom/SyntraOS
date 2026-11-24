@@ -607,7 +607,7 @@ syntra_status_t scheduler_create_owned_thread(
 {
     syntra_irq_state_t irq = syntra_irq_save();
     syntra_status_t status;
-    if (owner.generation == 0U || owner.slot >= 64U)
+    if (owner.generation == 0U || owner.slot >= SYNTRA_MAX_PROCESSES)
     {
         syntra_irq_restore(irq);
         return SYNTRA_STATUS_INVALID_ARGUMENT;
