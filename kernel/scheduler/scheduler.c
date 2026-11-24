@@ -147,8 +147,8 @@ syntra_status_t scheduler_create_thread(
     }
 
     /*
-     * Every live thread owns a distinct stack range. Check both EL1 and
-     * EL0 ranges so a kernel thread cannot alias another thread's stack.
+     * Every registered thread retains exclusive stack ranges until the
+     * scheduler is reset. Check both EL1 and EL0 ranges.
      */
     if (scheduler_stack_range_conflicts(stack_address, stack_size))
     {
