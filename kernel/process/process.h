@@ -35,6 +35,13 @@ typedef struct
 /* Initialize process manager. */
 syntra_status_t process_init(void);
 
+/* Create a process record and return its generation-aware handle. */
+syntra_status_t process_create_with_handle(
+    unsigned int process_id,
+    unsigned int priority,
+    syntra_process_handle_t *handle
+);
+
 /* Legacy creation API using caller-supplied IDs. */
 syntra_status_t process_create(
     unsigned int process_id,
