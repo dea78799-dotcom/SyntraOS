@@ -242,7 +242,7 @@ static syntra_thread_t *scheduler_schedule_next_unlocked(void)
         threads[(unsigned int)current_slot].state = THREAD_READY;
     }
 
-    syntra_thread_t *selected = scheduler_get_next_ready();
+    syntra_thread_t *selected = scheduler_get_next_ready_unlocked();
     if (selected == NULL)
     {
         /* No READY task: keep the current task if it is still runnable. */
