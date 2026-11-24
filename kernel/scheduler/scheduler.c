@@ -1405,16 +1405,26 @@ syntra_status_t scheduler_ack_switch_away_event(
 syntra_status_t scheduler_take_switch_away_event(
     syntra_thread_switch_event_t *event_out)
 {
-    syntra_status_t status;
+    syntra_irq_state_t irq = syntra_irq_save();
 
     if (event_out == NULL)
+    {
+        syntra_irq_restore(irq);
         return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+    if (switch_event_count == 0U)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_ERROR;
+    }
 
-    status = scheduler_peek_switch_away_event(event_out);
-    if (status != SYNTRA_STATUS_OK)
-        return status;
+    *event_out = switch_events[switch_event_head];
+    switch_event_head =
+        (switch_event_head + 1U) % SYNTRA_SWITCH_COMPLETION_CAPACITY;
+    --switch_event_count;
 
-    return scheduler_ack_switch_away_event(*event_out);
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t scheduler_get_thread_snapshot_by_handle(
