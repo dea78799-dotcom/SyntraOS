@@ -23,6 +23,7 @@ static size_t syntra_fw_cfg_size;
 #include "../../../timer/timer.h"
 #include "../../../interrupt/interrupt.h"
 #include "../../../scheduler/scheduler.h"
+#include "../../../scheduler/thread_reaper.h"
 #include "../../../process/process.h"
 #include "../../../process/process_thread.h"
 
@@ -805,9 +806,12 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
 {
     syntra_status_t status;
     syntra_arm64_exception_context_t *initial_context = NULL;
-    syntra_thread_switch_event_t switch_event;
-    unsigned int switch_proof_count = 0U;
-    uint64_t last_switch_sequence = 0U;
+    syntra_reaper_candidate_t reap_candidate;
+    syntra_reaper_stats_t reaper_stats;
+    unsigned int candidate_count = 0U;
+    unsigned int processed_events = 0U;
+    unsigned int total_processed_events = 0U;
+    uint64_t last_terminal_sequence = 0U;
 
     scheduler_test_completed = 0U;
     scheduler_test_last_worker = 0U;
@@ -819,6 +823,8 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
         scheduler_test_trace[i] = '\0';
 
     status = scheduler_init();
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = thread_reaper_init();
     if (status != SYNTRA_STATUS_OK) return status;
 
     status = scheduler_create_thread(
@@ -881,27 +887,63 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
     (void)interrupt_disable(30U);
 
     /*
-     * Drain the bounded proof queue from the resumed boot thread, not from
-     * IRQ context. The post-SP hook itself performs metadata publication only.
+     * Dispatch proof events from the resumed boot thread, not from IRQ
+     * context. This is the sole consumer of the D2 FIFO in this QEMU test.
+     * The dispatcher queues terminal candidates and discards ordinary
+     * preemption/block events. It never releases a stack.
      */
-    while (scheduler_take_switch_away_event(&switch_event) == SYNTRA_STATUS_OK)
+    do
     {
-        if (switch_event.handle.generation == 0U ||
-            switch_event.sequence == 0U ||
-            switch_event.sequence <= last_switch_sequence)
+        processed_events = 0U;
+        status = thread_reaper_dispatch(
+            SYNTRA_REAPER_CANDIDATE_CAPACITY, &processed_events);
+        if (status != SYNTRA_STATUS_OK)
         {
-            syntra_uart_puts("Thread switch-away proof validation: FAIL\n");
-            return SYNTRA_STATUS_ERROR;
+            syntra_uart_puts("Thread reaper event dispatch: FAIL\n");
+            return status;
         }
-        last_switch_sequence = switch_event.sequence;
-        ++switch_proof_count;
-    }
-    if (switch_proof_count == 0U)
+        total_processed_events += processed_events;
+    } while (processed_events == SYNTRA_REAPER_CANDIDATE_CAPACITY);
+
+    status = thread_reaper_get_candidate_count(&candidate_count);
+    if (status != SYNTRA_STATUS_OK || candidate_count != 2U ||
+        total_processed_events == 0U)
     {
-        syntra_uart_puts("Thread switch-away proof validation: FAIL\n");
+        syntra_uart_puts("Thread reaper candidate count: FAIL\n");
         return SYNTRA_STATUS_ERROR;
     }
-    syntra_uart_puts("Thread switch-away proof: PUBLISHED\n");
+
+    for (unsigned int i = 0U; i < candidate_count; ++i)
+    {
+        syntra_thread_t terminal_snapshot;
+        status = thread_reaper_get_candidate(i, &reap_candidate);
+        if (status != SYNTRA_STATUS_OK ||
+            reap_candidate.state != SYNTRA_REAPER_CANDIDATE_QUEUED ||
+            reap_candidate.reason != SYNTRA_REAPER_REASON_NONE ||
+            reap_candidate.proof.handle.generation == 0U ||
+            reap_candidate.proof.sequence == 0U ||
+            reap_candidate.proof.sequence <= last_terminal_sequence ||
+            scheduler_get_thread_snapshot_by_handle(
+                reap_candidate.proof.handle, &terminal_snapshot) !=
+                    SYNTRA_STATUS_OK ||
+            terminal_snapshot.state != THREAD_TERMINATED)
+        {
+            syntra_uart_puts("Thread reaper candidate validation: FAIL\n");
+            return SYNTRA_STATUS_ERROR;
+        }
+        last_terminal_sequence = reap_candidate.proof.sequence;
+    }
+
+    status = thread_reaper_get_stats(&reaper_stats);
+    if (status != SYNTRA_STATUS_OK ||
+        reaper_stats.queued != candidate_count)
+        return SYNTRA_STATUS_ERROR;
+
+    syntra_uart_puts("Thread switch-away proof dispatcher: PASS candidates=");
+    syntra_uart_put_hex(candidate_count);
+    syntra_uart_puts(" events=");
+    syntra_uart_put_hex(total_processed_events);
+    syntra_uart_puts("\n");
 
     {
         syntra_status_t validation_status = scheduler_validate();
