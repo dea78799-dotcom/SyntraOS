@@ -462,7 +462,7 @@ static syntra_status_t validate_dtb_and_discover_gic(const void *dtb)
         syntra_uart_put_hex((uint64_t)metadata.dtb_start);
         syntra_uart_puts(" size=");
         syntra_uart_put_hex((uint64_t)metadata.dtb_size);
-        syntra_uart_puts("\\n");
+        syntra_uart_puts("\n");
     }
 
     status = syntra_arm64_memory_map_discover(
@@ -755,17 +755,6 @@ static void syntra_scheduler_test_worker(void *argument)
     unsigned int worker_id = (unsigned int)(uintptr_t)argument;
     unsigned int worker_index = worker_id - SYNTRA_SCHEDULER_TEST_WORKER_A_ID;
     uint64_t observed_tick = timer_get_ticks();
-    uint64_t initial_daif;
-
-    __asm__ volatile("mrs %0, daif" : "=r"(initial_daif));
-    syntra_uart_puts(worker_id == SYNTRA_SCHEDULER_TEST_WORKER_A_ID
-        ? "Scheduler worker A entered; DAIF="
-        : "Scheduler worker B entered; DAIF=");
-    syntra_uart_put_hex(initial_daif);
-    syntra_uart_puts(" tick=");
-    syntra_uart_put_hex(observed_tick);
-    syntra_uart_puts("\\n");
-
     for (;;)
     {
         uint64_t current_tick;
@@ -935,7 +924,7 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
             syntra_uart_put_hex(scheduler_test_trace_length);
             syntra_uart_puts(" validate=");
             syntra_uart_put_hex((uint64_t)validation_status);
-            syntra_uart_puts("\\n");
+            syntra_uart_puts("\n");
             syntra_uart_puts("FAIL: ARM64 Scheduler context switch validation\n");
             return SYNTRA_STATUS_ERROR;
         }
@@ -1210,7 +1199,7 @@ static syntra_status_t syntra_arm64_run_el0_hello_test(void)
     syntra_uart_put_hex((stack.page_descriptor >> 8U) & 3U);
     syntra_uart_puts(" UXN=");
     syntra_uart_put_hex((stack.page_descriptor >> 54U) & 1U);
-    syntra_uart_puts("\\n");
+    syntra_uart_puts("\n");
     if (((code.page_descriptor >> 10U) & 1U) != 1U ||
         ((code.page_descriptor >> 6U) & 3U) != 3U ||
         ((code.page_descriptor >> 8U) & 3U) != 3U ||
