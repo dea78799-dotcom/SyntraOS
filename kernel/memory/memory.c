@@ -953,7 +953,23 @@ void memory_get_info(syntra_memory_info_t *info)
     }
 
     if (!initialized) {
-        *info = (syntra_memory_info_t){0};
+        info->total_blocks = 0U;
+        info->used_blocks = 0U;
+        info->free_blocks = 0U;
+        info->allocation_count = 0U;
+        info->release_count = 0U;
+        info->active_allocations = 0U;
+        info->failed_allocations = 0U;
+        info->largest_free_block = 0U;
+        info->free_regions = 0U;
+        info->fragmentation_blocks = 0U;
+        info->usage_percent = 0U;
+        info->integrity_errors = 0U;
+        info->validation_errors = 0U;
+        info->peak_used_blocks = 0U;
+        info->peak_usage_percent = 0U;
+        info->leak_count = 0U;
+        info->leak_blocks = 0U;
         return;
     }
 
