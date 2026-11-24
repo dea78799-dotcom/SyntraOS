@@ -57,6 +57,127 @@ syntra_status_t process_thread_create_kernel_with_handle(
     return status;
 }
 
+/*
+ * Atomic single-core coordinator for allocator-owned kernel thread stacks.
+ * Before publication every failure path removes the unpublished TCB first,
+ * then aborts/releases only the exact allocation token and owner. If an exact
+ * rollback operation fails, the allocation is deliberately retained rather
+ * than freed by address or guessed identity.
+ */
+syntra_status_t process_thread_create_kernel_allocated_with_handle(
+    syntra_process_handle_t owner, unsigned int thread_id,
+    unsigned int priority, syntra_thread_entry_t entry, void *argument,
+    unsigned int stack_blocks, syntra_thread_handle_t *handle_out)
+{
+    syntra_irq_state_t irq;
+    syntra_process_t process;
+    syntra_thread_handle_t reserved_handle = {0U, 0U};
+    syntra_memory_allocation_handle_t allocation = {UINT32_MAX, 0U};
+    syntra_memory_owner_handle_t allocation_owner = {UINT32_MAX, 0U};
+    void *stack = NULL;
+    size_t stack_size;
+    syntra_status_t status;
+    syntra_status_t rollback_status;
+    int staged = 0;
+    int reserved = 0;
+    int bound = 0;
+    int committed = 0;
+
+    if (!process_thread_handle_is_structurally_valid(owner) ||
+        thread_id == 0U || entry == NULL || stack_blocks == 0U ||
+        stack_blocks > SYNTRA_MAX_MEMORY_BLOCKS || handle_out == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    stack_size = (size_t)stack_blocks * SYNTRA_MEMORY_BLOCK_SIZE;
+    if (stack_size < SYNTRA_THREAD_MIN_STACK_SIZE)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    irq = syntra_irq_save();
+
+    status = process_get_snapshot_by_handle(owner, &process);
+    if (status != SYNTRA_STATUS_OK)
+        goto done;
+    if (process.state == PROCESS_TERMINATED)
+    {
+        status = SYNTRA_STATUS_PERMISSION_DENIED;
+        goto done;
+    }
+
+    status = memory_init();
+    if (status != SYNTRA_STATUS_OK)
+        goto done;
+
+    status = memory_allocate_staged(stack_blocks, &stack, &allocation);
+    if (status != SYNTRA_STATUS_OK)
+        goto done;
+    staged = 1;
+
+    status = scheduler_reserve_owned_thread(
+        owner, thread_id, priority, entry, argument,
+        stack, stack_size, &reserved_handle);
+    if (status != SYNTRA_STATUS_OK)
+        goto rollback;
+    reserved = 1;
+
+    allocation_owner.slot = reserved_handle.slot;
+    allocation_owner.generation = reserved_handle.generation;
+
+    status = memory_bind_staged_allocation(allocation, allocation_owner);
+    if (status != SYNTRA_STATUS_OK)
+        goto rollback;
+    bound = 1;
+
+    status = scheduler_attach_owned_stack(reserved_handle, allocation);
+    if (status != SYNTRA_STATUS_OK)
+        goto rollback;
+
+    status = memory_commit_thread_allocation(allocation, allocation_owner);
+    if (status != SYNTRA_STATUS_OK)
+        goto rollback;
+    committed = 1;
+
+    status = scheduler_publish_owned_thread(reserved_handle);
+    if (status != SYNTRA_STATUS_OK)
+        goto rollback;
+
+    reserved = 0;
+    staged = 0;
+    bound = 0;
+    committed = 0;
+    *handle_out = reserved_handle;
+    goto done;
+
+rollback:
+    if (reserved)
+    {
+        rollback_status = scheduler_abort_reserved_thread(reserved_handle);
+        if (rollback_status != SYNTRA_STATUS_OK)
+        {
+            status = SYNTRA_STATUS_ERROR;
+            goto done;
+        }
+        reserved = 0;
+    }
+
+    if (committed)
+        rollback_status = memory_release_owned_allocation(
+            allocation, allocation_owner);
+    else if (bound)
+        rollback_status = memory_abort_reserved_allocation(
+            allocation, allocation_owner);
+    else if (staged)
+        rollback_status = memory_abort_staged_allocation(allocation);
+    else
+        rollback_status = SYNTRA_STATUS_OK;
+
+    if (rollback_status != SYNTRA_STATUS_OK)
+        status = SYNTRA_STATUS_ERROR;
+
+done:
+    syntra_irq_restore(irq);
+    return status;
+}
+
 syntra_status_t process_thread_create_user(
     syntra_process_handle_t owner, unsigned int thread_id,
     unsigned int priority, syntra_thread_entry_t entry, void *argument,
