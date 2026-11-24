@@ -25,7 +25,7 @@ The current IPC module provides a small, fixed-capacity message queue as an earl
 - Capabilities or policy-based authorization.
 - Per-process queues, blocking receive, wait queues or notifications.
 - Message prioritization, quotas or denial-of-service controls.
-- SMP-safe locking or interrupt-safe queue synchronization.
+- SMP-safe locking, FIQ-safe synchronization, and cross-core queue coordination.
 - Lifecycle cleanup when a process terminates.
 
 The sender ID is currently caller-supplied metadata. It must not be trusted as proof of identity.
@@ -36,7 +36,7 @@ The current queue is suitable only for controlled prototype tests. It must not b
 
 ## 5. Validation scope
 
-The IPC unit tests cover initialization, message enqueue/dequeue, sender and receiver metadata, payload copying, queue count and rejection of a zero-length message. They do not demonstrate permission enforcement, process authentication, isolation, concurrency safety or resilience against malicious senders.
+The IPC unit tests cover initialization, message enqueue/dequeue, sender and receiver metadata, payload copying, queue count, invalid inputs, fixed-capacity behavior and full-queue rejection. They do not demonstrate permission enforcement, process authentication, isolation, concurrency safety or resilience against malicious senders.
 
 ## 6. V1 status
 
