@@ -659,6 +659,30 @@ syntra_status_t scheduler_create_thread(
     return status;
 }
 
+syntra_status_t scheduler_create_user_thread_with_handle(
+    unsigned int id, unsigned int priority, syntra_thread_entry_t entry,
+    void *argument, void *kernel_stack, size_t kernel_stack_size,
+    void *user_stack, size_t user_stack_size, void *cpu_context,
+    syntra_thread_handle_t *handle_out)
+{
+    syntra_irq_state_t irq;
+    syntra_status_t status;
+    int slot;
+    if (handle_out == NULL) return SYNTRA_STATUS_INVALID_ARGUMENT;
+    irq = syntra_irq_save();
+    status = scheduler_create_user_thread_unlocked(
+        id, priority, entry, argument, kernel_stack, kernel_stack_size,
+        user_stack, user_stack_size, cpu_context);
+    if (status == SYNTRA_STATUS_OK)
+    {
+        slot = scheduler_find_slot(id);
+        if (slot < 0) status = SYNTRA_STATUS_ERROR;
+        else *handle_out = threads[(unsigned int)slot].handle;
+    }
+    syntra_irq_restore(irq);
+    return status;
+}
+
 syntra_status_t scheduler_create_user_thread(
     unsigned int id, unsigned int priority, syntra_thread_entry_t entry,
     void *argument, void *kernel_stack, size_t kernel_stack_size,
@@ -679,13 +703,16 @@ syntra_status_t scheduler_create_user_thread(
  * These functions retain their own nested save/restore for safe standalone
  * scheduler access and commit ownership only after successful insertion.
  */
-syntra_status_t scheduler_create_owned_thread(
+syntra_status_t scheduler_create_owned_thread_with_handle(
     syntra_process_handle_t owner, unsigned int id, unsigned int priority,
-    syntra_thread_entry_t entry, void *argument, void *stack, size_t stack_size)
+    syntra_thread_entry_t entry, void *argument, void *stack, size_t stack_size,
+    syntra_thread_handle_t *handle_out)
 {
     syntra_irq_state_t irq = syntra_irq_save();
     syntra_status_t status;
-    if (owner.generation == 0U || owner.slot >= SYNTRA_MAX_PROCESSES)
+    int slot;
+    if (owner.generation == 0U || owner.slot >= SYNTRA_MAX_PROCESSES ||
+        handle_out == NULL)
     {
         syntra_irq_restore(irq);
         return SYNTRA_STATUS_INVALID_ARGUMENT;
@@ -694,28 +721,31 @@ syntra_status_t scheduler_create_owned_thread(
         id, priority, entry, argument, stack, stack_size);
     if (status == SYNTRA_STATUS_OK)
     {
-        int slot = scheduler_find_slot(id);
-        if (slot < 0)
-            status = SYNTRA_STATUS_ERROR;
+        slot = scheduler_find_slot(id);
+        if (slot < 0) status = SYNTRA_STATUS_ERROR;
         else
         {
             threads[(unsigned int)slot].owner_process = owner;
             threads[(unsigned int)slot].has_process_owner = 1U;
+            *handle_out = threads[(unsigned int)slot].handle;
         }
     }
     syntra_irq_restore(irq);
     return status;
 }
 
-syntra_status_t scheduler_create_owned_user_thread(
+syntra_status_t scheduler_create_owned_user_thread_with_handle(
     syntra_process_handle_t owner, unsigned int id, unsigned int priority,
     syntra_thread_entry_t entry, void *argument,
     void *kernel_stack, size_t kernel_stack_size,
-    void *user_stack, size_t user_stack_size, void *cpu_context)
+    void *user_stack, size_t user_stack_size, void *cpu_context,
+    syntra_thread_handle_t *handle_out)
 {
     syntra_irq_state_t irq = syntra_irq_save();
     syntra_status_t status;
-    if (owner.generation == 0U || owner.slot >= 64U)
+    int slot;
+    if (owner.generation == 0U || owner.slot >= SYNTRA_MAX_PROCESSES ||
+        handle_out == NULL)
     {
         syntra_irq_restore(irq);
         return SYNTRA_STATUS_INVALID_ARGUMENT;
@@ -725,13 +755,13 @@ syntra_status_t scheduler_create_owned_user_thread(
         user_stack, user_stack_size, cpu_context);
     if (status == SYNTRA_STATUS_OK)
     {
-        int slot = scheduler_find_slot(id);
-        if (slot < 0)
-            status = SYNTRA_STATUS_ERROR;
+        slot = scheduler_find_slot(id);
+        if (slot < 0) status = SYNTRA_STATUS_ERROR;
         else
         {
             threads[(unsigned int)slot].owner_process = owner;
             threads[(unsigned int)slot].has_process_owner = 1U;
+            *handle_out = threads[(unsigned int)slot].handle;
         }
     }
     syntra_irq_restore(irq);
@@ -933,6 +963,22 @@ syntra_status_t scheduler_get_thread_snapshot(unsigned int id, syntra_thread_t *
     syntra_status_t status = scheduler_get_thread_snapshot_unlocked(id, out);
     syntra_irq_restore(irq);
     return status;
+}
+
+syntra_status_t scheduler_get_current_handle(
+    syntra_thread_handle_t *handle_out)
+{
+    syntra_irq_state_t irq;
+    if (handle_out == NULL) return SYNTRA_STATUS_INVALID_ARGUMENT;
+    irq = syntra_irq_save();
+    if (!scheduler_initialized || current_slot < 0)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_ERROR;
+    }
+    *handle_out = threads[(unsigned int)current_slot].handle;
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t scheduler_get_current_snapshot(syntra_thread_t *out)
