@@ -46,6 +46,7 @@ int main(void)
     /* Test 3: Allocate one block */
     void *block = memory_allocate(1);
     void *staged_address = NULL;
+    void *stale_address = NULL;
     syntra_memory_allocation_handle_t staged_handle = {UINT32_MAX, 0U};
     syntra_memory_allocation_handle_t stale_handle = {UINT32_MAX, 0U};
     syntra_memory_owner_handle_t owner = {3U, 7U};
@@ -150,6 +151,7 @@ int main(void)
 
     /* Test 10: Address reuse must not revive a stale token */
     stale_handle = staged_handle;
+    stale_address = staged_address;
     staged_address = NULL;
     check(
         "Allocate second staged lifetime",
@@ -161,6 +163,7 @@ int main(void)
     check(
         "Reused allocation slot has a newer generation",
         staged_handle.slot == stale_handle.slot &&
+        staged_address == stale_address &&
         staged_handle.generation > stale_handle.generation
     );
 
