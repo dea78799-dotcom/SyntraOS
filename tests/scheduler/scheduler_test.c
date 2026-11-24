@@ -103,10 +103,30 @@ int main(void)
             scheduler_get_current()->thread_id == 2U);
         check("Publish blocked-thread switch proof",
             scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
-        check("Consume exact blocked-thread switch event",
-            scheduler_take_switch_away_event(&event) == SYNTRA_STATUS_OK &&
+        check("Peek exact blocked-thread switch event without consuming",
+            scheduler_peek_switch_away_event(&event) == SYNTRA_STATUS_OK &&
             scheduler_thread_handle_equal(event.handle, outgoing_snapshot.handle) &&
             event.sequence != 0U);
+        {
+            syntra_thread_switch_event_t repeated;
+            syntra_thread_switch_event_t wrong = event;
+            wrong.sequence++;
+            check("Repeated peek preserves the same FIFO head",
+                scheduler_peek_switch_away_event(&repeated) == SYNTRA_STATUS_OK &&
+                repeated.handle.slot == event.handle.slot &&
+                repeated.handle.generation == event.handle.generation &&
+                repeated.sequence == event.sequence);
+            check("Reject acknowledgement for a mismatched proof token",
+                scheduler_ack_switch_away_event(&wrong) ==
+                    SYNTRA_STATUS_PERMISSION_DENIED);
+            check("Mismatched acknowledgement leaves FIFO head intact",
+                scheduler_peek_switch_away_event(&repeated) == SYNTRA_STATUS_OK &&
+                repeated.sequence == event.sequence);
+        }
+        check("Acknowledge exact blocked-thread proof event",
+            scheduler_ack_switch_away_event(&event) == SYNTRA_STATUS_OK);
+        check("Acknowledged event is no longer at FIFO head",
+            scheduler_peek_switch_away_event(&event) == SYNTRA_STATUS_ERROR);
     }
     check("Wake blocked thread",
         scheduler_wake_thread(1U) == SYNTRA_STATUS_OK);
@@ -126,7 +146,7 @@ int main(void)
             scheduler_get_current()->thread_id == 1U);
         check("Publish terminated-thread switch proof",
             scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
-        check("Consume exact terminated-thread switch event",
+        check("Legacy take API still consumes exact terminated-thread event",
             scheduler_take_switch_away_event(&event) == SYNTRA_STATUS_OK &&
             scheduler_thread_handle_equal(event.handle, outgoing_snapshot.handle) &&
             event.sequence != 0U);
