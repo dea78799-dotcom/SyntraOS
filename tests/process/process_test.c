@@ -135,6 +135,12 @@ int main(void)
         process_create(1U, 3U) != SYNTRA_STATUS_OK
     );
 
+    /* Refresh process 1 after the legacy API checks on process 2. */
+    check(
+        "Refresh process 1 before initial-state assertion",
+        process_get_snapshot(1U, &process_snapshot) == SYNTRA_STATUS_OK
+    );
+
     /* Test 6: Check initial state */
     check(
         "Initial state is READY",
