@@ -392,6 +392,57 @@ syntra_status_t scheduler_terminate_current(void)
     return SYNTRA_STATUS_OK;
 }
 
+
+syntra_status_t scheduler_get_thread_snapshot(
+    unsigned int thread_id,
+    syntra_thread_t *snapshot)
+{
+    if (snapshot == NULL || thread_id == 0U)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    if (!scheduler_initialized)
+        return SYNTRA_STATUS_ERROR;
+    int slot = scheduler_find_slot(thread_id);
+    if (slot < 0)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    *snapshot = threads[(unsigned int)slot];
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t scheduler_get_current_snapshot(syntra_thread_t *snapshot)
+{
+    if (snapshot == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    if (!scheduler_initialized || current_slot < 0)
+        return SYNTRA_STATUS_ERROR;
+    *snapshot = threads[(unsigned int)current_slot];
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t scheduler_set_thread_context(
+    unsigned int thread_id, void *cpu_context)
+{
+    if (!scheduler_initialized)
+        return SYNTRA_STATUS_ERROR;
+    int slot = scheduler_find_slot(thread_id);
+    if (slot < 0)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    threads[(unsigned int)slot].cpu_context = cpu_context;
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t scheduler_schedule_next_context(void **cpu_context_out)
+{
+    syntra_thread_t *selected;
+    if (cpu_context_out == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    *cpu_context_out = NULL;
+    selected = scheduler_schedule_next_with_context();
+    if (selected == NULL)
+        return SYNTRA_STATUS_ERROR;
+    *cpu_context_out = selected->cpu_context;
+    return SYNTRA_STATUS_OK;
+}
+
 syntra_thread_t *scheduler_get_thread(unsigned int thread_id)
 {
     if (!scheduler_initialized || thread_id == 0U)
