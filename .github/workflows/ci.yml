@@ -30,6 +30,7 @@ on:
   pull_request:
     branches:
       - main
+      - feat/d3-owned-kernel-thread-coordinator-v1
 
   # Run a health check every day at 02:00 UTC (09:00 Vietnam time).
   schedule:
