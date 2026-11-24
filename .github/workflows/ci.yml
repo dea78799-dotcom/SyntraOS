@@ -26,6 +26,7 @@ on:
       - feat/d3-thread-resource-descriptor-v1
       - feat/d3-scheduler-reservation-transaction-v1
       - feat/d3-owned-thread-creation-coordinator-v1
+      - feat/d3-switch-proof-event-peek-ack-v1
 
   pull_request:
     branches:
