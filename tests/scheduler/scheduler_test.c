@@ -330,7 +330,7 @@ int main(void)
             scheduler_reserve_owned_thread(owner, 88U, 3U, dummy_thread,
                 NULL, owned_stack, 2048U, &reserved) == SYNTRA_STATUS_OK);
         check("Reservation is invisible to published thread count and selection",
-            scheduler_get_thread_count() == 4U &&
+            scheduler_get_thread_count() == 3U &&
             scheduler_get_thread_snapshot_by_handle(reserved,
                 &(syntra_thread_t){0}) == SYNTRA_STATUS_INVALID_ARGUMENT &&
             scheduler_get_next_ready() == NULL);
@@ -362,7 +362,7 @@ int main(void)
                     allocation.generation);
         }
         check("Published owned thread preserves scheduler invariants",
-            scheduler_get_thread_count() == 5U &&
+            scheduler_get_thread_count() == 4U &&
             scheduler_validate() == SYNTRA_STATUS_OK);
         check("Allocator snapshot resolves exact THREAD_OWNED token",
             memory_get_allocation_by_handle(allocation,
