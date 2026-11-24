@@ -56,14 +56,19 @@ bridge use these APIs instead of retaining mutable thread-record pointers.
 Legacy mutable-pointer accessors remain for compatibility and must not be used
 by new kernel code.
 
-These copy-out APIs prevent callers from mutating scheduler records through
-an inspection result; they do not themselves provide synchronization. The
-scheduler data structure currently has no internal lock or IRQ-save
-critical-section wrapper. Do not assume its APIs are safe against arbitrary
-concurrent callers or SMP execution. The current QEMU validation is not an
-SMP-safety proof. Before enabling broader preemption or multiple cores, define
-and test a consistent synchronization contract for every state mutation and
-for APIs that expose mutable thread-record pointers.
+Public scheduler operations now save and mask local IRQ state with
+syntra_irq_save()/syntra_irq_restore() around metadata reads and mutations.
+This follows the existing single-core ARM64 page-allocator critical-section
+pattern and is safe for nested calls because each operation restores the
+caller's previous DAIF state.
+
+This is local interrupt exclusion, not an SMP lock. It does not serialize
+multiple CPU cores, FIQ handlers, or arbitrary concurrent execution. Legacy
+mutable-pointer accessors return after IRQ state is restored; callers must not
+retain or mutate those pointers. New kernel code must use snapshot and
+controlled-mutation APIs. QEMU validation is not an SMP-safety proof. Before
+enabling multiple cores or broader exception classes, define and test a
+separate cross-core synchronization contract.
 
 ## 6. Validation scope
 
