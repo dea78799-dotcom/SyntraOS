@@ -78,6 +78,34 @@ syntra_status_t process_thread_create_user(
     return status;
 }
 
+/*
+ * Canonical lifecycle coordinator. The scheduler cascade runs before the
+ * process state transition while local IRQs are masked. The scheduler helper
+ * validates readiness before mutating and has no failure path after that
+ * validation, so an invalid handle or unavailable scheduler changes nothing.
+ * Calling this again for an already-terminated process still repairs any
+ * active owned threads left by metadata-only legacy state APIs.
+ */
+syntra_status_t process_thread_terminate_process(
+    syntra_process_handle_t owner)
+{
+    syntra_irq_state_t irq;
+    syntra_process_t process;
+    syntra_status_t status;
+
+    if (!process_thread_handle_is_structurally_valid(owner))
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    irq = syntra_irq_save();
+    status = process_get_snapshot_by_handle(owner, &process);
+    if (status == SYNTRA_STATUS_OK)
+        status = scheduler_terminate_process_threads(owner);
+    if (status == SYNTRA_STATUS_OK && process.state != PROCESS_TERMINATED)
+        status = process_set_state_by_handle(owner, PROCESS_TERMINATED);
+    syntra_irq_restore(irq);
+    return status;
+}
+
 syntra_status_t process_thread_get_count(
     syntra_process_handle_t owner, unsigned int *count_out)
 {
