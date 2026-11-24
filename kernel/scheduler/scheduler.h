@@ -6,6 +6,7 @@
 
 #include "../core/status.h"
 #include "../process/process_handle.h"
+#include "../memory/memory.h"
 
 #define SYNTRA_MAX_THREADS 32U
 #define SYNTRA_THREAD_MIN_STACK_SIZE 1024U
@@ -37,6 +38,12 @@ typedef struct
     uint64_t sequence;
 } syntra_thread_switch_event_t;
 
+typedef enum
+{
+    SYNTRA_THREAD_STACK_BORROWED = 0,
+    SYNTRA_THREAD_STACK_OWNED = 1
+} syntra_thread_stack_ownership_t;
+
 typedef struct
 {
     /* Stable scheduler-slot identity; generation is nonzero when occupied. */
@@ -50,6 +57,10 @@ typedef struct
     void *argument;
     uintptr_t stack_base;
     size_t stack_size;
+
+    /* Exact Memory V2 identity for an allocator-owned EL1 kernel stack. */
+    syntra_thread_stack_ownership_t stack_ownership;
+    syntra_memory_allocation_handle_t stack_allocation;
 
     /* User threads keep an independent EL0 stack; stack_* remains EL1. */
     uintptr_t user_stack_base;

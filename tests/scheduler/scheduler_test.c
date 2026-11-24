@@ -43,6 +43,8 @@ int main(void)
     check("Create thread with caller stack",
         scheduler_create_thread(2U, 99U, dummy_thread, NULL,
             stack_a, sizeof(stack_a)) == SYNTRA_STATUS_OK);
+    check("Scheduler invariants accept legacy borrowed stack descriptor",
+        scheduler_validate() == SYNTRA_STATUS_OK);
     check("Reject unaligned stack",
         scheduler_create_thread(3U, 1U, dummy_thread, NULL,
             &stack_b[1], sizeof(stack_b) - 1U)
@@ -55,7 +57,9 @@ int main(void)
     check("Store entry and stack metadata",
         thread != NULL && thread->entry == dummy_thread &&
         thread->stack_base == (uintptr_t)stack_a &&
-        thread->stack_size == sizeof(stack_a));
+        thread->stack_size == sizeof(stack_a) &&
+        thread->stack_ownership == SYNTRA_THREAD_STACK_BORROWED &&
+        thread->stack_allocation.generation == 0U);
 
     {
         syntra_thread_t snapshot;

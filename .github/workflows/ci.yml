@@ -23,6 +23,7 @@ on:
       - design/d3-deferred-reaper-runtime-v1
       - feat/memory-allocation-identity-v2
       - design/d3-scheduler-resource-integration-v1
+      - feat/d3-thread-resource-descriptor-v1
 
   pull_request:
     branches:
