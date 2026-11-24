@@ -300,8 +300,9 @@ syntra_arm64_exception_handle_and_select(
 )
 {
     syntra_status_t status;
-    syntra_thread_t *current;
-    syntra_thread_t *next;
+    syntra_thread_t current_snapshot;
+    syntra_thread_t boot_snapshot;
+    void *next_context = NULL;
 
     if (context == NULL) return NULL;
 
@@ -329,38 +330,37 @@ syntra_arm64_exception_handle_and_select(
         (context->esr_el1 & 0xFFFFU) ==
             SYNTRA_ARM64_SCHEDULER_START_SVC_IMMEDIATE)
     {
-        syntra_thread_t *boot_thread =
-            scheduler_get_thread(SYNTRA_ARM64_BOOT_THREAD_ID);
-
         if (scheduler_context_switching_active ||
-            boot_thread == NULL ||
-            boot_thread->state != THREAD_BLOCKED)
+            scheduler_get_thread_snapshot(
+                SYNTRA_ARM64_BOOT_THREAD_ID, &boot_snapshot) != SYNTRA_STATUS_OK ||
+            boot_snapshot.state != THREAD_BLOCKED)
             return NULL;
 
-        boot_thread->cpu_context = context;
+        if (scheduler_set_thread_context(
+                SYNTRA_ARM64_BOOT_THREAD_ID, context) != SYNTRA_STATUS_OK)
+            return NULL;
         context->reserved = SYNTRA_ARM64_IRQ_RETURN_MAGIC;
         scheduler_context_switching_active = 1;
 
-        next = scheduler_schedule_next_with_context();
-        if (next == NULL)
+        if (scheduler_schedule_next_context(&next_context) != SYNTRA_STATUS_OK)
         {
             (void)scheduler_set_thread_state(
                 SYNTRA_ARM64_BOOT_THREAD_ID, THREAD_RUNNING);
             scheduler_context_switching_active = 0;
             return context;
         }
-        return (syntra_arm64_exception_context_t *)next->cpu_context;
+        return (syntra_arm64_exception_context_t *)next_context;
     }
 
     if (scheduler_context_switching_active &&
         context->vector_index == SYNTRA_ARM64_VECTOR_CURRENT_SPX_IRQ)
     {
-        current = scheduler_get_current();
-        if (current != NULL) current->cpu_context = context;
+        if (scheduler_get_current_snapshot(&current_snapshot) == SYNTRA_STATUS_OK)
+            (void)scheduler_set_thread_context(current_snapshot.thread_id, context);
 
-        next = scheduler_schedule_next_with_context();
-        if (next == NULL) return context;
-        return (syntra_arm64_exception_context_t *)next->cpu_context;
+        if (scheduler_schedule_next_context(&next_context) != SYNTRA_STATUS_OK)
+            return context;
+        return (syntra_arm64_exception_context_t *)next_context;
     }
 
     return NULL;
