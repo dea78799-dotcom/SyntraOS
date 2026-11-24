@@ -327,7 +327,7 @@ int main(void)
         owner.slot = 0U;
         owner.generation = 1U;
         check("Reserve owned thread without publishing it",
-            scheduler_reserve_owned_thread(owner, 88U, 3U, dummy_thread,
+            scheduler_reserve_owned_thread((syntra_process_handle_t){0U, 1U}, 88U, 3U, dummy_thread,
                 NULL, owned_stack, 2048U, &reserved) == SYNTRA_STATUS_OK);
         check("Reservation is invisible to published thread count and selection",
             scheduler_get_thread_count() == 3U &&
