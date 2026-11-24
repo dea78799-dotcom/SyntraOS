@@ -296,8 +296,8 @@ int syntra_arm64_exception_has_last_context(void)
  */
 void syntra_arm64_thread_switch_complete(void)
 {
-    if (scheduler_complete_switch_away() == SYNTRA_STATUS_OK)
-        syntra_exception_uart_puts("Thread switch-away proof: PUBLISHED\n");
+    /* No logging or allocation in this post-switch exception hook. */
+    (void)scheduler_complete_switch_away();
 }
 
 /* ARM64 exception-to-scheduler bridge. */
