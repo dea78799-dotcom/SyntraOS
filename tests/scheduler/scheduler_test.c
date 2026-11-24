@@ -168,6 +168,31 @@ int main(void)
             selected->state == THREAD_RUNNING);
     }
 
+    {
+        static _Alignas(16) unsigned char overlapping_stack[2048];
+        static _Alignas(16) unsigned char overlapping_stack_2[2048];
+        syntra_thread_t *user_thread = scheduler_get_thread(4U);
+
+        check("Reject a second thread using the exact same stack",
+            scheduler_create_thread(5U, 1U, dummy_thread, NULL,
+                stack_a, sizeof(stack_a)) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+        check("Reject partially overlapping thread stacks",
+            scheduler_create_thread(6U, 1U, dummy_thread, NULL,
+                &stack_a[1024], 1024U) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+        check("Reject kernel thread stack overlapping a user stack",
+            user_thread != NULL &&
+            scheduler_create_thread(7U, 1U, dummy_thread, NULL,
+                (void *)user_thread->user_stack_base,
+                user_thread->user_stack_size) == SYNTRA_STATUS_INVALID_ARGUMENT);
+
+        check("Reject stack range overflowing uintptr_t",
+            scheduler_create_thread(8U, 1U, dummy_thread, NULL,
+                (void *)(UINTPTR_MAX - 15U), 1024U)
+                == SYNTRA_STATUS_INVALID_ARGUMENT);
+    }
+
     printf("\n=================================\n");
     printf(" Total failures: %d\n", failures);
     printf("=================================\n");
