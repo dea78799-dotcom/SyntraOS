@@ -101,7 +101,8 @@ int main(void)
         process_thread_create_kernel_allocated_with_handle(
             owner, 100U, 2U, thread_entry, NULL, 1U,
             &allocated_handle) == SYNTRA_STATUS_INVALID_ARGUMENT &&
-        allocated_handle.slot != UINT32_MAX);
+        allocated_handle.slot == snapshot.handle.slot &&
+        allocated_handle.generation == snapshot.handle.generation);
     {
         syntra_memory_info_t info;
         memory_get_info(&info);
@@ -159,7 +160,7 @@ int main(void)
     count = 0U;
     check("Failed creation leaves owner count unchanged",
         process_thread_get_count(owner, &count) == SYNTRA_STATUS_OK &&
-        count == 3U);
+        count == 4U);
 
     check("Mark second process terminated through metadata API",
         process_set_state_by_handle(other, PROCESS_TERMINATED) == SYNTRA_STATUS_OK);
