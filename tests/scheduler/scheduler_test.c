@@ -113,13 +113,23 @@ int main(void)
         static _Alignas(16) unsigned char user_stack_2[2048];
         static _Alignas(16) unsigned char fake_context[320];
         syntra_thread_t *user_thread;
+        syntra_thread_handle_t user_handle = {0U, 0U};
 
-        check("Create user thread with separate stacks and prepared context",
-            scheduler_create_user_thread(
+        check("Create user thread and return stable handle",
+            scheduler_create_user_thread_with_handle(
                 4U, 1U, dummy_thread, NULL,
                 user_kernel_stack, sizeof(user_kernel_stack),
                 user_stack, sizeof(user_stack),
-                fake_context) == SYNTRA_STATUS_OK);
+                fake_context, &user_handle) == SYNTRA_STATUS_OK);
+        {
+            syntra_thread_t handle_snapshot;
+            check("User thread handle resolves exact registered thread",
+                user_handle.generation != 0U &&
+                scheduler_get_thread_snapshot_by_handle(user_handle,
+                    &handle_snapshot) == SYNTRA_STATUS_OK &&
+                handle_snapshot.thread_id == 4U &&
+                handle_snapshot.is_user_thread == 1U);
+        }
 
         user_thread = scheduler_get_thread(4U);
         check("Store kernel stack and user stack independently",

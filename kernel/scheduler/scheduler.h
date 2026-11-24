@@ -90,6 +90,14 @@ syntra_status_t scheduler_create_thread(
  * Register a prepared User Mode thread. cpu_context must be a validated
  * architecture frame built on kernel_stack; this API never enters EL0.
  */
+syntra_status_t scheduler_create_user_thread_with_handle(
+    unsigned int thread_id, unsigned int priority,
+    syntra_thread_entry_t entry, void *argument,
+    void *kernel_stack, size_t kernel_stack_size,
+    void *user_stack, size_t user_stack_size, void *cpu_context,
+    syntra_thread_handle_t *handle_out
+);
+
 syntra_status_t scheduler_create_user_thread(
     unsigned int thread_id,
     unsigned int priority,
@@ -131,6 +139,7 @@ syntra_status_t scheduler_get_thread_snapshot(
     syntra_thread_t *snapshot
 );
 syntra_status_t scheduler_get_current_snapshot(syntra_thread_t *snapshot);
+syntra_status_t scheduler_get_current_handle(syntra_thread_handle_t *handle_out);
 
 /* Exact-handle copy-out and state update APIs; stale handles are rejected. */
 syntra_status_t scheduler_get_thread_snapshot_by_handle(

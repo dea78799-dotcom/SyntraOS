@@ -30,6 +30,9 @@ int main(void)
     syntra_process_handle_t other = {0U, 0U};
     syntra_process_handle_t invalid;
     syntra_thread_t snapshot;
+    syntra_thread_handle_t kernel_handle = {0U, 0U};
+    syntra_thread_handle_t user_handle = {0U, 0U};
+    syntra_thread_handle_t current_handle = {77U, 88U};
     unsigned int count = 99U;
 
     check("Initialize process manager", process_init() == SYNTRA_STATUS_OK);
@@ -39,16 +42,33 @@ int main(void)
     check("Create second process",
         process_create_with_handle(11U, 4U, &other) == SYNTRA_STATUS_OK);
 
-    check("Create first process-owned kernel thread",
-        process_thread_create_kernel(owner, 100U, 3U, thread_entry, NULL,
-            stack_a, sizeof(stack_a)) == SYNTRA_STATUS_OK);
+    check("Create first process-owned kernel thread and return handle",
+        process_thread_create_kernel_with_handle(
+            owner, 100U, 3U, thread_entry, NULL,
+            stack_a, sizeof(stack_a), &kernel_handle) == SYNTRA_STATUS_OK);
+    check("Kernel handle resolves exact process-owned thread",
+        kernel_handle.generation != 0U &&
+        scheduler_get_thread_snapshot_by_handle(kernel_handle, &snapshot) ==
+            SYNTRA_STATUS_OK && snapshot.thread_id == 100U &&
+        snapshot.has_process_owner == 1U &&
+        snapshot.owner_process.slot == owner.slot &&
+        snapshot.owner_process.generation == owner.generation);
     check("Create second thread for same process",
         process_thread_create_kernel(owner, 101U, 3U, thread_entry, NULL,
             stack_b, sizeof(stack_b)) == SYNTRA_STATUS_OK);
-    check("Create process-owned user thread",
-        process_thread_create_user(owner, 102U, 2U, thread_entry, NULL,
+    check("Create process-owned user thread and return handle",
+        process_thread_create_user_with_handle(
+            owner, 102U, 2U, thread_entry, NULL,
             user_kernel_stack, sizeof(user_kernel_stack),
-            user_stack, sizeof(user_stack), user_cpu_context) == SYNTRA_STATUS_OK);
+            user_stack, sizeof(user_stack), user_cpu_context,
+            &user_handle) == SYNTRA_STATUS_OK);
+    check("User handle resolves exact process-owned thread",
+        user_handle.generation != 0U &&
+        scheduler_get_thread_snapshot_by_handle(user_handle, &snapshot) ==
+            SYNTRA_STATUS_OK && snapshot.thread_id == 102U &&
+        snapshot.is_user_thread == 1U &&
+        snapshot.owner_process.slot == owner.slot &&
+        snapshot.owner_process.generation == owner.generation);
     check("Create thread owned by second process",
         process_thread_create_kernel(other, 201U, 2U, thread_entry, NULL,
             stack_d, sizeof(stack_d)) == SYNTRA_STATUS_OK);
@@ -74,9 +94,14 @@ int main(void)
 
     invalid = owner;
     invalid.generation = 0U;
-    check("Reject zero-generation owner",
-        process_thread_create_kernel(invalid, 102U, 1U, thread_entry, NULL,
-            stack_c, sizeof(stack_c)) == SYNTRA_STATUS_INVALID_ARGUMENT);
+    kernel_handle.slot = 77U;
+    kernel_handle.generation = 88U;
+    check("Reject zero-generation owner without publishing handle",
+        process_thread_create_kernel_with_handle(
+            invalid, 102U, 1U, thread_entry, NULL,
+            stack_c, sizeof(stack_c), &kernel_handle) ==
+                SYNTRA_STATUS_INVALID_ARGUMENT &&
+        kernel_handle.slot == 77U && kernel_handle.generation == 88U);
     invalid = owner;
     ++invalid.generation;
     check("Reject stale or mismatched owner",
@@ -97,8 +122,16 @@ int main(void)
         process_thread_create_kernel(other, 200U, 1U, thread_entry, NULL,
             stack_c, sizeof(stack_c)) == SYNTRA_STATUS_PERMISSION_DENIED);
 
+    check("Current handle is unavailable before scheduling and output is unchanged",
+        scheduler_get_current_handle(&current_handle) == SYNTRA_STATUS_ERROR &&
+        current_handle.slot == 77U && current_handle.generation == 88U);
     check("Schedule an owned thread before cascade",
         scheduler_schedule_next() != NULL);
+    check("Current handle matches current thread snapshot",
+        scheduler_get_current_handle(&current_handle) == SYNTRA_STATUS_OK &&
+        scheduler_get_current_snapshot(&snapshot) == SYNTRA_STATUS_OK &&
+        current_handle.slot == snapshot.handle.slot &&
+        current_handle.generation == snapshot.handle.generation);
     check("Terminate owner process and its complete thread set",
         process_thread_terminate_process(owner) == SYNTRA_STATUS_OK);
     {
@@ -116,6 +149,8 @@ int main(void)
         snapshot.state == THREAD_TERMINATED);
     check("Current thread pointer is cleared after current-owner termination",
         scheduler_get_current() == NULL);
+    check("Current handle unavailable after owner termination",
+        scheduler_get_current_handle(&current_handle) == SYNTRA_STATUS_ERROR);
     check("Terminated thread cannot be made runnable again",
         scheduler_set_thread_state(100U, THREAD_READY) ==
             SYNTRA_STATUS_INVALID_ARGUMENT);
