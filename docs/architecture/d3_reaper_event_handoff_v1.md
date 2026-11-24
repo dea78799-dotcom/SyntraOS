@@ -27,10 +27,10 @@ For each event:
 1. Check candidate capacity before peeking or acknowledging the scheduler FIFO.
 2. Copy the exact FIFO head.
 3. Resolve the exact thread handle to a TCB snapshot.
-4. Discard a valid event if the TCB is not TERMINATED; preemption and blocking are not terminal reaping requests.
-5. Queue a TERMINATED event by exact handle and sequence.
-6. Quarantine stale handles and conflicting sequences.
-7. Acknowledge only the exact event after its disposition is safely recorded.
+4. Discard events whose event-time terminal-intent bit is false. This remains correct even if the same thread has terminated by the time the FIFO is drained.
+5. For terminal-intent events, resolve the exact handle and require the TCB to be TERMINATED; quarantine stale handles or terminal-state mismatches.
+6. Queue a valid terminal event by exact handle and sequence.
+7. Quarantine conflicting sequences and acknowledge only the exact event after its disposition is safely recorded.
 
 If the candidate queue is full, the dispatcher stops without consuming the FIFO head. Candidate records contain identity and proof only; they contain no TCB pointer, stack address, allocation token, or allocator resource.
 
