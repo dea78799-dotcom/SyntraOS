@@ -69,6 +69,9 @@ typedef struct
     size_t user_stack_size;
     uint8_t is_user_thread;
 
+    /* Latest exact post-switch-away proof published for this TCB. */
+    uint64_t switch_away_sequence;
+
     /* Architecture layer stores the saved ARM64 exception frame here. */
     void *cpu_context;
 
@@ -167,6 +170,14 @@ syntra_status_t scheduler_get_current_handle(syntra_thread_handle_t *handle_out)
 /* Exact-handle copy-out and state update APIs; stale handles are rejected. */
 syntra_status_t scheduler_get_thread_snapshot_by_handle(
     syntra_thread_handle_t handle, syntra_thread_t *snapshot);
+/*
+ * Release only an exact allocator-owned kernel stack after its terminal
+ * switch-away sequence has been published and the thread is not current.
+ * The terminated TCB remains allocated but loses all references to freed
+ * stack/context memory; scheduler slots are never reused by this API.
+ */
+syntra_status_t scheduler_reclaim_owned_thread_stack(
+    syntra_thread_handle_t handle, uint64_t switch_away_sequence);
 syntra_status_t scheduler_set_thread_state_by_handle(
     syntra_thread_handle_t handle, thread_state_t new_state);
 int scheduler_thread_handle_equal(
