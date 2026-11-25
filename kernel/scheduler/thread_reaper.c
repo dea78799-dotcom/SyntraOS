@@ -8,6 +8,50 @@ static syntra_reaper_candidate_t candidates[
 static unsigned int candidate_count;
 static syntra_reaper_stats_t reaper_stats;
 static int reaper_initialized;
+static int execution_context_bound;
+static syntra_thread_handle_t execution_context_handle;
+static uintptr_t execution_stack_base;
+static size_t execution_stack_size;
+
+static uintptr_t thread_reaper_read_stack_pointer(void)
+{
+#if defined(__aarch64__)
+    uintptr_t stack_pointer;
+    __asm__ volatile("mov %0, sp" : "=r"(stack_pointer));
+    return stack_pointer;
+#else
+    volatile uintptr_t marker = 0U;
+    return (uintptr_t)&marker;
+#endif
+}
+
+static int thread_reaper_is_on_bound_context_unlocked(void)
+{
+    syntra_thread_handle_t current_handle;
+    uintptr_t stack_pointer;
+    uintptr_t stack_top;
+
+    if (!execution_context_bound)
+        return 1;
+
+    if (execution_stack_base > UINTPTR_MAX - execution_stack_size)
+        return 0;
+    stack_top = execution_stack_base + execution_stack_size;
+
+    if (scheduler_get_current_handle(&current_handle) != SYNTRA_STATUS_OK ||
+        !scheduler_thread_handle_equal(
+            current_handle, execution_context_handle))
+        return 0;
+
+    stack_pointer = thread_reaper_read_stack_pointer();
+    if (stack_pointer < execution_stack_base || stack_pointer >= stack_top)
+        return 0;
+#if defined(__aarch64__)
+    if ((stack_pointer & 15U) != 0U)
+        return 0;
+#endif
+    return 1;
+}
 
 static int reaper_find_handle(syntra_thread_handle_t handle)
 {
@@ -30,17 +74,83 @@ syntra_status_t thread_reaper_init(void)
     reaper_stats.discarded_nonterminal = 0U;
     reaper_stats.duplicate_events = 0U;
     reaper_stats.acknowledged_events = 0U;
+    reaper_stats.execution_context_bound = 0U;
+    reaper_stats.execution_context_dispatches = 0U;
+    reaper_stats.execution_context_rejections = 0U;
+    execution_context_bound = 0;
+    execution_context_handle.slot = 0U;
+    execution_context_handle.generation = 0U;
+    execution_stack_base = 0U;
+    execution_stack_size = 0U;
 
     for (unsigned int i = 0U; i < SYNTRA_REAPER_CANDIDATE_CAPACITY; ++i)
     {
         candidates[i].proof.handle.slot = 0U;
         candidates[i].proof.handle.generation = 0U;
         candidates[i].proof.sequence = 0U;
+        candidates[i].proof.terminal = 0U;
         candidates[i].state = SYNTRA_REAPER_CANDIDATE_FREE;
         candidates[i].reason = SYNTRA_REAPER_REASON_NONE;
     }
 
     reaper_initialized = 1;
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
+}
+
+syntra_status_t thread_reaper_bind_execution_context(
+    syntra_thread_handle_t handle,
+    uintptr_t stack_base,
+    size_t stack_size)
+{
+    syntra_irq_state_t irq;
+    syntra_thread_t snapshot;
+    uintptr_t stack_top;
+    uintptr_t context_address;
+    syntra_status_t status;
+
+    if (handle.generation == 0U || stack_base == 0U ||
+        stack_size < SYNTRA_THREAD_MIN_STACK_SIZE ||
+        (stack_base & (SYNTRA_THREAD_STACK_ALIGNMENT - 1U)) != 0U ||
+        stack_base > UINTPTR_MAX - stack_size)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    stack_top = stack_base + stack_size;
+    irq = syntra_irq_save();
+    if (!reaper_initialized || execution_context_bound)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    status = scheduler_get_thread_snapshot_by_handle(handle, &snapshot);
+    if (status != SYNTRA_STATUS_OK ||
+        snapshot.state != THREAD_READY ||
+        snapshot.entry == NULL ||
+        snapshot.cpu_context == NULL ||
+        snapshot.stack_base != stack_base ||
+        snapshot.stack_size != stack_size ||
+        snapshot.stack_ownership != SYNTRA_THREAD_STACK_BORROWED ||
+        snapshot.is_user_thread != 0U ||
+        snapshot.user_stack_size != 0U)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    context_address = (uintptr_t)snapshot.cpu_context;
+    if (context_address < stack_base || context_address >= stack_top)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    execution_context_handle = handle;
+    execution_stack_base = stack_base;
+    execution_stack_size = stack_size;
+    execution_context_bound = 1;
+    reaper_stats.execution_context_bound = 1U;
+
     syntra_irq_restore(irq);
     return SYNTRA_STATUS_OK;
 }
@@ -62,6 +172,15 @@ syntra_status_t thread_reaper_dispatch(
         syntra_irq_restore(irq);
         return SYNTRA_STATUS_ERROR;
     }
+    if (!thread_reaper_is_on_bound_context_unlocked())
+    {
+        ++reaper_stats.execution_context_rejections;
+        *processed_out = 0U;
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_ERROR;
+    }
+    if (execution_context_bound)
+        ++reaper_stats.execution_context_dispatches;
 
     while (processed < max_events)
     {
@@ -166,6 +285,7 @@ syntra_status_t thread_reaper_dispatch(
                 candidates[candidate_count].proof.handle.slot = 0U;
                 candidates[candidate_count].proof.handle.generation = 0U;
                 candidates[candidate_count].proof.sequence = 0U;
+                candidates[candidate_count].proof.terminal = 0U;
                 candidates[candidate_count].state =
                     SYNTRA_REAPER_CANDIDATE_FREE;
                 candidates[candidate_count].reason =

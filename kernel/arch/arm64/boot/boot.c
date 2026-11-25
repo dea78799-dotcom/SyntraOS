@@ -743,6 +743,12 @@ static syntra_status_t syntra_arm64_post_mmu_timer_irq_test(void)
 
 static _Alignas(16) uint8_t scheduler_worker_a_stack[SYNTRA_SCHEDULER_TEST_STACK_SIZE];
 static _Alignas(16) uint8_t scheduler_worker_b_stack[SYNTRA_SCHEDULER_TEST_STACK_SIZE];
+static _Alignas(16) uint8_t scheduler_reaper_stack[SYNTRA_SCHEDULER_TEST_STACK_SIZE];
+static syntra_thread_handle_t scheduler_reaper_handle;
+static volatile unsigned int scheduler_reaper_stack_verified;
+static volatile unsigned int scheduler_reaper_dispatch_calls;
+static volatile unsigned int scheduler_reaper_dispatch_events;
+static volatile unsigned int scheduler_reaper_error;
 static volatile uint64_t scheduler_test_deadline;
 static volatile unsigned int scheduler_test_completed;
 static volatile unsigned int scheduler_test_last_worker;
@@ -798,8 +804,64 @@ static void syntra_scheduler_test_worker(void *argument)
     }
 
     scheduler_test_completed++;
-    if (scheduler_test_completed == 2U)
-        (void)scheduler_wake_thread(SYNTRA_SCHEDULER_TEST_BOOT_ID);
+}
+
+/*
+ * Dedicated, permanent reaper test thread. It is the only caller of the
+ * candidate dispatcher after its execution context has been bound.
+ */
+static void syntra_scheduler_test_reaper(void *argument)
+{
+    uintptr_t stack_pointer;
+    syntra_thread_handle_t current_handle;
+    syntra_status_t status;
+    unsigned int candidate_count = 0U;
+    (void)argument;
+
+    __asm__ volatile("mov %0, sp" : "=r"(stack_pointer));
+    if (stack_pointer < (uintptr_t)scheduler_reaper_stack ||
+        stack_pointer >= (uintptr_t)(scheduler_reaper_stack +
+                                     sizeof(scheduler_reaper_stack)) ||
+        (stack_pointer & 15U) != 0U ||
+        scheduler_get_current_handle(&current_handle) != SYNTRA_STATUS_OK ||
+        !scheduler_thread_handle_equal(
+            current_handle, scheduler_reaper_handle))
+    {
+        scheduler_reaper_error = 1U;
+    }
+    else
+        scheduler_reaper_stack_verified = 1U;
+
+    while (scheduler_reaper_error == 0U)
+    {
+        unsigned int processed = 0U;
+
+        status = thread_reaper_dispatch(
+            SYNTRA_REAPER_CANDIDATE_CAPACITY, &processed);
+        ++scheduler_reaper_dispatch_calls;
+        scheduler_reaper_dispatch_events += processed;
+        if (status != SYNTRA_STATUS_OK ||
+            thread_reaper_get_candidate_count(&candidate_count) !=
+                SYNTRA_STATUS_OK)
+        {
+            scheduler_reaper_error = 2U;
+            break;
+        }
+        if (candidate_count >= 2U)
+            break;
+
+        /* Timer IRQs provide scheduling opportunities while no proof exists. */
+        __asm__ volatile("wfe" ::: "memory");
+    }
+
+    /* Boot is released only after both terminal candidates are queued. */
+    (void)scheduler_wake_thread(SYNTRA_SCHEDULER_TEST_BOOT_ID);
+    if (scheduler_block_current() != SYNTRA_STATUS_OK)
+        scheduler_reaper_error = 3U;
+
+    /* A permanent reaper context never returns through the thread-exit path. */
+    for (;;)
+        __asm__ volatile("wfe" ::: "memory");
 }
 
 static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
@@ -808,12 +870,20 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
     syntra_arm64_exception_context_t *initial_context = NULL;
     syntra_reaper_candidate_t reap_candidate;
     syntra_reaper_stats_t reaper_stats;
+    syntra_thread_switch_event_t switch_event;
+    syntra_thread_t reaper_snapshot;
+    uintptr_t boot_stack_pointer;
     unsigned int candidate_count = 0U;
-    unsigned int processed_events = 0U;
-    unsigned int total_processed_events = 0U;
+    unsigned int saw_reaper_switch_proof = 0U;
     uint64_t last_terminal_sequence = 0U;
 
     scheduler_test_completed = 0U;
+    scheduler_reaper_stack_verified = 0U;
+    scheduler_reaper_dispatch_calls = 0U;
+    scheduler_reaper_dispatch_events = 0U;
+    scheduler_reaper_error = 0U;
+    scheduler_reaper_handle.slot = 0U;
+    scheduler_reaper_handle.generation = 0U;
     scheduler_test_last_worker = 0U;
     scheduler_test_switches = 0U;
     scheduler_test_worker_slices[0] = 0U;
@@ -860,6 +930,23 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
         SYNTRA_SCHEDULER_TEST_WORKER_B_ID, initial_context);
     if (status != SYNTRA_STATUS_OK) return status;
 
+    status = scheduler_create_thread_with_handle(
+        4U, 0U, syntra_scheduler_test_reaper, NULL,
+        scheduler_reaper_stack, sizeof(scheduler_reaper_stack),
+        &scheduler_reaper_handle);
+    if (status != SYNTRA_STATUS_OK) return status;
+    initial_context = NULL;
+    status = syntra_arm64_context_initialize(
+        scheduler_reaper_stack, sizeof(scheduler_reaper_stack),
+        syntra_scheduler_test_reaper, NULL, &initial_context);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = scheduler_set_thread_context(4U, initial_context);
+    if (status != SYNTRA_STATUS_OK) return status;
+    status = thread_reaper_bind_execution_context(
+        scheduler_reaper_handle, (uintptr_t)scheduler_reaper_stack,
+        sizeof(scheduler_reaper_stack));
+    if (status != SYNTRA_STATUS_OK) return status;
+
     status = scheduler_add_thread(SYNTRA_SCHEDULER_TEST_BOOT_ID, 0U);
     if (status != SYNTRA_STATUS_OK) return status;
     status = scheduler_set_thread_state(
@@ -887,29 +974,47 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
     (void)interrupt_disable(30U);
 
     /*
-     * Dispatch proof events from the resumed boot thread, not from IRQ
-     * context. This is the sole consumer of the D2 FIFO in this QEMU test.
-     * The dispatcher queues terminal candidates and discards ordinary
-     * preemption/block events. It never releases a stack.
+     * The dedicated reaper thread is the sole candidate dispatcher. The boot
+     * thread resumes only after the reaper has queued both terminal workers
+     * and blocked or been preempted onto this separate bootstrap stack.
      */
-    do
+    __asm__ volatile("mov %0, sp" : "=r"(boot_stack_pointer));
+    if (scheduler_reaper_error != 0U ||
+        scheduler_reaper_stack_verified != 1U ||
+        scheduler_reaper_dispatch_calls == 0U ||
+        boot_stack_pointer < (uintptr_t)__stack_bottom ||
+        boot_stack_pointer >= (uintptr_t)__stack_top)
     {
-        processed_events = 0U;
-        status = thread_reaper_dispatch(
-            SYNTRA_REAPER_CANDIDATE_CAPACITY, &processed_events);
-        if (status != SYNTRA_STATUS_OK)
-        {
-            syntra_uart_puts("Thread reaper event dispatch: FAIL\n");
-            return status;
-        }
-        total_processed_events += processed_events;
-    } while (processed_events == SYNTRA_REAPER_CANDIDATE_CAPACITY);
+        syntra_uart_puts("Dedicated reaper active-stack validation: FAIL\n");
+        return SYNTRA_STATUS_ERROR;
+    }
 
     status = thread_reaper_get_candidate_count(&candidate_count);
-    if (status != SYNTRA_STATUS_OK || candidate_count != 2U ||
-        total_processed_events == 0U)
+    if (status != SYNTRA_STATUS_OK || candidate_count != 2U)
     {
         syntra_uart_puts("Thread reaper candidate count: FAIL\n");
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    /*
+     * The dispatcher consumed all earlier events on the reaper stack. The
+     * final nonterminal event must identify that exact reaper stack after the
+     * vector assembly has installed the bootstrap successor SP_EL1.
+     */
+    while (scheduler_take_switch_away_event(&switch_event) == SYNTRA_STATUS_OK)
+    {
+        if (scheduler_thread_handle_equal(
+                switch_event.handle, scheduler_reaper_handle) &&
+            switch_event.terminal == 0U && switch_event.sequence != 0U)
+            saw_reaper_switch_proof = 1U;
+    }
+    status = scheduler_get_thread_snapshot_by_handle(
+        scheduler_reaper_handle, &reaper_snapshot);
+    if (!saw_reaper_switch_proof || status != SYNTRA_STATUS_OK ||
+        (reaper_snapshot.state != THREAD_BLOCKED &&
+         reaper_snapshot.state != THREAD_READY))
+    {
+        syntra_uart_puts("Dedicated reaper switch-away proof: FAIL\n");
         return SYNTRA_STATUS_ERROR;
     }
 
@@ -936,14 +1041,20 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
 
     status = thread_reaper_get_stats(&reaper_stats);
     if (status != SYNTRA_STATUS_OK ||
-        reaper_stats.queued != candidate_count)
+        reaper_stats.queued != candidate_count ||
+        reaper_stats.execution_context_bound != 1U ||
+        reaper_stats.execution_context_dispatches == 0U ||
+        reaper_stats.execution_context_rejections != 0U ||
+        scheduler_reaper_dispatch_events == 0U)
         return SYNTRA_STATUS_ERROR;
 
-    syntra_uart_puts("Thread switch-away proof: PUBLISHED\n");
+    syntra_uart_puts("Dedicated reaper execution stack: PASS\n");
+    syntra_uart_puts("Dedicated reaper switch-away: PASS\n");
+    syntra_uart_puts("Thread switch-away proof: PUBLISHED\\n");
     syntra_uart_puts("Thread switch-away proof dispatcher: PASS candidates=");
     syntra_uart_put_hex(candidate_count);
     syntra_uart_puts(" events=");
-    syntra_uart_put_hex(total_processed_events);
+    syntra_uart_put_hex(scheduler_reaper_dispatch_events);
     syntra_uart_puts("\n");
 
     {
