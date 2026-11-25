@@ -6,6 +6,10 @@
 
 #include <stdio.h>
 
+/* Test-only hook implemented by scheduler.c under SYNTRA_HOST_TESTING. */
+syntra_status_t scheduler_test_enqueue_switch_away_event(
+    syntra_thread_switch_event_t event);
+
 static unsigned int failures;
 
 static _Alignas(16) unsigned char successor_stack[4096];
