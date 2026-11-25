@@ -38,6 +38,25 @@ static void check(const char *name, int condition)
         printf("PASS: %s\n", name);
 }
 
+static int find_reaper_candidate_index(
+    syntra_thread_handle_t handle)
+{
+    unsigned int count = 0U;
+    syntra_reaper_candidate_t candidate;
+
+    if (thread_reaper_get_candidate_count(&count) != SYNTRA_STATUS_OK)
+        return -1;
+
+    for (unsigned int i = 0U; i < count; ++i)
+    {
+        if (thread_reaper_get_candidate(i, &candidate) == SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(candidate.proof.handle, handle))
+            return (int)i;
+    }
+
+    return -1;
+}
+
 static void verify_owned_thread_creation_rollback(
     syntra_process_handle_t process,
     unsigned int stage,
@@ -106,6 +125,7 @@ int main(void)
     syntra_memory_info_t memory_before;
     syntra_memory_info_t memory_after;
     unsigned int processed = 0U;
+    int exhaustion_reusable_candidate_index = -1;
 
     check("Initialize memory", memory_init() == SYNTRA_STATUS_OK);
     check("Initialize process manager", process_init() == SYNTRA_STATUS_OK);
@@ -315,6 +335,7 @@ int main(void)
         syntra_thread_t borrowed_before;
         syntra_thread_t borrowed_after;
         unsigned int borrowed_processed = 0U;
+        int borrowed_candidate_index = -1;
 
         check("Resolve BORROWED thread identity",
             scheduler_get_thread_snapshot(
@@ -336,11 +357,20 @@ int main(void)
         check("Dispatch BORROWED terminal candidate",
             thread_reaper_dispatch(1U, &borrowed_processed) ==
                 SYNTRA_STATUS_OK && borrowed_processed == 1U);
+        borrowed_candidate_index =
+            find_reaper_candidate_index(borrowed_handle);
+        check("Locate BORROWED candidate by exact handle",
+            borrowed_candidate_index >= 0);
+        if (borrowed_candidate_index < 0)
+            borrowed_candidate_index = 0;
         memory_get_info(&memory_before);
         check("Reject BORROWED stack reclamation and quarantine candidate",
-            thread_reaper_reclaim_candidate(1U) ==
-                SYNTRA_STATUS_INVALID_ARGUMENT &&
-            thread_reaper_get_candidate(1U, &candidate) == SYNTRA_STATUS_OK &&
+            thread_reaper_reclaim_candidate(
+                (unsigned int)borrowed_candidate_index) ==
+                    SYNTRA_STATUS_INVALID_ARGUMENT &&
+            thread_reaper_get_candidate(
+                (unsigned int)borrowed_candidate_index, &candidate) ==
+                    SYNTRA_STATUS_OK &&
             candidate.state == SYNTRA_REAPER_CANDIDATE_QUARANTINED &&
             candidate.reason ==
                 SYNTRA_REAPER_REASON_RESOURCE_RECLAIM_FAILED);
@@ -358,11 +388,13 @@ int main(void)
             memory_after.active_allocations ==
                 memory_before.active_allocations);
         check("Quarantined candidate cannot be retried",
-            thread_reaper_reclaim_candidate(1U) ==
-                SYNTRA_STATUS_PERMISSION_DENIED);
+            thread_reaper_reclaim_candidate(
+                (unsigned int)borrowed_candidate_index) ==
+                    SYNTRA_STATUS_PERMISSION_DENIED);
         check("Quarantined BORROWED candidate cannot be retired",
-            thread_reaper_retire_candidate(1U) ==
-                SYNTRA_STATUS_PERMISSION_DENIED);
+            thread_reaper_retire_candidate(
+                (unsigned int)borrowed_candidate_index) ==
+                    SYNTRA_STATUS_PERMISSION_DENIED);
         check("Reaper statistics report reclaim, retirement and quarantine",
             thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
             stats.reclaimed == 1U && stats.retired == 1U &&
@@ -378,6 +410,7 @@ int main(void)
         uint32_t exhaustion_generation = 0U;
         unsigned int exhaustion_processed = 0U;
         unsigned int high_water_before = scheduler_get_thread_count();
+        int exhaustion_candidate_index = -1;
 
         check("Seed unused tail slot at UINT32_MAX for host boundary test",
             scheduler_test_seed_free_slot_generation(
@@ -401,10 +434,22 @@ int main(void)
         check("Dispatch terminal-generation candidate",
             thread_reaper_dispatch(1U, &exhaustion_processed) ==
                 SYNTRA_STATUS_OK && exhaustion_processed == 1U);
+        exhaustion_candidate_index =
+            find_reaper_candidate_index(exhaustion_handle);
+        check("Locate terminal-generation candidate by exact handle",
+            exhaustion_candidate_index >= 0);
+        if (exhaustion_candidate_index < 0)
+            exhaustion_candidate_index = 0;
         check("Reclaim terminal-generation thread stack",
-            thread_reaper_reclaim_candidate(2U) == SYNTRA_STATUS_OK);
+            thread_reaper_reclaim_candidate(
+                (unsigned int)exhaustion_candidate_index) == SYNTRA_STATUS_OK);
         check("Retire terminal-generation TCB without wrapping",
-            thread_reaper_retire_candidate(2U) == SYNTRA_STATUS_OK);
+            thread_reaper_retire_candidate(
+                (unsigned int)exhaustion_candidate_index) == SYNTRA_STATUS_OK);
+        exhaustion_reusable_candidate_index =
+            find_reaper_candidate_index(exhaustion_handle);
+        check("Retired terminal-generation candidate remains identifiable",
+            exhaustion_reusable_candidate_index >= 0);
         check("UINT32_MAX generation becomes permanently EXHAUSTED",
             scheduler_get_slot_metadata(exhaustion_slot, &exhaustion_state,
                 &exhaustion_generation) == SYNTRA_STATUS_OK &&
@@ -431,6 +476,118 @@ int main(void)
             exhaustion_state == SYNTRA_THREAD_SLOT_EXHAUSTED &&
             exhaustion_generation == UINT32_MAX);
         check("Scheduler validation accepts appended slot beside exhaustion",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+    }
+
+
+    {
+        const unsigned int recycle_cycles = 40U;
+        unsigned int candidate_count_before = 0U;
+        unsigned int reusable_scheduler_slot = UINT32_MAX;
+        int reusable_candidate_index =
+            exhaustion_reusable_candidate_index;
+
+        check("Locate retired candidate record for reuse",
+            reusable_candidate_index >= 0);
+        if (reusable_candidate_index < 0)
+            reusable_candidate_index = 0;
+        check("Capture bounded reaper table count before recycle stress",
+            thread_reaper_get_candidate_count(&candidate_count_before) ==
+                SYNTRA_STATUS_OK && candidate_count_before == 2U);
+
+        for (unsigned int cycle = 0U; cycle < recycle_cycles; ++cycle)
+        {
+            syntra_thread_handle_t cycle_handle = {0U, 0U};
+            unsigned int cycle_processed = 0U;
+            syntra_status_t cycle_status;
+
+            cycle_status = process_thread_create_kernel_owned_with_handle(
+                process, 1000U + cycle, 2U, test_entry, NULL, 4096U,
+                &cycle_handle);
+            check("Create next owned thread in recycle stress",
+                cycle_status == SYNTRA_STATUS_OK);
+            if (cycle_status != SYNTRA_STATUS_OK)
+                break;
+
+            if (reusable_scheduler_slot == UINT32_MAX)
+                reusable_scheduler_slot = cycle_handle.slot;
+            check("Scheduler reuses the same retired TCB slot during stress",
+                cycle_handle.slot == reusable_scheduler_slot);
+
+            cycle_status = scheduler_set_thread_state_by_handle(
+                cycle_handle, THREAD_RUNNING);
+            check("Run recycle-stress thread", cycle_status == SYNTRA_STATUS_OK);
+            if (cycle_status != SYNTRA_STATUS_OK)
+                break;
+
+            cycle_status = scheduler_terminate_current();
+            check("Terminate recycle-stress thread",
+                cycle_status == SYNTRA_STATUS_OK);
+            if (cycle_status != SYNTRA_STATUS_OK)
+                break;
+
+            cycle_status = scheduler_set_thread_state_by_handle(
+                reaper_handle, THREAD_RUNNING);
+            check("Return to reaper for recycle-stress thread",
+                cycle_status == SYNTRA_STATUS_OK);
+            if (cycle_status != SYNTRA_STATUS_OK)
+                break;
+
+            cycle_status = scheduler_complete_switch_away();
+            check("Publish recycle-stress switch-away proof",
+                cycle_status == SYNTRA_STATUS_OK);
+            if (cycle_status != SYNTRA_STATUS_OK)
+                break;
+
+            cycle_status = thread_reaper_dispatch(1U, &cycle_processed);
+            check("Dispatch recycle-stress proof into reused candidate",
+                cycle_status == SYNTRA_STATUS_OK && cycle_processed == 1U);
+            if (cycle_status != SYNTRA_STATUS_OK || cycle_processed != 1U)
+                break;
+
+            check("Recycled candidate records the newest exact handle",
+                thread_reaper_get_candidate(
+                    (unsigned int)reusable_candidate_index, &candidate) ==
+                    SYNTRA_STATUS_OK &&
+                scheduler_thread_handle_equal(
+                    candidate.proof.handle, cycle_handle) &&
+                candidate.state == SYNTRA_REAPER_CANDIDATE_QUEUED);
+
+            cycle_status = thread_reaper_reclaim_candidate(
+                (unsigned int)reusable_candidate_index);
+            check("Reclaim recycle-stress owned stack",
+                cycle_status == SYNTRA_STATUS_OK);
+            if (cycle_status != SYNTRA_STATUS_OK)
+                break;
+
+            cycle_status = thread_reaper_retire_candidate(
+                (unsigned int)reusable_candidate_index);
+            check("Retire recycle-stress TCB",
+                cycle_status == SYNTRA_STATUS_OK);
+            if (cycle_status != SYNTRA_STATUS_OK)
+                break;
+
+            check("Recycled candidate returns to RETIRED",
+                thread_reaper_get_candidate(
+                    (unsigned int)reusable_candidate_index, &candidate) ==
+                    SYNTRA_STATUS_OK &&
+                candidate.state == SYNTRA_REAPER_CANDIDATE_RETIRED);
+            check("Scheduler remains valid after each recycle cycle",
+                scheduler_validate() == SYNTRA_STATUS_OK);
+        }
+
+        check("More than candidate capacity can be reaped without table growth",
+            thread_reaper_get_candidate_count(&candidate_count_before) ==
+                SYNTRA_STATUS_OK && candidate_count_before == 2U);
+        check("Quarantined diagnostic record is never recycled",
+            thread_reaper_get_candidate(0U, &candidate) == SYNTRA_STATUS_OK &&
+            candidate.state == SYNTRA_REAPER_CANDIDATE_QUARANTINED &&
+            candidate.reason ==
+                SYNTRA_REAPER_REASON_RESOURCE_RECLAIM_FAILED);
+        check("Reaper retirement statistics include all recycle cycles",
+            thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
+            stats.retired == 42U);
+        check("Scheduler validates after repeated reaper candidate reuse",
             scheduler_validate() == SYNTRA_STATUS_OK);
     }
 

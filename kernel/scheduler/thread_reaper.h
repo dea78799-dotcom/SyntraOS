@@ -66,14 +66,19 @@ syntra_status_t thread_reaper_bind_execution_context(
 
 /*
  * Move at most max_events proof records from the scheduler FIFO into the
- * bounded candidate queue. If the queue is full, the FIFO head is preserved.
- * This function never releases memory or mutates a TCB.
+ * bounded candidate table. RETIRED records are reusable; QUARANTINED records
+ * remain reserved for diagnostics. If no safe record is available, the FIFO
+ * head is preserved. This function never releases memory or mutates a TCB.
  */
 syntra_status_t thread_reaper_dispatch(
     unsigned int max_events,
     unsigned int *processed_out
 );
 
+/*
+ * Return the candidate-table high-water count. A RETIRED record may later be
+ * overwritten by a newer candidate; QUARANTINED records are never recycled.
+ */
 syntra_status_t thread_reaper_get_candidate_count(
     unsigned int *count_out
 );
