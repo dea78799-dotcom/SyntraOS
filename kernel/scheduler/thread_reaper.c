@@ -535,7 +535,7 @@ syntra_status_t thread_reaper_test_fill_quarantined(void)
     candidate_count = SYNTRA_REAPER_CANDIDATE_CAPACITY;
     for (unsigned int i = 0U; i < SYNTRA_REAPER_CANDIDATE_CAPACITY; ++i)
     {
-        candidates[i].proof.handle.slot = i;
+        candidates[i].proof.handle.slot = SYNTRA_MAX_THREADS + i;
         candidates[i].proof.handle.generation = 1U;
         candidates[i].proof.sequence = (uint64_t)i + 1U;
         candidates[i].proof.terminal = 1U;
