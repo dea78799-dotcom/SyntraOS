@@ -172,3 +172,15 @@ completes reclamation and retirement normally.
 The injection hook is compiled only for `SYNTRA_HOST_TESTING`; it is absent
 from the freestanding ARM64 kernel. This test covers the reused-record rollback
 path and does not alter production scheduler behavior.
+
+
+## D3.5.13 — Full candidate table preserves the FIFO head
+
+A host-only fixture fills the bounded candidate table with QUARANTINED
+records, then presents a real terminal switch-away event at the scheduler FIFO
+head. Dispatch must report no processed event, leave the candidate high-water
+count at its fixed capacity, and preserve the exact FIFO head (handle,
+sequence, and terminal intent). Every quarantined record is checked to remain
+reserved. The fixture and its state-seeding hook are excluded from the
+freestanding ARM64 build; production dispatch continues to fail closed when no
+FREE or RETIRED candidate is available.

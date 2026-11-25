@@ -38,6 +38,7 @@ on:
       - test/d3510-generation-exhaustion-boundary-v1
       - feat/d3511-reaper-retired-candidate-reuse-v1
       - test/d3512-reaper-candidate-ack-rollback-v1
+      - test/d3513-reaper-full-table-fifo-preservation-v1
 
   pull_request:
     branches:
@@ -53,6 +54,7 @@ on:
       - test/d359-owned-thread-rollback-fault-injection-v1
       - test/d3510-generation-exhaustion-boundary-v1
       - feat/d3511-reaper-retired-candidate-reuse-v1
+      - test/d3512-reaper-candidate-ack-rollback-v1
 
   # Run a health check every day at 02:00 UTC (09:00 Vietnam time).
   schedule:
