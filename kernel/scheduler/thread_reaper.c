@@ -519,6 +519,37 @@ syntra_status_t thread_reaper_retire_candidate(unsigned int index)
     return status;
 }
 
+
+#ifdef SYNTRA_HOST_TESTING
+/* Seed a fully quarantined table to exercise the no-safe-slot path. */
+syntra_status_t thread_reaper_test_fill_quarantined(void)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+
+    if (!reaper_initialized)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    candidate_count = SYNTRA_REAPER_CANDIDATE_CAPACITY;
+    for (unsigned int i = 0U; i < SYNTRA_REAPER_CANDIDATE_CAPACITY; ++i)
+    {
+        candidates[i].proof.handle.slot = i;
+        candidates[i].proof.handle.generation = 1U;
+        candidates[i].proof.sequence = (uint64_t)i + 1U;
+        candidates[i].proof.terminal = 1U;
+        candidates[i].state = SYNTRA_REAPER_CANDIDATE_QUARANTINED;
+        candidates[i].reason = SYNTRA_REAPER_REASON_STALE_HANDLE;
+    }
+    reaper_stats.queued = 0U;
+    reaper_stats.quarantined = SYNTRA_REAPER_CANDIDATE_CAPACITY;
+
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
+}
+#endif
+
 syntra_status_t thread_reaper_get_stats(
     syntra_reaper_stats_t *stats_out)
 {
