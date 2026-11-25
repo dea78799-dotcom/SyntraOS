@@ -184,3 +184,14 @@ sequence, and terminal intent). Every quarantined record is checked to remain
 reserved. The fixture and its state-seeding hook are excluded from the
 freestanding ARM64 build; production dispatch continues to fail closed when no
 FREE or RETIRED candidate is available.
+
+
+## D3.5.14 — Nonterminal events do not consume candidate capacity
+
+A host integration test blocks a runnable borrowed-stack thread, publishes
+its nonterminal switch-away proof, and dispatches exactly one event on the
+bound reaper context. The test verifies the FIFO event is acknowledged, no
+candidate is created for that handle, candidate high-water count is unchanged,
+`discarded_nonterminal` and `acknowledged_events` each increment exactly once,
+and the queued-terminal count is unchanged. The test does not reclaim or
+retire the blocked thread and does not alter production dispatch behavior.
