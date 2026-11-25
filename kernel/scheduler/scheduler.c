@@ -1299,8 +1299,7 @@ syntra_status_t scheduler_publish_owned_thread(syntra_thread_handle_t handle)
         slot_states[handle.slot] != SYNTRA_THREAD_SLOT_RESERVED ||
         slot_generations[handle.slot] != handle.generation ||
         reserved_thread.stack_ownership != SYNTRA_THREAD_STACK_OWNED ||
-        reserved_thread.stack_allocation.generation == 0U ||
-        thread_count >= SYNTRA_MAX_THREADS)
+        reserved_thread.stack_allocation.generation == 0U)
         goto done;
 
     expected_owner.slot = handle.slot;
