@@ -392,6 +392,8 @@ int main(void)
         syntra_memory_allocation_handle_t allocation = {UINT32_MAX, 0U};
         syntra_thread_handle_t reserved = {0U, 0U};
         syntra_memory_owner_handle_t wrong_owner;
+        syntra_thread_slot_state_t slot_state;
+        uint32_t slot_generation = 0U;
 
         check("Stage allocation for owner-mismatch rollback",
             memory_allocate_staged(1U, &owned_stack, &allocation) ==
