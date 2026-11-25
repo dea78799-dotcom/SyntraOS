@@ -28,6 +28,7 @@ static void scheduler_clear_reserved_thread(void)
     reserved_thread.user_stack_base = 0U;
     reserved_thread.user_stack_size = 0U;
     reserved_thread.is_user_thread = 0U;
+    reserved_thread.switch_away_sequence = 0U;
     reserved_thread.cpu_context = NULL;
     reserved_thread.owner_process.slot = 0U;
     reserved_thread.owner_process.generation = 0U;
@@ -150,6 +151,7 @@ static syntra_status_t scheduler_insert_thread(
     thread->user_stack_base = 0U;
     thread->user_stack_size = 0U;
     thread->is_user_thread = 0U;
+    thread->switch_away_sequence = 0U;
     thread->cpu_context = NULL;
     thread->owner_process.slot = 0U;
     thread->owner_process.generation = 0U;
@@ -198,6 +200,7 @@ static syntra_status_t scheduler_init_unlocked(void)
         threads[i].user_stack_base = 0U;
         threads[i].user_stack_size = 0U;
         threads[i].is_user_thread = 0U;
+        threads[i].switch_away_sequence = 0U;
         threads[i].cpu_context = NULL;
         threads[i].owner_process.slot = 0U;
         threads[i].owner_process.generation = 0U;
@@ -1349,6 +1352,8 @@ syntra_status_t scheduler_complete_switch_away(void)
         return SYNTRA_STATUS_ERROR;
     }
 
+    threads[(unsigned int)outgoing_slot].switch_away_sequence =
+        pending_switch.sequence;
     switch_events[switch_event_tail].handle = pending_switch.handle;
     switch_events[switch_event_tail].sequence = pending_switch.sequence;
     switch_events[switch_event_tail].terminal = pending_switch.terminal;
@@ -1446,6 +1451,82 @@ syntra_status_t scheduler_get_thread_snapshot_by_handle(
     syntra_irq_restore(irq);
     return status;
 }
+
+/*
+ * This operation is intentionally one-way. The exact terminal switch-away
+ * proof is checked against the sequence stored in the TCB. Local IRQ masking
+ * keeps the current-slot check, allocator release, and TCB pointer clearing
+ * atomic on the supported single-core target.
+ */
+syntra_status_t scheduler_reclaim_owned_thread_stack(
+    syntra_thread_handle_t handle, uint64_t switch_away_sequence)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_memory_allocation_t allocation_snapshot;
+    syntra_memory_owner_handle_t owner;
+    syntra_thread_t *thread;
+    syntra_status_t status = SYNTRA_STATUS_INVALID_ARGUMENT;
+    int slot = scheduler_resolve_handle_unlocked(handle);
+
+    if (slot < 0 || switch_away_sequence == 0U)
+        goto done;
+
+    thread = &threads[(unsigned int)slot];
+    if (thread->state != THREAD_TERMINATED ||
+        current_slot == slot ||
+        thread->switch_away_sequence != switch_away_sequence ||
+        thread->is_user_thread != 0U ||
+        thread->user_stack_base != 0U ||
+        thread->user_stack_size != 0U ||
+        thread->stack_ownership != SYNTRA_THREAD_STACK_OWNED ||
+        thread->stack_allocation.generation == 0U ||
+        thread->stack_base == 0U ||
+        thread->stack_size < SYNTRA_THREAD_MIN_STACK_SIZE)
+        goto done;
+
+    owner.slot = handle.slot;
+    owner.generation = handle.generation;
+    status = memory_get_allocation_by_handle(
+        thread->stack_allocation, &allocation_snapshot);
+    if (status != SYNTRA_STATUS_OK)
+        goto done;
+
+    if (allocation_snapshot.ownership_state !=
+            SYNTRA_MEMORY_ALLOCATION_THREAD_OWNED ||
+        allocation_snapshot.owner.slot != owner.slot ||
+        allocation_snapshot.owner.generation != owner.generation ||
+        allocation_snapshot.address != (void *)thread->stack_base ||
+        allocation_snapshot.block_count == 0U ||
+        (size_t)allocation_snapshot.block_count *
+            SYNTRA_MEMORY_BLOCK_SIZE < thread->stack_size)
+    {
+        status = SYNTRA_STATUS_PERMISSION_DENIED;
+        goto done;
+    }
+
+    status = memory_release_owned_allocation(thread->stack_allocation, owner);
+    if (status != SYNTRA_STATUS_OK)
+        goto done;
+
+    /*
+     * The allocation is now free. Erase every TCB reference to it and to the
+     * embedded exception frame. Keep the TERMINATED identity/slot permanent.
+     */
+    thread->stack_base = 0U;
+    thread->stack_size = 0U;
+    thread->stack_ownership = SYNTRA_THREAD_STACK_BORROWED;
+    thread->stack_allocation.slot = 0U;
+    thread->stack_allocation.generation = 0U;
+    thread->cpu_context = NULL;
+    thread->entry = NULL;
+    thread->argument = NULL;
+    status = SYNTRA_STATUS_OK;
+
+done:
+    syntra_irq_restore(irq);
+    return status;
+}
+
 
 syntra_status_t scheduler_set_thread_state_by_handle(
     syntra_thread_handle_t handle, thread_state_t state)
