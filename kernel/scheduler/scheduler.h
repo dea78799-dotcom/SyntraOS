@@ -20,6 +20,14 @@ typedef enum
     THREAD_TERMINATED
 } thread_state_t;
 
+typedef enum
+{
+    SYNTRA_THREAD_SLOT_FREE = 0,
+    SYNTRA_THREAD_SLOT_RESERVED,
+    SYNTRA_THREAD_SLOT_ACTIVE,
+    SYNTRA_THREAD_SLOT_EXHAUSTED
+} syntra_thread_slot_state_t;
+
 typedef void (*syntra_thread_entry_t)(void *argument);
 
 typedef struct
@@ -217,7 +225,13 @@ syntra_status_t scheduler_take_switch_away_event(
  * New kernel code must use snapshot and controlled mutation APIs above.
  */
 syntra_thread_t *scheduler_get_thread(unsigned int thread_id);
+/* High-water bound retained for compatibility; active count is separate. */
 unsigned int scheduler_get_thread_count(void);
+unsigned int scheduler_get_active_thread_count(void);
+syntra_status_t scheduler_get_slot_metadata(
+    unsigned int slot,
+    syntra_thread_slot_state_t *state_out,
+    uint32_t *generation_out);
 syntra_status_t scheduler_validate(void);
 
 #endif
