@@ -190,55 +190,6 @@ int main(void)
         candidate.proof.sequence != 0U &&
         candidate.state == SYNTRA_REAPER_CANDIDATE_QUEUED);
 
-    {
-        syntra_thread_handle_t blocked_handle = {0U, 0U};
-        syntra_thread_switch_event_t nonterminal_event;
-        syntra_reaper_stats_t stats_before;
-        syntra_reaper_stats_t stats_after;
-        unsigned int candidate_count_before = 0U;
-        unsigned int candidate_count_after = 0U;
-        unsigned int nonterminal_processed = 0U;
-
-        check("Create thread for nonterminal event accounting",
-            scheduler_create_thread_with_handle(
-                953U, 2U, test_entry, NULL, nonterminal_stack,
-                sizeof(nonterminal_stack), &blocked_handle) == SYNTRA_STATUS_OK);
-        check("Make nonterminal test thread current",
-            scheduler_set_thread_state_by_handle(
-                blocked_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
-        check("Block current thread to stage nonterminal switch",
-            scheduler_block_current() == SYNTRA_STATUS_OK);
-        check("Switch to reaper for nonterminal event",
-            scheduler_set_thread_state_by_handle(
-                reaper_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
-        check("Publish nonterminal switch-away event",
-            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
-        check("Nonterminal FIFO head has terminal intent clear",
-            scheduler_peek_switch_away_event(&nonterminal_event) ==
-                SYNTRA_STATUS_OK &&
-            scheduler_thread_handle_equal(
-                nonterminal_event.handle, blocked_handle) &&
-            nonterminal_event.terminal == 0U);
-        thread_reaper_get_candidate_count(&candidate_count_before);
-        thread_reaper_get_stats(&stats_before);
-        check("Dispatch acknowledges nonterminal event",
-            thread_reaper_dispatch(1U, &nonterminal_processed) ==
-                SYNTRA_STATUS_OK && nonterminal_processed == 1U);
-        thread_reaper_get_candidate_count(&candidate_count_after);
-        thread_reaper_get_stats(&stats_after);
-        check("Nonterminal event does not consume candidate capacity",
-            candidate_count_after == candidate_count_before &&
-            find_reaper_candidate_index(blocked_handle) < 0);
-        check("Nonterminal event increments discard and ACK counters once",
-            stats_after.discarded_nonterminal ==
-                stats_before.discarded_nonterminal + 1U &&
-            stats_after.acknowledged_events ==
-                stats_before.acknowledged_events + 1U);
-        check("Nonterminal event leaves terminal queue count unchanged",
-            stats_after.queued == stats_before.queued);
-        check("Scheduler remains valid after nonterminal event dispatch",
-            scheduler_validate() == SYNTRA_STATUS_OK);
-    }
 
     check("Reject stale switch-away sequence without freeing stack",
         scheduler_reclaim_owned_thread_stack(
@@ -742,6 +693,57 @@ int main(void)
         check("Scheduler validates after repeated reaper candidate reuse",
             scheduler_validate() == SYNTRA_STATUS_OK);
     }
+
+    {
+        syntra_thread_handle_t blocked_handle = {0U, 0U};
+        syntra_thread_switch_event_t nonterminal_event;
+        syntra_reaper_stats_t stats_before;
+        syntra_reaper_stats_t stats_after;
+        unsigned int candidate_count_before = 0U;
+        unsigned int candidate_count_after = 0U;
+        unsigned int nonterminal_processed = 0U;
+
+        check("Create thread for nonterminal event accounting",
+            scheduler_create_thread_with_handle(
+                953U, 2U, test_entry, NULL, nonterminal_stack,
+                sizeof(nonterminal_stack), &blocked_handle) == SYNTRA_STATUS_OK);
+        check("Make nonterminal test thread current",
+            scheduler_set_thread_state_by_handle(
+                blocked_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Block current thread to stage nonterminal switch",
+            scheduler_block_current() == SYNTRA_STATUS_OK);
+        check("Switch to reaper for nonterminal event",
+            scheduler_set_thread_state_by_handle(
+                reaper_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Publish nonterminal switch-away event",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+        check("Nonterminal FIFO head has terminal intent clear",
+            scheduler_peek_switch_away_event(&nonterminal_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(
+                nonterminal_event.handle, blocked_handle) &&
+            nonterminal_event.terminal == 0U);
+        thread_reaper_get_candidate_count(&candidate_count_before);
+        thread_reaper_get_stats(&stats_before);
+        check("Dispatch acknowledges nonterminal event",
+            thread_reaper_dispatch(1U, &nonterminal_processed) ==
+                SYNTRA_STATUS_OK && nonterminal_processed == 1U);
+        thread_reaper_get_candidate_count(&candidate_count_after);
+        thread_reaper_get_stats(&stats_after);
+        check("Nonterminal event does not consume candidate capacity",
+            candidate_count_after == candidate_count_before &&
+            find_reaper_candidate_index(blocked_handle) < 0);
+        check("Nonterminal event increments discard and ACK counters once",
+            stats_after.discarded_nonterminal ==
+                stats_before.discarded_nonterminal + 1U &&
+            stats_after.acknowledged_events ==
+                stats_before.acknowledged_events + 1U);
+        check("Nonterminal event leaves terminal queue count unchanged",
+            stats_after.queued == stats_before.queued);
+        check("Scheduler remains valid after nonterminal event dispatch",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+    }
+
 
     {
         syntra_thread_handle_t saturation_handle = {0U, 0U};
