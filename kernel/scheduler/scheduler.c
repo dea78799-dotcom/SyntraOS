@@ -2,7 +2,10 @@
 #include "../arch/irq.h"
 
 static syntra_thread_t threads[SYNTRA_MAX_THREADS];
+static syntra_thread_slot_state_t slot_states[SYNTRA_MAX_THREADS];
+static uint32_t slot_generations[SYNTRA_MAX_THREADS];
 static unsigned int thread_count;
+static unsigned int active_thread_count;
 static unsigned int next_slot;
 static int current_slot;
 static int scheduler_initialized;
@@ -78,16 +81,57 @@ static void scheduler_copy_thread(
 }
 
 
+static syntra_status_t scheduler_reserve_slot_unlocked(uint32_t *slot_out)
+{
+    uint32_t slot;
+
+    if (slot_out == NULL)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    if (thread_count >= SYNTRA_MAX_THREADS)
+        return SYNTRA_STATUS_OUT_OF_MEMORY;
+
+    slot = (uint32_t)thread_count;
+    if (slot_states[slot] != SYNTRA_THREAD_SLOT_FREE ||
+        slot_generations[slot] == 0U)
+        return SYNTRA_STATUS_ERROR;
+
+    slot_states[slot] = SYNTRA_THREAD_SLOT_RESERVED;
+    *slot_out = slot;
+    return SYNTRA_STATUS_OK;
+}
+
+static syntra_status_t scheduler_publish_slot_unlocked(uint32_t slot)
+{
+    if (slot >= SYNTRA_MAX_THREADS || slot != thread_count ||
+        slot_states[slot] != SYNTRA_THREAD_SLOT_RESERVED ||
+        slot_generations[slot] == 0U)
+        return SYNTRA_STATUS_ERROR;
+
+    slot_states[slot] = SYNTRA_THREAD_SLOT_ACTIVE;
+    ++thread_count;
+    ++active_thread_count;
+    return SYNTRA_STATUS_OK;
+}
+
+static syntra_status_t scheduler_abort_slot_unlocked(uint32_t slot)
+{
+    if (slot >= SYNTRA_MAX_THREADS || slot != thread_count ||
+        slot_states[slot] != SYNTRA_THREAD_SLOT_RESERVED)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    /* An unpublished reservation never exposes its generation to callers. */
+    slot_states[slot] = SYNTRA_THREAD_SLOT_FREE;
+    return SYNTRA_STATUS_OK;
+}
+
 static int scheduler_find_slot(unsigned int thread_id)
 {
     for (unsigned int i = 0U; i < thread_count; ++i)
     {
-        if (threads[i].thread_id == thread_id)
-        {
+        if (slot_states[i] == SYNTRA_THREAD_SLOT_ACTIVE &&
+            threads[i].thread_id == thread_id)
             return (int)i;
-        }
     }
-
     return -1;
 }
 
@@ -156,14 +200,14 @@ static syntra_status_t scheduler_insert_thread(
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
 
-    if (thread_count >= SYNTRA_MAX_THREADS)
-    {
-        return SYNTRA_STATUS_OUT_OF_MEMORY;
-    }
+    uint32_t slot;
+    syntra_status_t reserve_status = scheduler_reserve_slot_unlocked(&slot);
+    if (reserve_status != SYNTRA_STATUS_OK)
+        return reserve_status;
 
-    syntra_thread_t *thread = &threads[thread_count];
-    thread->handle.slot = (uint32_t)thread_count;
-    thread->handle.generation = 1U;
+    syntra_thread_t *thread = &threads[slot];
+    thread->handle.slot = slot;
+    thread->handle.generation = slot_generations[slot];
     thread->thread_id = thread_id;
     thread->priority = priority;
     thread->state = THREAD_READY;
@@ -182,8 +226,13 @@ static syntra_status_t scheduler_insert_thread(
     thread->owner_process.slot = 0U;
     thread->owner_process.generation = 0U;
     thread->has_process_owner = 0U;
-    ++thread_count;
 
+    reserve_status = scheduler_publish_slot_unlocked(slot);
+    if (reserve_status != SYNTRA_STATUS_OK)
+    {
+        (void)scheduler_abort_slot_unlocked(slot);
+        return reserve_status;
+    }
     return SYNTRA_STATUS_OK;
 }
 
@@ -195,6 +244,7 @@ static syntra_status_t scheduler_init_unlocked(void)
     }
 
     thread_count = 0U;
+    active_thread_count = 0U;
     scheduler_clear_reserved_thread();
     reserved_thread_valid = 0;
     next_slot = 0U;
@@ -211,6 +261,8 @@ static syntra_status_t scheduler_init_unlocked(void)
 
     for (unsigned int i = 0U; i < SYNTRA_MAX_THREADS; ++i)
     {
+        slot_states[i] = SYNTRA_THREAD_SLOT_FREE;
+        slot_generations[i] = 1U;
         threads[i].handle.slot = 0U;
         threads[i].handle.generation = 0U;
         threads[i].thread_id = 0U;
@@ -529,7 +581,9 @@ static syntra_status_t scheduler_terminate_current_unlocked(void)
 static int scheduler_resolve_handle_unlocked(syntra_thread_handle_t handle)
 {
     if (!scheduler_initialized || handle.generation == 0U ||
-        handle.slot >= SYNTRA_MAX_THREADS || handle.slot >= thread_count)
+        handle.slot >= SYNTRA_MAX_THREADS || handle.slot >= thread_count ||
+        slot_states[handle.slot] != SYNTRA_THREAD_SLOT_ACTIVE ||
+        slot_generations[handle.slot] != handle.generation)
         return -1;
 
     const syntra_thread_t *thread = &threads[handle.slot];
@@ -675,11 +729,18 @@ static unsigned int scheduler_get_thread_count_unlocked(void)
     return scheduler_initialized ? thread_count : 0U;
 }
 
+static unsigned int scheduler_get_active_thread_count_unlocked(void)
+{
+    return scheduler_initialized ? active_thread_count : 0U;
+}
+
 static syntra_status_t scheduler_validate_unlocked(void)
 {
     unsigned int running_count = 0U;
+    unsigned int active_seen = 0U;
 
-    if (!scheduler_initialized || thread_count > SYNTRA_MAX_THREADS)
+    if (!scheduler_initialized || thread_count > SYNTRA_MAX_THREADS ||
+        active_thread_count > thread_count)
     {
         return SYNTRA_STATUS_ERROR;
     }
@@ -687,8 +748,12 @@ static syntra_status_t scheduler_validate_unlocked(void)
     for (unsigned int i = 0U; i < thread_count; ++i)
     {
         const syntra_thread_t *thread = &threads[i];
+        ++active_seen;
 
-        if (thread->handle.slot != i || thread->handle.generation == 0U ||
+        if (slot_states[i] != SYNTRA_THREAD_SLOT_ACTIVE ||
+            slot_generations[i] == 0U ||
+            thread->handle.slot != i ||
+            thread->handle.generation != slot_generations[i] ||
             thread->thread_id == 0U ||
             thread->state < THREAD_READY ||
             thread->state > THREAD_TERMINATED)
@@ -773,10 +838,36 @@ static syntra_status_t scheduler_validate_unlocked(void)
         }
     }
 
+    for (unsigned int i = thread_count; i < SYNTRA_MAX_THREADS; ++i)
+    {
+        if (reserved_thread_valid && i == reserved_thread.handle.slot)
+        {
+            if (slot_states[i] != SYNTRA_THREAD_SLOT_RESERVED ||
+                slot_generations[i] != reserved_thread.handle.generation)
+                return SYNTRA_STATUS_ERROR;
+        }
+        else if (slot_states[i] != SYNTRA_THREAD_SLOT_FREE &&
+                 slot_states[i] != SYNTRA_THREAD_SLOT_EXHAUSTED)
+            return SYNTRA_STATUS_ERROR;
+        if (slot_generations[i] == 0U)
+            return SYNTRA_STATUS_ERROR;
+        if (slot_states[i] == SYNTRA_THREAD_SLOT_EXHAUSTED &&
+            slot_generations[i] != UINT32_MAX)
+            return SYNTRA_STATUS_ERROR;
+    }
+
+    if (active_seen != active_thread_count ||
+        active_thread_count != thread_count)
+        return SYNTRA_STATUS_ERROR;
+
     if (reserved_thread_valid)
     {
         if (reserved_thread.handle.slot != thread_count ||
             reserved_thread.handle.generation == 0U ||
+            slot_states[reserved_thread.handle.slot] !=
+                SYNTRA_THREAD_SLOT_RESERVED ||
+            slot_generations[reserved_thread.handle.slot] !=
+                reserved_thread.handle.generation ||
             reserved_thread.thread_id == 0U ||
             reserved_thread.state != THREAD_BLOCKED ||
             reserved_thread.has_process_owner != 1U ||
@@ -1029,8 +1120,14 @@ syntra_status_t scheduler_reserve_owned_thread(
         goto done;
 
     scheduler_clear_reserved_thread();
-    reserved_thread.handle.slot = thread_count;
-    reserved_thread.handle.generation = 1U;
+    {
+        uint32_t reserved_slot;
+        status = scheduler_reserve_slot_unlocked(&reserved_slot);
+        if (status != SYNTRA_STATUS_OK)
+            goto done;
+        reserved_thread.handle.slot = reserved_slot;
+        reserved_thread.handle.generation = slot_generations[reserved_slot];
+    }
     reserved_thread.thread_id = id;
     reserved_thread.priority = priority;
     reserved_thread.state = THREAD_BLOCKED;
@@ -1101,6 +1198,10 @@ syntra_status_t scheduler_publish_owned_thread(syntra_thread_handle_t handle)
 
     if (!reserved_thread_valid ||
         !scheduler_thread_handle_equal(handle, reserved_thread.handle) ||
+        handle.slot != thread_count ||
+        handle.slot >= SYNTRA_MAX_THREADS ||
+        slot_states[handle.slot] != SYNTRA_THREAD_SLOT_RESERVED ||
+        slot_generations[handle.slot] != handle.generation ||
         reserved_thread.stack_ownership != SYNTRA_THREAD_STACK_OWNED ||
         reserved_thread.stack_allocation.generation == 0U ||
         thread_count >= SYNTRA_MAX_THREADS)
@@ -1126,13 +1227,14 @@ syntra_status_t scheduler_publish_owned_thread(syntra_thread_handle_t handle)
         goto done;
     }
 
-    /* Final visibility point: copy complete TCB, then increment published count. */
+    /* Final visibility point: copy the complete TCB, then publish its slot. */
     reserved_thread.state = THREAD_READY;
-    scheduler_copy_thread(&threads[thread_count], &reserved_thread);
-    ++thread_count;
+    scheduler_copy_thread(&threads[handle.slot], &reserved_thread);
+    status = scheduler_publish_slot_unlocked(handle.slot);
+    if (status != SYNTRA_STATUS_OK)
+        goto done;
     scheduler_clear_reserved_thread();
     reserved_thread_valid = 0;
-    status = SYNTRA_STATUS_OK;
 
 done:
     syntra_irq_restore(irq);
@@ -1147,9 +1249,12 @@ syntra_status_t scheduler_abort_reserved_thread(syntra_thread_handle_t handle)
     if (reserved_thread_valid &&
         scheduler_thread_handle_equal(handle, reserved_thread.handle))
     {
-        scheduler_clear_reserved_thread();
-        reserved_thread_valid = 0;
-        status = SYNTRA_STATUS_OK;
+        status = scheduler_abort_slot_unlocked(handle.slot);
+        if (status == SYNTRA_STATUS_OK)
+        {
+            scheduler_clear_reserved_thread();
+            reserved_thread_valid = 0;
+        }
     }
 
     syntra_irq_restore(irq);
@@ -1633,6 +1738,38 @@ unsigned int scheduler_get_thread_count(void)
     unsigned int count = scheduler_get_thread_count_unlocked();
     syntra_irq_restore(irq);
     return count;
+}
+
+unsigned int scheduler_get_active_thread_count(void)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    unsigned int count = scheduler_get_active_thread_count_unlocked();
+    syntra_irq_restore(irq);
+    return count;
+}
+
+syntra_status_t scheduler_get_slot_metadata(
+    unsigned int slot,
+    syntra_thread_slot_state_t *state_out,
+    uint32_t *generation_out)
+{
+    syntra_irq_state_t irq;
+
+    if (state_out == NULL || generation_out == NULL ||
+        slot >= SYNTRA_MAX_THREADS)
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    irq = syntra_irq_save();
+    if (!scheduler_initialized)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_ERROR;
+    }
+
+    *state_out = slot_states[slot];
+    *generation_out = slot_generations[slot];
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
 }
 
 syntra_status_t scheduler_validate(void)
