@@ -81,3 +81,12 @@ Generation-exhaustion and slot-reuse tests belong to the later slot-reuse stage;
 - Stale handles are rejected by exact generation comparison after reuse.
 
 The scheduler remains single-core and IRQ-serialized. This change does not add SMP safety or lock-free behavior.
+
+
+## D3.5.8 — Rejected owned-thread creation preserves retired slots
+
+- Exercise the public process-owned thread creation API with an invalid stack size.
+- Verify argument validation rejects the request before any slot reservation or memory allocation begins.
+- Confirm the retired slot remains FREE with its generation unchanged.
+- Re-run scheduler validation, then let the existing valid owned-thread creation test reuse and publish the same hole.
+- The internal staged-reservation rollback remains covered by the coordinator's cleanup path; it is not exposed as a public scheduler API solely for testing.

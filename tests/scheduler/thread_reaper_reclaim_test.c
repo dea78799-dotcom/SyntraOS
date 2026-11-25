@@ -182,6 +182,21 @@ int main(void)
             thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
             stats.retired == 1U && stats.retirement_failures == 0U);
     }
+    check("Reject invalid owned-thread stack size before reserving a slot",
+        process_thread_create_kernel_owned_with_handle(
+            process, 955U, 2U, test_entry, NULL, 1U,
+            &reused_handle) == SYNTRA_STATUS_INVALID_ARGUMENT);
+    {
+        syntra_thread_slot_state_t rejected_state;
+        uint32_t rejected_generation = 0U;
+        check("Rejected creation preserves retired FREE slot generation",
+            scheduler_get_slot_metadata(owned_handle.slot, &rejected_state,
+                &rejected_generation) == SYNTRA_STATUS_OK &&
+            rejected_state == SYNTRA_THREAD_SLOT_FREE &&
+            rejected_generation == owned_handle.generation + 1U);
+        check("Rejected creation leaves scheduler invariants intact",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+    }
     check("Create thread in retired slot using a fresh stack",
         process_thread_create_kernel_owned_with_handle(
             process, 954U, 2U, test_entry, NULL, 4096U,
