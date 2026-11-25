@@ -1,7 +1,7 @@
 # SYNTRA OS Thread Management
 
 Version: 0.1.0
-Status: Scheduler prototype implemented; complete lifecycle and reclamation remain in design.
+Status: Generation-safe TCB retirement and process-owned kernel-stack reclamation are implemented for the supported single-core prototype.
 
 ## 1. Overview
 
@@ -40,11 +40,14 @@ boundary switches to another saved context.
 
 ARM64 initial kernel contexts use `syntra_arm64_thread_exit()` as their return
 trampoline. It marks the current TCB terminated and waits for the timer/exception
-bridge to select another context. This is prototype behavior; it is not yet a
-complete synchronous exit or deferred-reaping protocol.
+bridge to select another context. The architecture bridge publishes an exact
+post-switch-away event only after installing a successor stack.
 
-Process termination cascade marks all threads with the exact owner handle
-terminated. It does not free stacks, saved contexts, or TCB records.
+The dedicated Thread Reaper consumes that proof, validates process ownership,
+reclaims only an explicitly owned kernel stack, clears the TCB's resource
+references, and retires the TCB. Process termination cascade still marks all
+threads with the exact owner handle terminated; reclamation is deferred until
+each thread independently satisfies the switch-away and ownership gates.
 
 ## 5. Resource ownership
 
@@ -65,15 +68,17 @@ the two-stage lifecycle and the explicit allocator-ownership contract:
 2. REAPABLE: the architecture has switched away and no active or saved context
    can reference the thread's resources.
 
-A future reaper must run on a different stable kernel stack, validate
-switch-away completion, release only explicitly owned resources, and retain
-retry metadata if cleanup fails. Generation-aware thread handles are required
-before TCB slots or thread IDs can be reused.
+The reaper runs on a different stable kernel stack, validates switch-away
+completion, releases only explicitly owned resources, and retains quarantined
+metadata if cleanup fails. Generation-aware handles prevent stale references
+when retired TCB slots are reused. RETIRED candidate records are recyclable;
+QUARANTINED records remain reserved for diagnostics.
 
 ## 7. Security and limitations
 
-This prototype does not establish full process isolation, SMP safety, automatic
-resource reclamation, or production readiness. See
+This prototype does not establish full process isolation, SMP safety, user
+thread reclamation, or production readiness. Local IRQ masking is a single-core
+serialization mechanism, not a cross-core lock. See
 [`scheduler.md`](scheduler.md) and
 [`thread_exit_reclamation_v1.md`](thread_exit_reclamation_v1.md) for the
 current architecture constraints and implementation gates.
