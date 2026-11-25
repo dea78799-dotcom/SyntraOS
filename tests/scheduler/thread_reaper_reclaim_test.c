@@ -22,7 +22,6 @@ extern syntra_status_t thread_reaper_test_fill_quarantined(void);
 
 static unsigned int failures;
 static _Alignas(16) unsigned char borrowed_stack[4096];
-static _Alignas(16) unsigned char nonterminal_stack[4096];
 static int borrowed_context_marker;
 
 static void test_entry(void *argument)
@@ -704,9 +703,9 @@ int main(void)
         unsigned int nonterminal_processed = 0U;
 
         check("Create thread for nonterminal event accounting",
-            scheduler_create_thread_with_handle(
-                953U, 2U, test_entry, NULL, nonterminal_stack,
-                sizeof(nonterminal_stack), &blocked_handle) == SYNTRA_STATUS_OK);
+            process_thread_create_kernel_owned_with_handle(
+                process, 953U, 2U, test_entry, NULL, 4096U,
+                &blocked_handle) == SYNTRA_STATUS_OK);
         check("Make nonterminal test thread current",
             scheduler_set_thread_state_by_handle(
                 blocked_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
@@ -742,6 +741,34 @@ int main(void)
             stats_after.queued == stats_before.queued);
         check("Scheduler remains valid after nonterminal event dispatch",
             scheduler_validate() == SYNTRA_STATUS_OK);
+
+        check("Resume nonterminal thread for owned retirement",
+            scheduler_set_thread_state_by_handle(
+                blocked_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Terminate nonterminal test thread after accounting",
+            scheduler_terminate_current() == SYNTRA_STATUS_OK);
+        check("Return to reaper for nonterminal test cleanup",
+            scheduler_set_thread_state_by_handle(
+                reaper_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Publish terminal proof for nonterminal test cleanup",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+        check("Dispatch terminal proof for nonterminal test cleanup",
+            thread_reaper_dispatch(1U, &nonterminal_processed) ==
+                SYNTRA_STATUS_OK && nonterminal_processed == 1U);
+        {
+            int cleanup_index = find_reaper_candidate_index(blocked_handle);
+            check("Locate cleanup candidate by exact handle",
+                cleanup_index >= 0);
+            if (cleanup_index >= 0)
+            {
+                check("Reclaim owned stack after nonterminal test",
+                    thread_reaper_reclaim_candidate(
+                        (unsigned int)cleanup_index) == SYNTRA_STATUS_OK);
+                check("Retire owned TCB after nonterminal test",
+                    thread_reaper_retire_candidate(
+                        (unsigned int)cleanup_index) == SYNTRA_STATUS_OK);
+            }
+        }
     }
 
 
