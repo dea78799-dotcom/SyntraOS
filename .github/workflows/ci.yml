@@ -36,8 +36,8 @@ on:
       - test/d358-reused-slot-abort-coverage-v1
       - test/d359-owned-thread-rollback-fault-injection-v1
       - test/d3510-generation-exhaustion-boundary-v1
-      - feat/d3511-reaper-retired-candidate-reuse-v1
-      - test/d3512-reaper-candidate-ack-rollback-v1
+      - feat/d3511-reaper-retired-candidate-reuse-v1\n      - test/d3512-reaper-candidate-ack-rollback-v1
+      - test/d3512-reaper-candidate-ack-rollback-v1\n      - test/d3513-reaper-full-table-fifo-preservation-v1
 
   pull_request:
     branches:
