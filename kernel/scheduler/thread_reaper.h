@@ -9,7 +9,8 @@ typedef enum
 {
     SYNTRA_REAPER_CANDIDATE_FREE = 0,
     SYNTRA_REAPER_CANDIDATE_QUEUED = 1,
-    SYNTRA_REAPER_CANDIDATE_QUARANTINED = 2
+    SYNTRA_REAPER_CANDIDATE_QUARANTINED = 2,
+    SYNTRA_REAPER_CANDIDATE_RECLAIMED = 3
 } syntra_reaper_candidate_state_t;
 
 typedef enum
@@ -17,7 +18,8 @@ typedef enum
     SYNTRA_REAPER_REASON_NONE = 0,
     SYNTRA_REAPER_REASON_STALE_HANDLE = 1,
     SYNTRA_REAPER_REASON_SEQUENCE_CONFLICT = 2,
-    SYNTRA_REAPER_REASON_TERMINAL_STATE_MISMATCH = 3
+    SYNTRA_REAPER_REASON_TERMINAL_STATE_MISMATCH = 3,
+    SYNTRA_REAPER_REASON_RESOURCE_RECLAIM_FAILED = 4
 } syntra_reaper_candidate_reason_t;
 
 /*
@@ -41,6 +43,8 @@ typedef struct
     unsigned int execution_context_bound;
     unsigned int execution_context_dispatches;
     unsigned int execution_context_rejections;
+    unsigned int reclaimed;
+    unsigned int reclaim_failures;
 } syntra_reaper_stats_t;
 
 /* Initialize after scheduler_init(); no resource reclamation is enabled. */
@@ -75,6 +79,11 @@ syntra_status_t thread_reaper_get_candidate(
     unsigned int index,
     syntra_reaper_candidate_t *candidate_out
 );
+/*
+ * Reclaim one queued terminal candidate from the bound reaper context.
+ * Any validation/release failure quarantines the candidate; no blind retry.
+ */
+syntra_status_t thread_reaper_reclaim_candidate(unsigned int index);
 
 syntra_status_t thread_reaper_get_stats(
     syntra_reaper_stats_t *stats_out
