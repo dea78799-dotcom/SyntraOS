@@ -8,6 +8,8 @@
 #include <stdio.h>
 
 static unsigned int failures;
+static _Alignas(16) unsigned char borrowed_stack[4096];
+static int borrowed_context_marker;
 
 static void test_entry(void *argument)
 {
@@ -145,9 +147,69 @@ int main(void)
     check("Reaper statistics record one reclamation",
         thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
         stats.reclaimed == 1U && stats.reclaim_failures == 0U);
-    check("Memory allocator invariants remain valid",
+    check("Create a BORROWED kernel thread for fail-closed coverage",
+        scheduler_create_thread_with_handle(
+            953U, 1U, test_entry, NULL, borrowed_stack,
+            sizeof(borrowed_stack), &(syntra_thread_handle_t){0U, 0U}) ==
+                SYNTRA_STATUS_OK);
+    {
+        syntra_thread_handle_t borrowed_handle;
+        syntra_thread_t borrowed_before;
+        syntra_thread_t borrowed_after;
+        unsigned int borrowed_processed = 0U;
+
+        check("Resolve BORROWED thread identity",
+            scheduler_get_thread_snapshot(
+                953U, &borrowed_before) == SYNTRA_STATUS_OK);
+        borrowed_handle = borrowed_before.handle;
+        check("Install BORROWED thread context",
+            scheduler_set_thread_context(
+                953U, &borrowed_context_marker) == SYNTRA_STATUS_OK);
+        check("Make BORROWED thread current",
+            scheduler_set_thread_state_by_handle(
+                borrowed_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Terminate BORROWED thread",
+            scheduler_terminate_current() == SYNTRA_STATUS_OK);
+        check("Return current execution to dedicated reaper",
+            scheduler_set_thread_state_by_handle(
+                reaper_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Publish BORROWED terminal switch-away proof",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+        check("Dispatch BORROWED terminal candidate",
+            thread_reaper_dispatch(1U, &borrowed_processed) ==
+                SYNTRA_STATUS_OK && borrowed_processed == 1U);
+        memory_get_info(&memory_before);
+        check("Reject BORROWED stack reclamation and quarantine candidate",
+            thread_reaper_reclaim_candidate(1U) ==
+                SYNTRA_STATUS_INVALID_ARGUMENT &&
+            thread_reaper_get_candidate(1U, &candidate) == SYNTRA_STATUS_OK &&
+            candidate.state == SYNTRA_REAPER_CANDIDATE_QUARANTINED &&
+            candidate.reason ==
+                SYNTRA_REAPER_REASON_RESOURCE_RECLAIM_FAILED);
+        check("BORROWED TCB stack and context remain intact",
+            scheduler_get_thread_snapshot_by_handle(
+                borrowed_handle, &borrowed_after) == SYNTRA_STATUS_OK &&
+            borrowed_after.state == THREAD_TERMINATED &&
+            borrowed_after.stack_base == (uintptr_t)borrowed_stack &&
+            borrowed_after.stack_size == sizeof(borrowed_stack) &&
+            borrowed_after.cpu_context == &borrowed_context_marker &&
+            borrowed_after.stack_ownership ==
+                SYNTRA_THREAD_STACK_BORROWED);
+        memory_get_info(&memory_after);
+        check("Rejected BORROWED candidate does not alter allocator",
+            memory_after.active_allocations ==
+                memory_before.active_allocations);
+        check("Quarantined candidate cannot be retried",
+            thread_reaper_reclaim_candidate(1U) ==
+                SYNTRA_STATUS_PERMISSION_DENIED);
+        check("Reaper statistics report one reclaim and one quarantine",
+            thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
+            stats.reclaimed == 1U && stats.quarantined == 1U &&
+            stats.reclaim_failures == 1U);
+    }
+    check("Memory allocator invariants remain valid after quarantine",
         memory_validate() == SYNTRA_STATUS_OK);
-    check("Scheduler invariants remain valid",
+    check("Scheduler invariants remain valid after quarantine",
         scheduler_validate() == SYNTRA_STATUS_OK);
 
     if (failures != 0U)
