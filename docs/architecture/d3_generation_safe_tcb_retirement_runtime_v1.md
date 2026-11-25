@@ -81,3 +81,11 @@ Generation-exhaustion and slot-reuse tests belong to the later slot-reuse stage;
 - Stale handles are rejected by exact generation comparison after reuse.
 
 The scheduler remains single-core and IRQ-serialized. This change does not add SMP safety or lock-free behavior.
+
+
+## D3.5.8 — Reused-slot reservation rollback coverage
+
+- Exercise the process-owned staged reservation path against a previously retired FREE hole.
+- Validate scheduler invariants while the hole is RESERVED and the staged TCB remains unpublished.
+- Abort the reservation and verify the slot returns to FREE without advancing its generation, because no handle was published.
+- Re-run scheduler validation before the same hole is committed by a subsequent owned-thread creation.
