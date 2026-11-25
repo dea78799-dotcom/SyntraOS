@@ -1694,10 +1694,13 @@ syntra_status_t scheduler_retire_thread_after_reap(
         current_slot == (int)slot ||
         thread->switch_away_sequence != switch_away_sequence ||
         thread->is_user_thread != 0U ||
-        /* Process-owned TCBs require a coordinated owner-detach protocol. */
-        thread->has_process_owner != 0U ||
-        thread->owner_process.slot != 0U ||
-        thread->owner_process.generation != 0U ||
+        thread->has_process_owner > 1U ||
+        (thread->has_process_owner == 0U &&
+         (thread->owner_process.slot != 0U ||
+          thread->owner_process.generation != 0U)) ||
+        (thread->has_process_owner != 0U &&
+         (thread->owner_process.slot >= SYNTRA_MAX_PROCESSES ||
+          thread->owner_process.generation == 0U)) ||
         thread->user_stack_base != 0U ||
         thread->user_stack_size != 0U ||
         thread->stack_base != 0U ||
