@@ -316,6 +316,8 @@ int main(void)
         syntra_memory_allocation_handle_t allocation = {UINT32_MAX, 0U};
         syntra_thread_handle_t reserved = {0U, 0U};
         syntra_memory_owner_handle_t owner;
+        syntra_thread_slot_state_t slot_state;
+        uint32_t slot_generation = 0U;
 
         check("Initialize memory manager for owned-stack transaction",
             memory_init() == SYNTRA_STATUS_OK);
@@ -335,6 +337,12 @@ int main(void)
                 &(syntra_thread_t){0}) == SYNTRA_STATUS_INVALID_ARGUMENT &&
             (scheduler_get_next_ready() == NULL ||
                 scheduler_get_next_ready()->thread_id != 88U));
+        check("Owned reservation marks the exact slot RESERVED",
+            scheduler_get_slot_metadata(reserved.slot, &slot_state,
+                &slot_generation) == SYNTRA_STATUS_OK &&
+            slot_state == SYNTRA_THREAD_SLOT_RESERVED &&
+            slot_generation == reserved.generation &&
+            scheduler_get_active_thread_count() == 3U);
         check("Public insertion cannot steal reserved append-only slot",
             scheduler_add_thread(90U, 1U) == SYNTRA_STATUS_ERROR &&
             scheduler_get_thread_count() == 3U);
@@ -365,6 +373,12 @@ int main(void)
                 published.stack_allocation.generation ==
                     allocation.generation);
         }
+        check("Published owned thread activates its reserved slot",
+            scheduler_get_slot_metadata(reserved.slot, &slot_state,
+                &slot_generation) == SYNTRA_STATUS_OK &&
+            slot_state == SYNTRA_THREAD_SLOT_ACTIVE &&
+            slot_generation == reserved.generation &&
+            scheduler_get_active_thread_count() == 4U);
         check("Published owned thread preserves scheduler invariants",
             scheduler_get_thread_count() == 4U &&
             scheduler_validate() == SYNTRA_STATUS_OK);
@@ -402,6 +416,12 @@ int main(void)
                 SYNTRA_STATUS_OK);
         check("Failed reservation never changes published thread count",
             scheduler_get_thread_count() == 4U);
+        check("Aborted reservation returns its slot to FREE without generation change",
+            scheduler_get_slot_metadata(reserved.slot, &slot_state,
+                &slot_generation) == SYNTRA_STATUS_OK &&
+            slot_state == SYNTRA_THREAD_SLOT_FREE &&
+            slot_generation == reserved.generation &&
+            scheduler_get_active_thread_count() == 4U);
         check("Scheduler invariants hold after reservation abort",
             scheduler_validate() == SYNTRA_STATUS_OK);
     }
