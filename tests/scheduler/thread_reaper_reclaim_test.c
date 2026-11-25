@@ -38,6 +38,25 @@ static void check(const char *name, int condition)
         printf("PASS: %s\n", name);
 }
 
+static int find_reaper_candidate_index(
+    syntra_thread_handle_t handle)
+{
+    unsigned int count = 0U;
+    syntra_reaper_candidate_t candidate;
+
+    if (thread_reaper_get_candidate_count(&count) != SYNTRA_STATUS_OK)
+        return -1;
+
+    for (unsigned int i = 0U; i < count; ++i)
+    {
+        if (thread_reaper_get_candidate(i, &candidate) == SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(candidate.proof.handle, handle))
+            return (int)i;
+    }
+
+    return -1;
+}
+
 static void verify_owned_thread_creation_rollback(
     syntra_process_handle_t process,
     unsigned int stage,
@@ -378,6 +397,7 @@ int main(void)
         uint32_t exhaustion_generation = 0U;
         unsigned int exhaustion_processed = 0U;
         unsigned int high_water_before = scheduler_get_thread_count();
+        int exhaustion_candidate_index = -1;
 
         check("Seed unused tail slot at UINT32_MAX for host boundary test",
             scheduler_test_seed_free_slot_generation(
@@ -401,10 +421,18 @@ int main(void)
         check("Dispatch terminal-generation candidate",
             thread_reaper_dispatch(1U, &exhaustion_processed) ==
                 SYNTRA_STATUS_OK && exhaustion_processed == 1U);
+        exhaustion_candidate_index =
+            find_reaper_candidate_index(exhaustion_handle);
+        check("Locate terminal-generation candidate by exact handle",
+            exhaustion_candidate_index >= 0);
+        if (exhaustion_candidate_index < 0)
+            exhaustion_candidate_index = 0;
         check("Reclaim terminal-generation thread stack",
-            thread_reaper_reclaim_candidate(2U) == SYNTRA_STATUS_OK);
+            thread_reaper_reclaim_candidate(
+                (unsigned int)exhaustion_candidate_index) == SYNTRA_STATUS_OK);
         check("Retire terminal-generation TCB without wrapping",
-            thread_reaper_retire_candidate(2U) == SYNTRA_STATUS_OK);
+            thread_reaper_retire_candidate(
+                (unsigned int)exhaustion_candidate_index) == SYNTRA_STATUS_OK);
         check("UINT32_MAX generation becomes permanently EXHAUSTED",
             scheduler_get_slot_metadata(exhaustion_slot, &exhaustion_state,
                 &exhaustion_generation) == SYNTRA_STATUS_OK &&
@@ -442,7 +470,7 @@ int main(void)
 
         check("Capture bounded reaper table count before recycle stress",
             thread_reaper_get_candidate_count(&candidate_count_before) ==
-                SYNTRA_STATUS_OK && candidate_count_before == 3U);
+                SYNTRA_STATUS_OK && candidate_count_before == 2U);
 
         for (unsigned int cycle = 0U; cycle < recycle_cycles; ++cycle)
         {
