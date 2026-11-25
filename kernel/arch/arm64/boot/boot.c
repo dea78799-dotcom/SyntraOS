@@ -1048,8 +1048,8 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
         scheduler_reaper_dispatch_events == 0U)
         return SYNTRA_STATUS_ERROR;
 
-    syntra_uart_puts("Dedicated reaper execution stack: PASS\\n");
-    syntra_uart_puts("Dedicated reaper switch-away: PASS\\n");
+    syntra_uart_puts("Dedicated reaper execution stack: PASS\n");
+    syntra_uart_puts("Dedicated reaper switch-away: PASS\n");
     syntra_uart_puts("Thread switch-away proof: PUBLISHED\\n");
     syntra_uart_puts("Thread switch-away proof dispatcher: PASS candidates=");
     syntra_uart_put_hex(candidate_count);
