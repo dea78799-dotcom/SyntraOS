@@ -54,11 +54,50 @@ static int thread_reaper_is_on_bound_context_unlocked(void)
     return 1;
 }
 
+
+static int reaper_find_available_slot(
+    unsigned int *slot_out, int *append_out)
+{
+    if (slot_out == NULL || append_out == NULL)
+        return 0;
+
+    for (unsigned int i = 0U; i < candidate_count; ++i)
+    {
+        if (candidates[i].state == SYNTRA_REAPER_CANDIDATE_FREE ||
+            candidates[i].state == SYNTRA_REAPER_CANDIDATE_RETIRED)
+        {
+            *slot_out = i;
+            *append_out = 0;
+            return 1;
+        }
+    }
+
+    if (candidate_count < SYNTRA_REAPER_CANDIDATE_CAPACITY)
+    {
+        *slot_out = candidate_count;
+        *append_out = 1;
+        return 1;
+    }
+
+    return 0;
+}
+
+static void reaper_clear_candidate(unsigned int index)
+{
+    candidates[index].proof.handle.slot = 0U;
+    candidates[index].proof.handle.generation = 0U;
+    candidates[index].proof.sequence = 0U;
+    candidates[index].proof.terminal = 0U;
+    candidates[index].state = SYNTRA_REAPER_CANDIDATE_FREE;
+    candidates[index].reason = SYNTRA_REAPER_REASON_NONE;
+}
+
 static int reaper_find_handle(syntra_thread_handle_t handle)
 {
     for (unsigned int i = 0U; i < candidate_count; ++i)
     {
-        if (scheduler_thread_handle_equal(
+        if (candidates[i].state != SYNTRA_REAPER_CANDIDATE_FREE &&
+            scheduler_thread_handle_equal(
                 candidates[i].proof.handle, handle))
             return (int)i;
     }
@@ -196,13 +235,8 @@ syntra_status_t thread_reaper_dispatch(
         int existing_index;
         int candidate_inserted = 0;
         int candidate_modified = 0;
-
-        /*
-         * Reserve candidate capacity before inspecting/removing the FIFO
-         * head. A full candidate queue therefore cannot lose proof events.
-         */
-        if (candidate_count >= SYNTRA_REAPER_CANDIDATE_CAPACITY)
-            break;
+        int candidate_appended = 0;
+        unsigned int candidate_index = 0U;
 
         status = scheduler_peek_switch_away_event(&event);
         if (status != SYNTRA_STATUS_OK)
@@ -236,48 +270,57 @@ syntra_status_t thread_reaper_dispatch(
                 SYNTRA_REAPER_REASON_SEQUENCE_CONFLICT;
             candidate_modified = 1;
         }
+        else if (event.terminal == 0U)
+        {
+            /*
+             * Nonterminal switch events do not consume candidate capacity.
+             * The event's captured intent is authoritative even if the TCB
+             * has since transitioned to TERMINATED.
+             */
+            status = scheduler_ack_switch_away_event(event);
+            if (status != SYNTRA_STATUS_OK)
+            {
+                *processed_out = processed;
+                syntra_irq_restore(irq);
+                return status;
+            }
+            ++reaper_stats.discarded_nonterminal;
+            ++reaper_stats.acknowledged_events;
+            ++processed;
+            continue;
+        }
         else
         {
-            syntra_reaper_candidate_t *candidate =
-                &candidates[candidate_count];
+            if (!reaper_find_available_slot(
+                    &candidate_index, &candidate_appended))
+                break; /* Preserve the FIFO head when no safe record exists. */
 
-            candidate->proof = event;
-            candidate->state = SYNTRA_REAPER_CANDIDATE_QUEUED;
-            candidate->reason = SYNTRA_REAPER_REASON_NONE;
-            ++candidate_count;
+            previous_candidate = candidates[candidate_index];
+            if (candidate_appended)
+                ++candidate_count;
+
+            candidates[candidate_index].proof = event;
+            candidates[candidate_index].state =
+                SYNTRA_REAPER_CANDIDATE_QUEUED;
+            candidates[candidate_index].reason =
+                SYNTRA_REAPER_REASON_NONE;
             candidate_inserted = 1;
 
-            if (event.terminal == 0U)
+            status = scheduler_get_thread_snapshot_by_handle(
+                event.handle, &snapshot);
+            if (status != SYNTRA_STATUS_OK)
             {
-                /*
-                 * The thread may have terminated after this older preemption
-                 * event was published. Event-time intent, not current TCB
-                 * state, decides whether this proof is a reap candidate.
-                 */
-                --candidate_count;
-                candidate->state = SYNTRA_REAPER_CANDIDATE_FREE;
-                candidate->proof.handle.slot = 0U;
-                candidate->proof.handle.generation = 0U;
-                candidate->proof.sequence = 0U;
-                candidate->proof.terminal = 0U;
-                candidate->reason = SYNTRA_REAPER_REASON_NONE;
-                candidate_inserted = 0;
+                candidates[candidate_index].state =
+                    SYNTRA_REAPER_CANDIDATE_QUARANTINED;
+                candidates[candidate_index].reason =
+                    SYNTRA_REAPER_REASON_STALE_HANDLE;
             }
-            else
+            else if (snapshot.state != THREAD_TERMINATED)
             {
-                status = scheduler_get_thread_snapshot_by_handle(
-                    event.handle, &snapshot);
-                if (status != SYNTRA_STATUS_OK)
-                {
-                    candidate->state = SYNTRA_REAPER_CANDIDATE_QUARANTINED;
-                    candidate->reason = SYNTRA_REAPER_REASON_STALE_HANDLE;
-                }
-                else if (snapshot.state != THREAD_TERMINATED)
-                {
-                    candidate->state = SYNTRA_REAPER_CANDIDATE_QUARANTINED;
-                    candidate->reason =
-                        SYNTRA_REAPER_REASON_TERMINAL_STATE_MISMATCH;
-                }
+                candidates[candidate_index].state =
+                    SYNTRA_REAPER_CANDIDATE_QUARANTINED;
+                candidates[candidate_index].reason =
+                    SYNTRA_REAPER_REASON_TERMINAL_STATE_MISMATCH;
             }
         }
 
@@ -286,15 +329,13 @@ syntra_status_t thread_reaper_dispatch(
         {
             if (candidate_inserted)
             {
-                --candidate_count;
-                candidates[candidate_count].proof.handle.slot = 0U;
-                candidates[candidate_count].proof.handle.generation = 0U;
-                candidates[candidate_count].proof.sequence = 0U;
-                candidates[candidate_count].proof.terminal = 0U;
-                candidates[candidate_count].state =
-                    SYNTRA_REAPER_CANDIDATE_FREE;
-                candidates[candidate_count].reason =
-                    SYNTRA_REAPER_REASON_NONE;
+                if (candidate_appended)
+                {
+                    --candidate_count;
+                    reaper_clear_candidate(candidate_index);
+                }
+                else
+                    candidates[candidate_index] = previous_candidate;
             }
             else if (candidate_modified)
             {
@@ -308,7 +349,7 @@ syntra_status_t thread_reaper_dispatch(
 
         if (candidate_inserted)
         {
-            if (candidates[candidate_count - 1U].state ==
+            if (candidates[candidate_index].state ==
                 SYNTRA_REAPER_CANDIDATE_QUEUED)
                 ++reaper_stats.queued;
             else
@@ -323,8 +364,6 @@ syntra_status_t thread_reaper_dispatch(
                 ++reaper_stats.quarantined;
             }
         }
-        else
-            ++reaper_stats.discarded_nonterminal;
 
         ++reaper_stats.acknowledged_events;
         ++processed;
