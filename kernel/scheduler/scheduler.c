@@ -827,6 +827,16 @@ static syntra_status_t scheduler_validate_unlocked(void)
         const syntra_thread_t *thread;
         if (!scheduler_slot_is_active(i))
         {
+            if (reserved_thread_valid &&
+                i == reserved_thread.handle.slot)
+            {
+                if (slot_states[i] != SYNTRA_THREAD_SLOT_RESERVED ||
+                    slot_generations[i] !=
+                        reserved_thread.handle.generation ||
+                    !scheduler_thread_record_is_clear(&threads[i]))
+                    return SYNTRA_STATUS_ERROR;
+                continue;
+            }
             if ((slot_states[i] != SYNTRA_THREAD_SLOT_FREE &&
                  slot_states[i] != SYNTRA_THREAD_SLOT_EXHAUSTED) ||
                 slot_generations[i] == 0U ||
@@ -952,7 +962,8 @@ static syntra_status_t scheduler_validate_unlocked(void)
 
     if (reserved_thread_valid)
     {
-        if (reserved_thread.handle.slot != thread_count ||
+        if (reserved_thread.handle.slot >= SYNTRA_MAX_THREADS ||
+            reserved_thread.handle.slot > thread_count ||
             reserved_thread.handle.generation == 0U ||
             slot_states[reserved_thread.handle.slot] !=
                 SYNTRA_THREAD_SLOT_RESERVED ||
@@ -1201,11 +1212,6 @@ syntra_status_t scheduler_reserve_owned_thread(
     }
     if (scheduler_find_slot(id) >= 0)
         goto done;
-    if (thread_count >= SYNTRA_MAX_THREADS)
-    {
-        status = SYNTRA_STATUS_OUT_OF_MEMORY;
-        goto done;
-    }
     if (scheduler_stack_range_conflicts(base, stack_size))
         goto done;
 
@@ -1288,7 +1294,7 @@ syntra_status_t scheduler_publish_owned_thread(syntra_thread_handle_t handle)
 
     if (!reserved_thread_valid ||
         !scheduler_thread_handle_equal(handle, reserved_thread.handle) ||
-        handle.slot != thread_count ||
+        handle.slot > thread_count ||
         handle.slot >= SYNTRA_MAX_THREADS ||
         slot_states[handle.slot] != SYNTRA_THREAD_SLOT_RESERVED ||
         slot_generations[handle.slot] != handle.generation ||
