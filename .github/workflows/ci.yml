@@ -35,6 +35,7 @@ on:
       - feat/d357-safe-thread-slot-reuse-v1
       - test/d358-reused-slot-abort-coverage-v1
       - test/d359-owned-thread-rollback-fault-injection-v1
+      - test/d3510-generation-exhaustion-boundary-v1
 
   pull_request:
     branches:
@@ -47,6 +48,7 @@ on:
       - feat/d356-generation-safe-tcb-retirement-v1
       - feat/d357-safe-thread-slot-reuse-v1
       - test/d358-reused-slot-abort-coverage-v1
+      - test/d359-owned-thread-rollback-fault-injection-v1
 
   # Run a health check every day at 02:00 UTC (09:00 Vietnam time).
   schedule:
