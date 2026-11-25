@@ -169,6 +169,12 @@ add_executable(thread_reaper_context_test
 target_link_libraries(thread_reaper_context_test PRIVATE syntra_kernel)
 add_test(NAME ThreadReaperExecutionContextV1Test COMMAND thread_reaper_context_test)
 
+add_executable(thread_reaper_reclaim_test
+    tests/scheduler/thread_reaper_reclaim_test.c
+)
+target_link_libraries(thread_reaper_reclaim_test PRIVATE syntra_kernel)
+add_test(NAME ThreadReaperSafeReclamationV1Test COMMAND thread_reaper_reclaim_test)
+
 # Memory Region Manager Test
 add_executable(memory_region_test
     tests/memory/memory_region_test.c
