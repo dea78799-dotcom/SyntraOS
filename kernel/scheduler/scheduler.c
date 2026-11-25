@@ -102,6 +102,9 @@ static unsigned int switch_event_head;
 static unsigned int switch_event_tail;
 static unsigned int switch_event_count;
 static uint64_t switch_sequence;
+#ifdef SYNTRA_HOST_TESTING
+static int test_fail_next_switch_event_ack;
+#endif
 /*
  * Field-wise TCB copy for the freestanding image: avoid whole-struct
  * assignments that may be lowered to an unavailable libc memcpy.
@@ -336,6 +339,9 @@ static syntra_status_t scheduler_init_unlocked(void)
     switch_event_tail = 0U;
     switch_event_count = 0U;
     switch_sequence = 0U;
+#ifdef SYNTRA_HOST_TESTING
+    test_fail_next_switch_event_ack = 0;
+#endif
 
     for (unsigned int i = 0U; i < SYNTRA_MAX_THREADS; ++i)
     {
@@ -371,6 +377,15 @@ syntra_status_t scheduler_test_seed_free_slot_generation(
 
     syntra_irq_restore(irq);
     return status;
+}
+
+/* One-shot acknowledgement failure injection; host test builds only. */
+syntra_status_t scheduler_test_fail_next_switch_event_ack(void)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    test_fail_next_switch_event_ack = 1;
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
 }
 #endif
 
@@ -1666,6 +1681,15 @@ syntra_status_t scheduler_ack_switch_away_event(
         syntra_irq_restore(irq);
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     }
+
+#ifdef SYNTRA_HOST_TESTING
+    if (test_fail_next_switch_event_ack)
+    {
+        test_fail_next_switch_event_ack = 0;
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_ERROR;
+    }
+#endif
 
     switch_event_head =
         (switch_event_head + 1U) % SYNTRA_SWITCH_COMPLETION_CAPACITY;
