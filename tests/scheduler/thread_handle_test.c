@@ -23,18 +23,33 @@ int main(void)
     syntra_thread_handle_t invalid;
     syntra_thread_t snapshot;
     syntra_thread_t before;
+    syntra_thread_slot_state_t slot_state;
+    uint32_t slot_generation = 0U;
 
     check("scheduler initializes", scheduler_init() == SYNTRA_STATUS_OK);
+    check("fresh scheduler has zero active threads",
+        scheduler_get_active_thread_count() == 0U);
+    check("first slot starts FREE with generation one",
+        scheduler_get_slot_metadata(0U, &slot_state, &slot_generation) ==
+            SYNTRA_STATUS_OK && slot_state == SYNTRA_THREAD_SLOT_FREE &&
+        slot_generation == 1U);
     check("handle create commits first thread",
         scheduler_create_thread_with_handle(101U, 1U, entry, NULL,
             stack_a, sizeof(stack_a), &first) == SYNTRA_STATUS_OK);
     check("first handle has slot zero and nonzero generation",
         first.slot == 0U && first.generation == 1U);
+    check("first publication activates slot zero",
+        scheduler_get_slot_metadata(0U, &slot_state, &slot_generation) ==
+            SYNTRA_STATUS_OK && slot_state == SYNTRA_THREAD_SLOT_ACTIVE &&
+        slot_generation == first.generation);
     check("handle create commits second thread",
         scheduler_create_thread_with_handle(102U, 1U, entry, NULL,
             stack_b, sizeof(stack_b), &second) == SYNTRA_STATUS_OK);
     check("second handle identifies the second slot",
         second.slot == 1U && second.generation == 1U);
+    check("high-water and active counts agree before retirement exists",
+        scheduler_get_thread_count() == 2U &&
+        scheduler_get_active_thread_count() == 2U);
     check("equal handles compare both fields",
         scheduler_thread_handle_equal(first, first) &&
         !scheduler_thread_handle_equal(first, second));
