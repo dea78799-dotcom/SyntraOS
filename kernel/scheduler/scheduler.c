@@ -227,7 +227,13 @@ static syntra_status_t scheduler_insert_thread(
     thread->owner_process.generation = 0U;
     thread->has_process_owner = 0U;
 
-    return scheduler_publish_slot_unlocked(slot);
+    reserve_status = scheduler_publish_slot_unlocked(slot);
+    if (reserve_status != SYNTRA_STATUS_OK)
+    {
+        (void)scheduler_abort_slot_unlocked(slot);
+        return reserve_status;
+    }
+    return SYNTRA_STATUS_OK;
 }
 
 static syntra_status_t scheduler_init_unlocked(void)
@@ -1192,6 +1198,10 @@ syntra_status_t scheduler_publish_owned_thread(syntra_thread_handle_t handle)
 
     if (!reserved_thread_valid ||
         !scheduler_thread_handle_equal(handle, reserved_thread.handle) ||
+        handle.slot != thread_count ||
+        handle.slot >= SYNTRA_MAX_THREADS ||
+        slot_states[handle.slot] != SYNTRA_THREAD_SLOT_RESERVED ||
+        slot_generations[handle.slot] != handle.generation ||
         reserved_thread.stack_ownership != SYNTRA_THREAD_STACK_OWNED ||
         reserved_thread.stack_allocation.generation == 0U ||
         thread_count >= SYNTRA_MAX_THREADS)
