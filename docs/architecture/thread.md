@@ -21,9 +21,10 @@ The current TCB stores:
 - Saved architecture CPU-context pointer.
 - Optional generation-aware process owner handle.
 
-The scheduler table is fixed at 32 entries. Registered stack ranges remain
-reserved until scheduler reset. Thread records and stack resources are not
-currently reaped or reused.
+The scheduler table is fixed at 32 entries. Fully reaped slots may be reused
+with an advanced generation; slots at generation UINT32_MAX are permanently
+EXHAUSTED. Only explicitly allocator-owned process kernel stacks participate
+in the reaper reclamation path. Borrowed stacks remain caller-owned.
 
 ## 3. Thread states
 
@@ -51,11 +52,11 @@ each thread independently satisfies the switch-away and ownership gates.
 
 ## 5. Resource ownership
 
-Thread creation currently accepts caller-owned buffers. The scheduler records
-their ranges but does not allocate or free them. There is no allocator token or
-resource-release callback for kernel stacks, user stacks, or CPU contexts.
-The kernel must not free a resource unless ownership was explicitly transferred
-to a compatible allocator.
+Thread creation supports caller-provided buffers and a process-owned kernel
+stack path backed by Memory V2. The reaper releases only the exact committed
+allocation after switch-away proof and owner validation. Borrowed stacks,
+user-stack resources, and arbitrary CPU-context storage are not reclaimed by
+this path.
 
 ## 6. Next lifecycle design
 
