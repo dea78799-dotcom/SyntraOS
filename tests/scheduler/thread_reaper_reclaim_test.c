@@ -9,7 +9,6 @@
 
 static unsigned int failures;
 static _Alignas(16) unsigned char borrowed_stack[4096];
-static _Alignas(16) unsigned char reused_stack[4096];
 static int borrowed_context_marker;
 
 static void test_entry(void *argument)
@@ -184,9 +183,9 @@ int main(void)
             stats.retired == 1U && stats.retirement_failures == 0U);
     }
     check("Create thread in retired slot using a fresh stack",
-        scheduler_create_thread_with_handle(
-            954U, 2U, test_entry, NULL, reused_stack,
-            sizeof(reused_stack), &reused_handle) == SYNTRA_STATUS_OK);
+        process_thread_create_kernel_owned_with_handle(
+            process, 954U, 2U, test_entry, NULL, 4096U,
+            &reused_handle) == SYNTRA_STATUS_OK);
     check("Slot reuse preserves index and advances generation",
         reused_handle.slot == owned_handle.slot &&
         reused_handle.generation == owned_handle.generation + 1U);
@@ -199,6 +198,9 @@ int main(void)
         scheduler_get_thread_snapshot_by_handle(
             reused_handle, &owned_after) == SYNTRA_STATUS_OK &&
         owned_after.thread_id == 954U &&
+        owned_after.has_process_owner == 1U &&
+        owned_after.owner_process.slot == process.slot &&
+        owned_after.owner_process.generation == process.generation &&
         scheduler_thread_handle_equal(owned_after.handle, reused_handle));
     check("High-water count stays stable while active count increases",
         scheduler_get_thread_count() == 2U &&
