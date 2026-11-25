@@ -4,6 +4,24 @@
 #include "../arch/irq.h"
 #include "../memory/memory.h"
 
+#ifdef SYNTRA_HOST_TESTING
+/* Host-only fault injection; never compiled into the ARM64 kernel image. */
+static unsigned int process_thread_test_failure_stage;
+
+void process_thread_test_fail_at(unsigned int stage)
+{
+    process_thread_test_failure_stage = stage;
+}
+
+static int process_thread_test_should_fail(unsigned int stage)
+{
+    if (process_thread_test_failure_stage != stage)
+        return 0;
+    process_thread_test_failure_stage = 0U;
+    return 1;
+}
+#endif
+
 static int process_thread_handle_is_structurally_valid(
     syntra_process_handle_t handle)
 {
@@ -165,6 +183,13 @@ syntra_status_t process_thread_create_kernel_owned_with_handle(
     if (status != SYNTRA_STATUS_OK)
         goto rollback;
     allocation_created = 1;
+#ifdef SYNTRA_HOST_TESTING
+    if (process_thread_test_should_fail(1U))
+    {
+        status = SYNTRA_STATUS_ERROR;
+        goto rollback;
+    }
+#endif
 
     status = scheduler_reserve_owned_thread(
         owner, thread_id, priority, entry, argument,
@@ -172,6 +197,13 @@ syntra_status_t process_thread_create_kernel_owned_with_handle(
     if (status != SYNTRA_STATUS_OK)
         goto rollback;
     reservation_created = 1;
+#ifdef SYNTRA_HOST_TESTING
+    if (process_thread_test_should_fail(2U))
+    {
+        status = SYNTRA_STATUS_ERROR;
+        goto rollback;
+    }
+#endif
 
     allocation_owner.slot = reserved_handle.slot;
     allocation_owner.generation = reserved_handle.generation;
@@ -180,15 +212,36 @@ syntra_status_t process_thread_create_kernel_owned_with_handle(
     if (status != SYNTRA_STATUS_OK)
         goto rollback;
     allocation_reserved = 1;
+#ifdef SYNTRA_HOST_TESTING
+    if (process_thread_test_should_fail(3U))
+    {
+        status = SYNTRA_STATUS_ERROR;
+        goto rollback;
+    }
+#endif
 
     status = scheduler_attach_owned_stack(reserved_handle, allocation);
     if (status != SYNTRA_STATUS_OK)
         goto rollback;
+#ifdef SYNTRA_HOST_TESTING
+    if (process_thread_test_should_fail(4U))
+    {
+        status = SYNTRA_STATUS_ERROR;
+        goto rollback;
+    }
+#endif
 
     status = memory_commit_thread_allocation(allocation, allocation_owner);
     if (status != SYNTRA_STATUS_OK)
         goto rollback;
     allocation_committed = 1;
+#ifdef SYNTRA_HOST_TESTING
+    if (process_thread_test_should_fail(5U))
+    {
+        status = SYNTRA_STATUS_ERROR;
+        goto rollback;
+    }
+#endif
 
     status = scheduler_publish_owned_thread(reserved_handle);
     if (status != SYNTRA_STATUS_OK)
