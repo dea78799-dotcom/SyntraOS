@@ -125,6 +125,7 @@ int main(void)
     syntra_memory_info_t memory_before;
     syntra_memory_info_t memory_after;
     unsigned int processed = 0U;
+    int exhaustion_reusable_candidate_index = -1;
 
     check("Initialize memory", memory_init() == SYNTRA_STATUS_OK);
     check("Initialize process manager", process_init() == SYNTRA_STATUS_OK);
@@ -445,6 +446,10 @@ int main(void)
         check("Retire terminal-generation TCB without wrapping",
             thread_reaper_retire_candidate(
                 (unsigned int)exhaustion_candidate_index) == SYNTRA_STATUS_OK);
+        exhaustion_reusable_candidate_index =
+            find_reaper_candidate_index(exhaustion_handle);
+        check("Retired terminal-generation candidate remains identifiable",
+            exhaustion_reusable_candidate_index >= 0);
         check("UINT32_MAX generation becomes permanently EXHAUSTED",
             scheduler_get_slot_metadata(exhaustion_slot, &exhaustion_state,
                 &exhaustion_generation) == SYNTRA_STATUS_OK &&
@@ -480,7 +485,7 @@ int main(void)
         unsigned int candidate_count_before = 0U;
         unsigned int reusable_scheduler_slot = UINT32_MAX;
         int reusable_candidate_index =
-            find_reaper_candidate_index(exhaustion_handle);
+            exhaustion_reusable_candidate_index;
 
         check("Locate retired candidate record for reuse",
             reusable_candidate_index >= 0);
