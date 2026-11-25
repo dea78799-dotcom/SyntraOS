@@ -128,3 +128,38 @@ Numeric thread IDs remain compatibility identifiers and must not be used as slot
 ## 9. Rollout boundary
 
 D3.5.4 is design-only. No slot reuse, TCB retirement, generation increment, or candidate compaction is implemented by this PR. Implementation starts only after the source audit and compatibility decisions are reviewed. D3.5.3's append-only behavior remains authoritative until then.
+
+
+## 10. Source audit — implementation constraints
+
+Audit performed against the D3.5.4 parent branch on 2026-11-25.
+
+### Confirmed scheduler assumptions
+
+- `thread_count` is currently both the number of published TCBs and the exclusive upper bound for every scheduler scan. The table is contiguous and append-only today. Preserve its existing getter as a high-water bound; introduce a separate active count rather than changing its meaning.
+- `scheduler_find_slot()` currently scans every index below `thread_count` and compares numeric IDs. It must ignore non-ACTIVE slots.
+- `scheduler_resolve_handle_unlocked()` currently accepts any matching TCB in the high-water range. It must additionally require slot state ACTIVE and the per-slot generation to match.
+- Stack-overlap checks, scheduling scans, state validation, process-owned thread enumeration, process termination, and snapshot lookup all iterate to `thread_count`. Each must skip FREE and EXHAUSTED slots.
+- Round-robin selection currently uses modulo `thread_count`. It must retain the high-water scan bound while skipping holes; it must not modulo the active count.
+- The direct metadata/thread creation path currently writes at `threads[thread_count]` and increments the count. It must reserve a FREE slot or append a new slot through one shared helper.
+- The owned-thread transaction currently assigns `reserved_thread.handle.slot = thread_count`, validates that exact append-only assumption, and publishes into `threads[thread_count]`. This is a mandatory conversion point: reservation must mark a specific slot RESERVED, and publish/abort must resolve that exact reservation.
+- The scheduler's single pending switch ticket and 128-entry switch-event FIFO are separate from TCB occupancy. Retirement must scan the entire live FIFO range for an exact handle+generation match; checking only the head is insufficient.
+- Switch-event acknowledgement is FIFO-head-only. Retirement must not consume events on behalf of the reaper.
+
+### Reaper and process constraints
+
+- Reaper candidate storage is a fixed 128-entry append-only array indexed by callers. Dispatch rollback assumes a just-appended tail entry. Candidate compaction would invalidate indices and is not acceptable.
+- Candidate state already includes QUEUED, QUARANTINED, and RECLAIMED, but not RETIRED. Candidate count currently acts as a high-water count and does not reclaim indices.
+- Reaper dispatch acknowledges terminal and nonterminal switch events after recording or classifying them. The scheduler retirement gate still needs to defend against any exact old-generation event that remains queued.
+- Process ownership is stored in each TCB as an exact process slot+generation pair. Process termination and process-thread enumeration scan the scheduler high-water range and therefore must ignore retired holes.
+- The process manager has its own generation-aware slot table. This phase must not alter process-slot lifecycle or conflate process and thread generations.
+
+### Required implementation order
+
+1. Add per-thread-slot state and generation metadata, plus an active-thread count while retaining the high-water meaning of `thread_count`.
+2. Convert every TCB creation path—including direct insertion and the unpublished owned-thread transaction—to a common reserve/publish/abort path.
+3. Convert every scheduler, stack-conflict, validation, and process-owned scan to skip non-ACTIVE slots.
+4. Add exact-proof TCB retirement with pending-ticket and full-FIFO exclusion, then expose it only through the reaper.
+5. Add tests for slot holes, stale handles/events/candidates, generation exhaustion, reservation abort, and the unchanged high-water getter before enabling slot reuse.
+
+No scheduler behavior is changed by this audit commit. The implementation remains gated until all five steps and the full host/ARM64 CI matrix pass.
