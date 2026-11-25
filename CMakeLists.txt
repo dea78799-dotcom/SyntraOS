@@ -81,6 +81,10 @@ add_library(syntra_kernel STATIC
     kernel/input/input.c
 )
 
+# Fault injection is compiled only into the host test library. The separate
+# freestanding ARM64 target does not define this macro or include these hooks.
+target_compile_definitions(syntra_kernel PRIVATE SYNTRA_HOST_TESTING=1)
+
 target_include_directories(syntra_kernel PUBLIC
 
     kernel/core

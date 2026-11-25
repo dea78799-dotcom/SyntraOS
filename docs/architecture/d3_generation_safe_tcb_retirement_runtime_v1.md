@@ -90,3 +90,22 @@ The scheduler remains single-core and IRQ-serialized. This change does not add S
 - Confirm the retired slot remains FREE with its generation unchanged.
 - Re-run scheduler validation, then let the existing valid owned-thread creation test reuse and publish the same hole.
 - The internal staged-reservation rollback remains covered by the coordinator's cleanup path; it is not exposed as a public scheduler API solely for testing.
+
+
+## D3.5.9 — Owned-thread transaction rollback fault injection
+
+The host test build defines `SYNTRA_HOST_TESTING` for the host-only `syntra_kernel` library. This enables a one-shot, internal fault-injection seam in the process/thread coordinator. The hook is not declared in a public kernel header and is not compiled into the separate freestanding ARM64 ELF target.
+
+The reaper reclamation integration test injects a failure after each successful transaction stage:
+
+1. STAGED stack allocation, before TCB reservation;
+2. unpublished TCB reservation, before allocation-owner binding;
+3. allocation-owner binding, before scheduler stack attachment;
+4. scheduler stack attachment, before allocation commit;
+5. THREAD_OWNED allocation commit, before READY publication.
+
+For every injected failure, the coordinator must return the injected error after successful cleanup. Tests verify that active allocation count and used blocks return to their pre-call values, allocator and scheduler validation remain successful, the retired slot remains FREE with the same generation, active scheduler thread count is unchanged, and the process-owned thread count is unchanged.
+
+The fifth case specifically verifies the post-commit rollback path: the unpublished TCB reservation is aborted first, then the exact THREAD_OWNED allocation is released using its owner token. Earlier cases exercise staged and RESERVED allocation cleanup. The hook is one-shot so a test failure cannot leak into a later transaction.
+
+This is deterministic host fault injection, not a production runtime failure API. It does not claim SMP coverage; the coordinator remains serialized by local IRQ masking on the supported single-core design.

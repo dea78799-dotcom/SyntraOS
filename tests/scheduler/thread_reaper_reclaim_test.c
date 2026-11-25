@@ -7,6 +7,15 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#define PROCESS_THREAD_TEST_FAIL_AFTER_STAGED_ALLOCATION 1U
+#define PROCESS_THREAD_TEST_FAIL_AFTER_TCB_RESERVATION 2U
+#define PROCESS_THREAD_TEST_FAIL_AFTER_OWNER_BIND 3U
+#define PROCESS_THREAD_TEST_FAIL_AFTER_STACK_ATTACH 4U
+#define PROCESS_THREAD_TEST_FAIL_AFTER_ALLOCATION_COMMIT 5U
+
+/* Defined only by the host-test build of syntra_kernel. */
+extern void process_thread_test_fail_at(unsigned int stage);
+
 static unsigned int failures;
 static _Alignas(16) unsigned char borrowed_stack[4096];
 static int borrowed_context_marker;
@@ -26,6 +35,57 @@ static void check(const char *name, int condition)
     else
         printf("PASS: %s\n", name);
 }
+
+static void verify_owned_thread_creation_rollback(
+    syntra_process_handle_t process,
+    unsigned int stage,
+    unsigned int thread_id,
+    unsigned int expected_slot,
+    uint32_t expected_generation,
+    const char *stage_name)
+{
+    syntra_memory_info_t before;
+    syntra_memory_info_t after;
+    syntra_thread_slot_state_t slot_state = SYNTRA_THREAD_SLOT_EXHAUSTED;
+    uint32_t slot_generation = 0U;
+    unsigned int process_threads_before = 0U;
+    unsigned int process_threads_after = 0U;
+    unsigned int active_threads_before = scheduler_get_active_thread_count();
+    syntra_thread_handle_t failed_handle = {0U, 0U};
+    syntra_status_t status;
+
+    memory_get_info(&before);
+    check("Capture process thread count before rollback injection",
+        process_thread_get_count(process, &process_threads_before) ==
+            SYNTRA_STATUS_OK);
+
+    process_thread_test_fail_at(stage);
+    status = process_thread_create_kernel_owned_with_handle(
+        process, thread_id, 2U, test_entry, NULL, 4096U, &failed_handle);
+    check(stage_name, status == SYNTRA_STATUS_ERROR);
+
+    memory_get_info(&after);
+    check("Rollback restores active allocation count",
+        after.active_allocations == before.active_allocations);
+    check("Rollback restores used memory blocks",
+        after.used_blocks == before.used_blocks);
+    check("Rollback leaves allocator internally valid",
+        memory_validate() == SYNTRA_STATUS_OK);
+    check("Rollback preserves retired slot state and generation",
+        scheduler_get_slot_metadata(expected_slot, &slot_state,
+            &slot_generation) == SYNTRA_STATUS_OK &&
+        slot_state == SYNTRA_THREAD_SLOT_FREE &&
+        slot_generation == expected_generation);
+    check("Rollback restores scheduler active-thread count",
+        scheduler_get_active_thread_count() == active_threads_before);
+    check("Rollback leaves scheduler internally valid",
+        scheduler_validate() == SYNTRA_STATUS_OK);
+    check("Rollback preserves process-owned thread count",
+        process_thread_get_count(process, &process_threads_after) ==
+            SYNTRA_STATUS_OK &&
+        process_threads_after == process_threads_before);
+}
+
 
 int main(void)
 {
@@ -197,6 +257,27 @@ int main(void)
         check("Rejected creation leaves scheduler invariants intact",
             scheduler_validate() == SYNTRA_STATUS_OK);
     }
+    verify_owned_thread_creation_rollback(process,
+        PROCESS_THREAD_TEST_FAIL_AFTER_STAGED_ALLOCATION, 960U,
+        owned_handle.slot, owned_handle.generation + 1U,
+        "Inject failure after staged stack allocation");
+    verify_owned_thread_creation_rollback(process,
+        PROCESS_THREAD_TEST_FAIL_AFTER_TCB_RESERVATION, 961U,
+        owned_handle.slot, owned_handle.generation + 1U,
+        "Inject failure after TCB reservation");
+    verify_owned_thread_creation_rollback(process,
+        PROCESS_THREAD_TEST_FAIL_AFTER_OWNER_BIND, 962U,
+        owned_handle.slot, owned_handle.generation + 1U,
+        "Inject failure after allocation owner binding");
+    verify_owned_thread_creation_rollback(process,
+        PROCESS_THREAD_TEST_FAIL_AFTER_STACK_ATTACH, 963U,
+        owned_handle.slot, owned_handle.generation + 1U,
+        "Inject failure after stack descriptor attachment");
+    verify_owned_thread_creation_rollback(process,
+        PROCESS_THREAD_TEST_FAIL_AFTER_ALLOCATION_COMMIT, 964U,
+        owned_handle.slot, owned_handle.generation + 1U,
+        "Inject failure after owned-allocation commit");
+
     check("Create thread in retired slot using a fresh stack",
         process_thread_create_kernel_owned_with_handle(
             process, 954U, 2U, test_entry, NULL, 4096U,
