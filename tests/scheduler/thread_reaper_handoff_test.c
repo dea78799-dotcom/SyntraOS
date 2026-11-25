@@ -6,6 +6,10 @@
 
 #include <stdio.h>
 
+/* Test-only hook implemented by scheduler.c under SYNTRA_HOST_TESTING. */
+syntra_status_t scheduler_test_enqueue_switch_away_event(
+    syntra_thread_switch_event_t event);
+
 static unsigned int failures;
 
 static _Alignas(16) unsigned char successor_stack[4096];
@@ -42,6 +46,7 @@ int main(void)
     syntra_memory_allocation_t allocation;
     syntra_memory_info_t before;
     syntra_memory_info_t after;
+    syntra_thread_switch_event_t duplicate_event;
     void *selected_context = NULL;
     unsigned int processed = 0U;
     unsigned int candidate_count = 0U;
@@ -148,6 +153,35 @@ int main(void)
         allocation.owner.slot == owned_handle.slot &&
         allocation.owner.generation == owned_handle.generation);
 
+    check("Capture terminal proof for duplicate replay",
+        thread_reaper_get_candidate(0U, &candidate) == SYNTRA_STATUS_OK &&
+        candidate.state == SYNTRA_REAPER_CANDIDATE_QUEUED);
+    duplicate_event = candidate.proof;
+    check("Host fixture requeues the exact terminal proof",
+        scheduler_test_enqueue_switch_away_event(duplicate_event) ==
+            SYNTRA_STATUS_OK);
+    processed = 0U;
+    check("Duplicate terminal proof is acknowledged exactly once",
+        thread_reaper_dispatch(1U, &processed) == SYNTRA_STATUS_OK &&
+        processed == 1U);
+    check("Duplicate proof leaves the original candidate unchanged",
+        thread_reaper_get_candidate_count(&candidate_count) ==
+            SYNTRA_STATUS_OK && candidate_count == 1U &&
+        thread_reaper_get_candidate(0U, &candidate) == SYNTRA_STATUS_OK &&
+        candidate.state == SYNTRA_REAPER_CANDIDATE_QUEUED &&
+        candidate.reason == SYNTRA_REAPER_REASON_NONE &&
+        scheduler_thread_handle_equal(
+            candidate.proof.handle, duplicate_event.handle) &&
+        candidate.proof.sequence == duplicate_event.sequence &&
+        candidate.proof.terminal == duplicate_event.terminal);
+    check("Duplicate dispatch increments only duplicate and ACK accounting",
+        thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
+        stats.duplicate_events == 1U && stats.queued == 1U &&
+        stats.acknowledged_events == 4U);
+    check("Duplicate FIFO event is fully consumed",
+        scheduler_peek_switch_away_event(&duplicate_event) ==
+            SYNTRA_STATUS_ERROR);
+
     check("Block successor to produce a nonterminal proof",
         scheduler_block_current() == SYNTRA_STATUS_OK);
     check("Prepare later thread context",
@@ -168,7 +202,8 @@ int main(void)
     check("Dispatcher statistics distinguish terminal and nonterminal events",
         thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
         stats.queued == 1U && stats.discarded_nonterminal == 3U &&
-        stats.acknowledged_events == 4U);
+        stats.duplicate_events == 1U &&
+        stats.acknowledged_events == 5U);
 
     check("Terminate final runnable thread with no successor",
         scheduler_terminate_current() == SYNTRA_STATUS_OK);

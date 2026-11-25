@@ -387,6 +387,34 @@ syntra_status_t scheduler_test_fail_next_switch_event_ack(void)
     syntra_irq_restore(irq);
     return SYNTRA_STATUS_OK;
 }
+
+/*
+ * Reinsert an exact previously observed event to test duplicate-proof
+ * idempotence. This mutation seam exists only in host test builds.
+ */
+syntra_status_t scheduler_test_enqueue_switch_away_event(
+    syntra_thread_switch_event_t event)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+
+    if (!scheduler_initialized || event.handle.generation == 0U ||
+        event.sequence == 0U || event.terminal > 1U ||
+        switch_event_count >= SYNTRA_SWITCH_COMPLETION_CAPACITY)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    switch_events[switch_event_tail].handle = event.handle;
+    switch_events[switch_event_tail].sequence = event.sequence;
+    switch_events[switch_event_tail].terminal = event.terminal;
+    switch_event_tail =
+        (switch_event_tail + 1U) % SYNTRA_SWITCH_COMPLETION_CAPACITY;
+    ++switch_event_count;
+
+    syntra_irq_restore(irq);
+    return SYNTRA_STATUS_OK;
+}
 #endif
 
 static syntra_status_t scheduler_add_thread_unlocked(

@@ -40,6 +40,7 @@ on:
       - test/d3512-reaper-candidate-ack-rollback-v1
       - test/d3513-reaper-full-table-fifo-preservation-v1
       - test/d3514-nonterminal-event-capacity-v1
+      - test/d3515-duplicate-terminal-event-idempotence-v1
 
   pull_request:
     branches:
@@ -57,6 +58,8 @@ on:
       - feat/d3511-reaper-retired-candidate-reuse-v1
       - test/d3512-reaper-candidate-ack-rollback-v1
       - test/d3513-reaper-full-table-fifo-preservation-v1
+      - test/d3514-nonterminal-event-capacity-v1
+      - test/d3515-duplicate-terminal-event-idempotence-v1
 
   # Run a health check every day at 02:00 UTC (09:00 Vietnam time).
   schedule:

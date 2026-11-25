@@ -199,3 +199,19 @@ terminal proof, and reclaims its owned stack before retiring its TCB. This
 cleanup keeps later integration checks isolated; it is not part of the
 nonterminal-event accounting assertion. Production dispatch behavior is
 unchanged.
+
+
+## D3.5.15 — Duplicate terminal proof replay is idempotent
+
+A host-only scheduler fixture re-enqueues the exact terminal switch-away proof
+after the reaper has already accepted it into a QUEUED candidate. Dispatch
+recognizes the matching handle, sequence, and terminal intent as a duplicate,
+acknowledges the replay, and increments duplicate/acknowledgement statistics
+without allocating or modifying a candidate. The integration test verifies
+that candidate identity, proof, state, reason, and table high-water count are
+unchanged, while `duplicate_events` and `acknowledged_events` each increase
+exactly once.
+
+The event replay hook is compiled only with `SYNTRA_HOST_TESTING` and is
+excluded from the freestanding ARM64 kernel. Production duplicate handling is
+not changed by this test.
