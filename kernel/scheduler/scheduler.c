@@ -135,12 +135,30 @@ static syntra_status_t scheduler_reserve_slot_unlocked(uint32_t *slot_out)
 
     if (slot_out == NULL)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    /*
+     * Reuse only fully retired FREE holes below the high-water mark.
+     * EXHAUSTED slots are permanent and RESERVED slots are never candidates.
+     */
+    for (slot = 0U; slot < thread_count; ++slot)
+    {
+        if (slot_states[slot] == SYNTRA_THREAD_SLOT_FREE &&
+            slot_generations[slot] != 0U &&
+            scheduler_thread_record_is_clear(&threads[slot]))
+        {
+            slot_states[slot] = SYNTRA_THREAD_SLOT_RESERVED;
+            *slot_out = slot;
+            return SYNTRA_STATUS_OK;
+        }
+    }
+
     if (thread_count >= SYNTRA_MAX_THREADS)
         return SYNTRA_STATUS_OUT_OF_MEMORY;
 
     slot = (uint32_t)thread_count;
     if (slot_states[slot] != SYNTRA_THREAD_SLOT_FREE ||
-        slot_generations[slot] == 0U)
+        slot_generations[slot] == 0U ||
+        !scheduler_thread_record_is_clear(&threads[slot]))
         return SYNTRA_STATUS_ERROR;
 
     slot_states[slot] = SYNTRA_THREAD_SLOT_RESERVED;
@@ -150,13 +168,14 @@ static syntra_status_t scheduler_reserve_slot_unlocked(uint32_t *slot_out)
 
 static syntra_status_t scheduler_publish_slot_unlocked(uint32_t slot)
 {
-    if (slot >= SYNTRA_MAX_THREADS || slot != thread_count ||
+    if (slot >= SYNTRA_MAX_THREADS || slot > thread_count ||
         slot_states[slot] != SYNTRA_THREAD_SLOT_RESERVED ||
         slot_generations[slot] == 0U)
         return SYNTRA_STATUS_ERROR;
 
     slot_states[slot] = SYNTRA_THREAD_SLOT_ACTIVE;
-    ++thread_count;
+    if (slot == thread_count)
+        ++thread_count;
     ++active_thread_count;
     return SYNTRA_STATUS_OK;
 }
@@ -169,11 +188,12 @@ static int scheduler_slot_is_active(unsigned int slot)
 
 static syntra_status_t scheduler_abort_slot_unlocked(uint32_t slot)
 {
-    if (slot >= SYNTRA_MAX_THREADS || slot != thread_count ||
+    if (slot >= SYNTRA_MAX_THREADS || slot > thread_count ||
         slot_states[slot] != SYNTRA_THREAD_SLOT_RESERVED)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
     /* An unpublished reservation never exposes its generation to callers. */
+    scheduler_clear_thread_record(&threads[slot]);
     slot_states[slot] = SYNTRA_THREAD_SLOT_FREE;
     return SYNTRA_STATUS_OK;
 }
@@ -807,6 +827,16 @@ static syntra_status_t scheduler_validate_unlocked(void)
         const syntra_thread_t *thread;
         if (!scheduler_slot_is_active(i))
         {
+            if (reserved_thread_valid &&
+                i == reserved_thread.handle.slot)
+            {
+                if (slot_states[i] != SYNTRA_THREAD_SLOT_RESERVED ||
+                    slot_generations[i] !=
+                        reserved_thread.handle.generation ||
+                    !scheduler_thread_record_is_clear(&threads[i]))
+                    return SYNTRA_STATUS_ERROR;
+                continue;
+            }
             if ((slot_states[i] != SYNTRA_THREAD_SLOT_FREE &&
                  slot_states[i] != SYNTRA_THREAD_SLOT_EXHAUSTED) ||
                 slot_generations[i] == 0U ||
@@ -932,7 +962,8 @@ static syntra_status_t scheduler_validate_unlocked(void)
 
     if (reserved_thread_valid)
     {
-        if (reserved_thread.handle.slot != thread_count ||
+        if (reserved_thread.handle.slot >= SYNTRA_MAX_THREADS ||
+            reserved_thread.handle.slot > thread_count ||
             reserved_thread.handle.generation == 0U ||
             slot_states[reserved_thread.handle.slot] !=
                 SYNTRA_THREAD_SLOT_RESERVED ||
@@ -1181,11 +1212,6 @@ syntra_status_t scheduler_reserve_owned_thread(
     }
     if (scheduler_find_slot(id) >= 0)
         goto done;
-    if (thread_count >= SYNTRA_MAX_THREADS)
-    {
-        status = SYNTRA_STATUS_OUT_OF_MEMORY;
-        goto done;
-    }
     if (scheduler_stack_range_conflicts(base, stack_size))
         goto done;
 
@@ -1268,13 +1294,12 @@ syntra_status_t scheduler_publish_owned_thread(syntra_thread_handle_t handle)
 
     if (!reserved_thread_valid ||
         !scheduler_thread_handle_equal(handle, reserved_thread.handle) ||
-        handle.slot != thread_count ||
+        handle.slot > thread_count ||
         handle.slot >= SYNTRA_MAX_THREADS ||
         slot_states[handle.slot] != SYNTRA_THREAD_SLOT_RESERVED ||
         slot_generations[handle.slot] != handle.generation ||
         reserved_thread.stack_ownership != SYNTRA_THREAD_STACK_OWNED ||
-        reserved_thread.stack_allocation.generation == 0U ||
-        thread_count >= SYNTRA_MAX_THREADS)
+        reserved_thread.stack_allocation.generation == 0U)
         goto done;
 
     expected_owner.slot = handle.slot;

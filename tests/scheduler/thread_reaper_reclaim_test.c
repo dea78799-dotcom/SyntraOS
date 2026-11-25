@@ -36,6 +36,7 @@ int main(void)
     syntra_process_handle_t process = {0U, 0U};
     syntra_thread_handle_t owned_handle = {0U, 0U};
     syntra_thread_handle_t reaper_handle = {0U, 0U};
+    syntra_thread_handle_t reused_handle = {0U, 0U};
     syntra_thread_t owned_before;
     syntra_thread_t owned_after;
     syntra_reaper_candidate_t candidate;
@@ -181,6 +182,31 @@ int main(void)
             thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
             stats.retired == 1U && stats.retirement_failures == 0U);
     }
+    check("Create thread in retired slot using a fresh stack",
+        process_thread_create_kernel_owned_with_handle(
+            process, 954U, 2U, test_entry, NULL, 4096U,
+            &reused_handle) == SYNTRA_STATUS_OK);
+    check("Slot reuse preserves index and advances generation",
+        reused_handle.slot == owned_handle.slot &&
+        reused_handle.generation == owned_handle.generation + 1U);
+    check("Stale handle cannot resolve after slot reuse",
+        scheduler_get_thread_snapshot_by_handle(
+            owned_handle, &owned_after) == SYNTRA_STATUS_INVALID_ARGUMENT &&
+        scheduler_set_thread_state_by_handle(
+            owned_handle, THREAD_RUNNING) == SYNTRA_STATUS_INVALID_ARGUMENT);
+    check("New handle resolves to the reused TCB",
+        scheduler_get_thread_snapshot_by_handle(
+            reused_handle, &owned_after) == SYNTRA_STATUS_OK &&
+        owned_after.thread_id == 954U &&
+        owned_after.has_process_owner == 1U &&
+        owned_after.owner_process.slot == process.slot &&
+        owned_after.owner_process.generation == process.generation &&
+        scheduler_thread_handle_equal(owned_after.handle, reused_handle));
+    check("High-water count stays stable while active count increases",
+        scheduler_get_thread_count() == 2U &&
+        scheduler_get_active_thread_count() == 2U);
+    check("Scheduler validation accepts a reused slot",
+        scheduler_validate() == SYNTRA_STATUS_OK);
     check("Create a BORROWED kernel thread for fail-closed coverage",
         scheduler_create_thread_with_handle(
             953U, 1U, test_entry, NULL, borrowed_stack,

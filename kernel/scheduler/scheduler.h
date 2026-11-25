@@ -98,7 +98,8 @@ syntra_status_t scheduler_add_thread(
 
 /*
  * Handle-first create API. On success, returns the committed slot identity.
- * D1 is append-only: slots are not reused and generation is currently 1.
+ * Fully retired FREE slots may be reused with their advanced generation;
+ * EXHAUSTED slots are permanently excluded.
  */
 syntra_status_t scheduler_create_thread_with_handle(
     unsigned int thread_id,
