@@ -40,6 +40,9 @@ on:
       - test/d3512-reaper-candidate-ack-rollback-v1
       - test/d3513-reaper-full-table-fifo-preservation-v1
       - test/d3514-nonterminal-event-capacity-v1
+      - test/d3515-duplicate-terminal-event-idempotence-v1
+      - test/d3514-nonterminal-event-capacity-v1
+      - test/d3515-duplicate-terminal-event-idempotence-v1
 
   pull_request:
     branches:
