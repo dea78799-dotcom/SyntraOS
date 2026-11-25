@@ -1054,7 +1054,7 @@ static syntra_status_t syntra_arm64_scheduler_context_switch_test(void)
     syntra_uart_puts("Thread switch-away proof dispatcher: PASS candidates=");
     syntra_uart_put_hex(candidate_count);
     syntra_uart_puts(" events=");
-    syntra_uart_put_hex(total_processed_events);
+    syntra_uart_put_hex(scheduler_reaper_dispatch_events);
     syntra_uart_puts("\n");
 
     {
