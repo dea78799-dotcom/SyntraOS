@@ -176,7 +176,7 @@ int main(void)
         stats.acknowledged_events == 4U);
     check("Duplicate FIFO event is fully consumed",
         scheduler_peek_switch_away_event(&duplicate_event) ==
-            SYNTRA_STATUS_INVALID_ARGUMENT);
+            SYNTRA_STATUS_ERROR);
 
     check("Block successor to produce a nonterminal proof",
         scheduler_block_current() == SYNTRA_STATUS_OK);
