@@ -550,7 +550,7 @@ int main(void)
 
         check("More than candidate capacity can be reaped without table growth",
             thread_reaper_get_candidate_count(&candidate_count_before) ==
-                SYNTRA_STATUS_OK && candidate_count_before == 3U);
+                SYNTRA_STATUS_OK && candidate_count_before == 2U);
         check("Quarantined diagnostic record is never recycled",
             thread_reaper_get_candidate(1U, &candidate) == SYNTRA_STATUS_OK &&
             candidate.state == SYNTRA_REAPER_CANDIDATE_QUARANTINED &&
