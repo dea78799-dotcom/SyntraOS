@@ -51,6 +51,32 @@ static unsigned int switch_event_head;
 static unsigned int switch_event_tail;
 static unsigned int switch_event_count;
 static uint64_t switch_sequence;
+/*
+ * Field-wise TCB copy for the freestanding image: avoid whole-struct
+ * assignments that may be lowered to an unavailable libc memcpy.
+ */
+static void scheduler_copy_thread(
+    syntra_thread_t *destination, const syntra_thread_t *source)
+{
+    destination->handle = source->handle;
+    destination->thread_id = source->thread_id;
+    destination->priority = source->priority;
+    destination->state = source->state;
+    destination->entry = source->entry;
+    destination->argument = source->argument;
+    destination->stack_base = source->stack_base;
+    destination->stack_size = source->stack_size;
+    destination->stack_ownership = source->stack_ownership;
+    destination->stack_allocation = source->stack_allocation;
+    destination->user_stack_base = source->user_stack_base;
+    destination->user_stack_size = source->user_stack_size;
+    destination->is_user_thread = source->is_user_thread;
+    destination->switch_away_sequence = source->switch_away_sequence;
+    destination->cpu_context = source->cpu_context;
+    destination->owner_process = source->owner_process;
+    destination->has_process_owner = source->has_process_owner;
+}
+
 
 static int scheduler_find_slot(unsigned int thread_id)
 {
@@ -526,7 +552,7 @@ static syntra_status_t scheduler_get_thread_snapshot_by_handle_unlocked(
     if (slot < 0)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
-    *snapshot = threads[(unsigned int)slot];
+    scheduler_copy_thread(snapshot, &threads[(unsigned int)slot]);
     return SYNTRA_STATUS_OK;
 }
 
@@ -552,7 +578,7 @@ static syntra_status_t scheduler_get_thread_snapshot_unlocked(
     int slot = scheduler_find_slot(thread_id);
     if (slot < 0)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
-    *snapshot = threads[(unsigned int)slot];
+    scheduler_copy_thread(snapshot, &threads[(unsigned int)slot]);
     return SYNTRA_STATUS_OK;
 }
 
@@ -562,7 +588,7 @@ static syntra_status_t scheduler_get_current_snapshot_unlocked(syntra_thread_t *
         return SYNTRA_STATUS_INVALID_ARGUMENT;
     if (!scheduler_initialized || current_slot < 0)
         return SYNTRA_STATUS_ERROR;
-    *snapshot = threads[(unsigned int)current_slot];
+    scheduler_copy_thread(snapshot, &threads[(unsigned int)current_slot]);
     return SYNTRA_STATUS_OK;
 }
 
@@ -1102,7 +1128,7 @@ syntra_status_t scheduler_publish_owned_thread(syntra_thread_handle_t handle)
 
     /* Final visibility point: copy complete TCB, then increment published count. */
     reserved_thread.state = THREAD_READY;
-    threads[thread_count] = reserved_thread;
+    scheduler_copy_thread(&threads[thread_count], &reserved_thread);
     ++thread_count;
     scheduler_clear_reserved_thread();
     reserved_thread_valid = 0;
@@ -1232,7 +1258,7 @@ syntra_status_t scheduler_get_process_thread_snapshot(
         {
             if (found == index)
             {
-                *snapshot = threads[i];
+                scheduler_copy_thread(snapshot, &threads[i]);
                 syntra_irq_restore(irq);
                 return SYNTRA_STATUS_OK;
             }
