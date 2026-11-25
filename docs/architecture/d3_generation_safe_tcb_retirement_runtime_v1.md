@@ -67,3 +67,17 @@ GCC's current documentation for `__atomic` built-ins was checked through Context
 - Process-owned TCB retirement preserves scheduler validation by checking owner metadata before clearing it atomically with ACTIVE-slot removal.
 
 Generation-exhaustion and slot-reuse tests belong to the later slot-reuse stage; no test-only state mutation hook is added here.
+
+
+## D3.5.7 — Safe slot reuse rollout
+
+- Reservation scans FREE slots below the high-water mark before extending it.
+- Only a FREE slot with a nonzero generation and a fully cleared TCB record is eligible.
+- RESERVED, ACTIVE, and EXHAUSTED slots are never selected.
+- Publishing a reused slot increments active count but does not change high-water count; publishing the tail slot advances high-water count.
+- Aborting a reservation clears the TCB record and returns the unpublished slot to FREE without advancing its generation because no handle was published.
+- Process-owned staged reservations may occupy a retired hole; validation recognizes the exact RESERVED slot both below and at the high-water boundary.
+- Retirement increments generation before FREE publication. UINT32_MAX transitions to EXHAUSTED and can never be reused.
+- Stale handles are rejected by exact generation comparison after reuse.
+
+The scheduler remains single-core and IRQ-serialized. This change does not add SMP safety or lock-free behavior.
