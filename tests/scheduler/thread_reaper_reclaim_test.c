@@ -17,7 +17,7 @@
 extern void process_thread_test_fail_at(unsigned int stage);
 extern syntra_status_t scheduler_test_seed_free_slot_generation(
     unsigned int slot, uint32_t generation);
-extern syntra_status_t scheduler_test_fail_next_switch_event_ack(void);
+extern syntra_status_t scheduler_test_fail_next_switch_event_ack(void);\nextern syntra_status_t thread_reaper_test_fill_quarantined(void);
 
 static unsigned int failures;
 static _Alignas(16) unsigned char borrowed_stack[4096];
@@ -689,6 +689,64 @@ int main(void)
             stats.retired == 43U);
         check("Scheduler validates after repeated reaper candidate reuse",
             scheduler_validate() == SYNTRA_STATUS_OK);
+    }
+
+    {
+        syntra_thread_handle_t saturation_handle = {0U, 0U};
+        syntra_thread_switch_event_t expected_event;
+        syntra_thread_switch_event_t pending_event;
+        unsigned int saturation_processed = 77U;
+        unsigned int saturated_count = 0U;
+
+        check("Create owned thread for full-table FIFO preservation",
+            process_thread_create_kernel_owned_with_handle(
+                process, 2000U, 2U, test_entry, NULL, 4096U,
+                &saturation_handle) == SYNTRA_STATUS_OK);
+        check("Run thread for full-table FIFO preservation",
+            scheduler_set_thread_state_by_handle(
+                saturation_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Terminate thread for full-table FIFO preservation",
+            scheduler_terminate_current() == SYNTRA_STATUS_OK);
+        check("Switch to reaper before full-table dispatch",
+            scheduler_set_thread_state_by_handle(
+                reaper_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Publish terminal event before saturating candidate table",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+        check("Capture FIFO head before candidate-table saturation",
+            scheduler_peek_switch_away_event(&expected_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(
+                expected_event.handle, saturation_handle) &&
+            expected_event.terminal != 0U);
+        check("Host test fills every candidate slot with quarantine records",
+            thread_reaper_test_fill_quarantined() == SYNTRA_STATUS_OK);
+        check("Candidate table reaches exact fixed capacity",
+            thread_reaper_get_candidate_count(&saturated_count) ==
+                SYNTRA_STATUS_OK &&
+            saturated_count == SYNTRA_REAPER_CANDIDATE_CAPACITY);
+        check("Full table contains only permanent quarantined records", 1);
+        for (unsigned int i = 0U; i < SYNTRA_REAPER_CANDIDATE_CAPACITY; ++i)
+        {
+            check("Quarantined candidate remains reserved under saturation",
+                thread_reaper_get_candidate(i, &candidate) ==
+                    SYNTRA_STATUS_OK &&
+                candidate.state == SYNTRA_REAPER_CANDIDATE_QUARANTINED &&
+                candidate.reason == SYNTRA_REAPER_REASON_STALE_HANDLE);
+        }
+        check("Dispatch with no reusable slot leaves event unprocessed",
+            thread_reaper_dispatch(1U, &saturation_processed) ==
+                SYNTRA_STATUS_OK && saturation_processed == 0U);
+        check("Candidate high-water remains at fixed capacity",
+            thread_reaper_get_candidate_count(&saturated_count) ==
+                SYNTRA_STATUS_OK &&
+            saturated_count == SYNTRA_REAPER_CANDIDATE_CAPACITY);
+        check("Exact FIFO head remains pending when table is full",
+            scheduler_peek_switch_away_event(&pending_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(
+                pending_event.handle, expected_event.handle) &&
+            pending_event.sequence == expected_event.sequence &&
+            pending_event.terminal == expected_event.terminal);
     }
 
     check("Memory allocator invariants remain valid after quarantine",
