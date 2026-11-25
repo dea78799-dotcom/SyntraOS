@@ -113,6 +113,12 @@ static syntra_status_t scheduler_publish_slot_unlocked(uint32_t slot)
     return SYNTRA_STATUS_OK;
 }
 
+static int scheduler_slot_is_active(unsigned int slot)
+{
+    return slot < SYNTRA_MAX_THREADS && slot < thread_count &&
+        slot_states[slot] == SYNTRA_THREAD_SLOT_ACTIVE;
+}
+
 static syntra_status_t scheduler_abort_slot_unlocked(uint32_t slot)
 {
     if (slot >= SYNTRA_MAX_THREADS || slot != thread_count ||
@@ -128,8 +134,9 @@ static int scheduler_find_slot(unsigned int thread_id)
 {
     for (unsigned int i = 0U; i < thread_count; ++i)
     {
-        if (slot_states[i] == SYNTRA_THREAD_SLOT_ACTIVE &&
-            threads[i].thread_id == thread_id)
+        if (!scheduler_slot_is_active(i))
+            continue;
+        if (threads[i].thread_id == thread_id)
             return (int)i;
     }
     return -1;
@@ -149,7 +156,10 @@ static int scheduler_stack_range_conflicts(
 {
     for (unsigned int i = 0U; i < thread_count; ++i)
     {
-        const syntra_thread_t *thread = &threads[i];
+        const syntra_thread_t *thread;
+        if (!scheduler_slot_is_active(i))
+            continue;
+        thread = &threads[i];
         if (scheduler_ranges_overlap(base, size,
                 thread->stack_base, thread->stack_size) ||
             scheduler_ranges_overlap(base, size,
@@ -166,7 +176,7 @@ static syntra_status_t scheduler_stage_switch_unlocked(
         switch_event_count >= SYNTRA_SWITCH_COMPLETION_CAPACITY ||
         switch_sequence == UINT64_MAX ||
         handle.generation == 0U ||
-        handle.slot >= thread_count)
+        !scheduler_slot_is_active(handle.slot))
         return SYNTRA_STATUS_ERROR;
 
     ++switch_sequence;
@@ -394,6 +404,8 @@ static syntra_thread_t *scheduler_get_next_ready_unlocked(void)
     for (unsigned int offset = 0U; offset < thread_count; ++offset)
     {
         unsigned int slot = (next_slot + offset) % thread_count;
+        if (!scheduler_slot_is_active(slot))
+            continue;
         if (threads[slot].state == THREAD_READY)
         {
             return &threads[slot];
@@ -411,6 +423,7 @@ static syntra_thread_t *scheduler_schedule_next_unlocked(void)
     }
 
     if (current_slot >= 0 &&
+        scheduler_slot_is_active((unsigned int)current_slot) &&
         threads[(unsigned int)current_slot].state == THREAD_RUNNING)
     {
         threads[(unsigned int)current_slot].state = THREAD_READY;
@@ -421,6 +434,7 @@ static syntra_thread_t *scheduler_schedule_next_unlocked(void)
     {
         /* No READY task: keep the current task if it is still runnable. */
         if (current_slot >= 0 &&
+            scheduler_slot_is_active((unsigned int)current_slot) &&
             threads[(unsigned int)current_slot].state == THREAD_READY)
         {
             threads[(unsigned int)current_slot].state = THREAD_RUNNING;
@@ -447,14 +461,18 @@ static syntra_thread_t *scheduler_schedule_next_with_context_unlocked(void)
         return NULL;
 
     if (current_slot >= 0 &&
+        scheduler_slot_is_active((unsigned int)current_slot) &&
         threads[(unsigned int)current_slot].state == THREAD_RUNNING)
         threads[(unsigned int)current_slot].state = THREAD_READY;
 
     for (unsigned int offset = 0U; offset < thread_count; ++offset)
     {
         unsigned int slot = (next_slot + offset) % thread_count;
-        syntra_thread_t *candidate = &threads[slot];
+        syntra_thread_t *candidate;
 
+        if (!scheduler_slot_is_active(slot))
+            continue;
+        candidate = &threads[slot];
         if (candidate->state != THREAD_READY ||
             candidate->cpu_context == NULL)
             continue;
@@ -468,11 +486,14 @@ static syntra_thread_t *scheduler_schedule_next_with_context_unlocked(void)
     /* If no eligible task exists, resume the interrupted task if possible. */
     if (current_slot >= 0)
     {
-        syntra_thread_t *current = &threads[(unsigned int)current_slot];
-        if (current->state == THREAD_READY && current->cpu_context != NULL)
+        if (scheduler_slot_is_active((unsigned int)current_slot))
         {
-            current->state = THREAD_RUNNING;
-            return current;
+            syntra_thread_t *current = &threads[(unsigned int)current_slot];
+            if (current->state == THREAD_READY && current->cpu_context != NULL)
+        {
+                current->state = THREAD_RUNNING;
+                return current;
+            }
         }
     }
 
@@ -482,10 +503,9 @@ static syntra_thread_t *scheduler_schedule_next_with_context_unlocked(void)
 
 static syntra_thread_t *scheduler_get_current_unlocked(void)
 {
-    if (!scheduler_initialized || current_slot < 0)
-    {
+    if (!scheduler_initialized || current_slot < 0 ||
+        !scheduler_slot_is_active((unsigned int)current_slot))
         return NULL;
-    }
 
     return &threads[(unsigned int)current_slot];
 }
@@ -672,6 +692,10 @@ static syntra_status_t scheduler_schedule_next_context_unlocked(void **cpu_conte
         switch_event_count >= SYNTRA_SWITCH_COMPLETION_CAPACITY)
         return SYNTRA_STATUS_ERROR;
 
+    if (current_slot >= 0 &&
+        !scheduler_slot_is_active((unsigned int)current_slot))
+        return SYNTRA_STATUS_ERROR;
+
     if (!pending_switch.valid && current_slot >= 0 &&
         threads[(unsigned int)current_slot].state == THREAD_RUNNING)
     {
@@ -747,7 +771,10 @@ static syntra_status_t scheduler_validate_unlocked(void)
 
     for (unsigned int i = 0U; i < thread_count; ++i)
     {
-        const syntra_thread_t *thread = &threads[i];
+        const syntra_thread_t *thread;
+        if (!scheduler_slot_is_active(i))
+            return SYNTRA_STATUS_ERROR;
+        thread = &threads[i];
         ++active_seen;
 
         if (slot_states[i] != SYNTRA_THREAD_SLOT_ACTIVE ||
@@ -763,7 +790,8 @@ static syntra_status_t scheduler_validate_unlocked(void)
 
         for (unsigned int j = i + 1U; j < thread_count; ++j)
         {
-            if (thread->thread_id == threads[j].thread_id)
+            if (scheduler_slot_is_active(j) &&
+                thread->thread_id == threads[j].thread_id)
             {
                 return SYNTRA_STATUS_ERROR;
             }
@@ -1282,7 +1310,8 @@ syntra_status_t scheduler_terminate_process_threads(
         return SYNTRA_STATUS_ERROR;
     }
 
-    if (current_slot >= 0)
+    if (current_slot >= 0 &&
+        scheduler_slot_is_active((unsigned int)current_slot))
     {
         syntra_thread_t *current = &threads[(unsigned int)current_slot];
         if (current->has_process_owner != 0U &&
@@ -1299,7 +1328,10 @@ syntra_status_t scheduler_terminate_process_threads(
 
     for (unsigned int i = 0U; i < thread_count; ++i)
     {
-        syntra_thread_t *thread = &threads[i];
+        syntra_thread_t *thread;
+        if (!scheduler_slot_is_active(i))
+            continue;
+        thread = &threads[i];
         if (thread->has_process_owner != 0U &&
             thread->owner_process.slot == owner.slot &&
             thread->owner_process.generation == owner.generation)
@@ -1330,7 +1362,8 @@ syntra_status_t scheduler_get_process_thread_count(
     }
     unsigned int count = 0U;
     for (unsigned int i = 0U; i < thread_count; ++i)
-        if (threads[i].has_process_owner != 0U &&
+        if (scheduler_slot_is_active(i) &&
+            threads[i].has_process_owner != 0U &&
             threads[i].owner_process.slot == owner.slot &&
             threads[i].owner_process.generation == owner.generation)
             ++count;
@@ -1357,7 +1390,8 @@ syntra_status_t scheduler_get_process_thread_snapshot(
     unsigned int found = 0U;
     for (unsigned int i = 0U; i < thread_count; ++i)
     {
-        if (threads[i].has_process_owner != 0U &&
+        if (scheduler_slot_is_active(i) &&
+            threads[i].has_process_owner != 0U &&
             threads[i].owner_process.slot == owner.slot &&
             threads[i].owner_process.generation == owner.generation)
         {
@@ -1468,7 +1502,7 @@ syntra_status_t scheduler_complete_switch_away(void)
     if (!pending_switch.valid ||
         switch_event_count >= SYNTRA_SWITCH_COMPLETION_CAPACITY ||
         current_slot < 0 ||
-        (unsigned int)current_slot >= thread_count)
+        !scheduler_slot_is_active((unsigned int)current_slot))
     {
         syntra_irq_restore(irq);
         return SYNTRA_STATUS_ERROR;
@@ -1690,7 +1724,8 @@ syntra_status_t scheduler_get_current_handle(
     syntra_irq_state_t irq;
     if (handle_out == NULL) return SYNTRA_STATUS_INVALID_ARGUMENT;
     irq = syntra_irq_save();
-    if (!scheduler_initialized || current_slot < 0)
+    if (!scheduler_initialized || current_slot < 0 ||
+        !scheduler_slot_is_active((unsigned int)current_slot))
     {
         syntra_irq_restore(irq);
         return SYNTRA_STATUS_ERROR;
