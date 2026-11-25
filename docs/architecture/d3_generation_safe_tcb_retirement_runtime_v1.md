@@ -31,7 +31,7 @@ The scheduler independently verifies:
 - no live entry in the complete switch-event FIFO names the exact handle;
 - the owned stack has already been reclaimed and all stack, allocation, user-stack, context, entry, and argument references are cleared;
 - the candidate is not a user thread;
-- the TCB has no process owner (`has_process_owner == 0` and a zero owner handle). Process-owned retirement is rejected until a coordinator can detach the exact thread handle from the owning process lifecycle.
+- process-owner metadata is internally consistent: ownerless TCBs carry a zero owner handle, while owned TCBs carry an in-range slot and nonzero generation. Process thread counts are derived by scanning ACTIVE TCBs, so clearing the TCB and decrementing active count under the same scheduler IRQ guard removes the ownership association atomically.
 
 The retirement API does not free memory. It clears the static TCB record, decrements active count, and invalidates the old handle while holding the scheduler IRQ guard.
 
@@ -49,7 +49,7 @@ The high-water count is unchanged. Creation remains append-only in this slice, s
 
 Any failed scheduler gate leaves the TCB, slot metadata, generation, and candidate state unchanged. The candidate remains `RECLAIMED` so the reaper can preserve its proof history and retry only if the blocking condition is transient.
 
-Borrowed-stack candidates remain unsupported by automatic retirement in this slice. The current reaper already quarantines them during owned-stack reclamation, so they cannot reach `RECLAIMED`. User-thread retirement is also rejected. Process-owned TCBs are rejected even after stack reclamation: clearing their owner fields without first updating the process/thread ownership view would leave stale process membership. A later coordinator change must perform that detach atomically before allowing retirement.
+Borrowed-stack candidates remain unsupported by automatic retirement in this slice. The current reaper already quarantines them during owned-stack reclamation, so they cannot reach `RECLAIMED`. User-thread retirement is also rejected. Process-owned kernel TCBs may be retired: the process thread view is derived from ACTIVE scheduler TCBs rather than a separate retained membership list, and retirement clears owner metadata while removing the TCB from the active set in the same IRQ-guarded operation.
 
 ## Compiler and synchronization note
 
@@ -64,6 +64,6 @@ GCC's current documentation for `__atomic` built-ins was checked through Context
 - Scheduler validation accepts a cleared free hole.
 - Duplicate retirement is rejected.
 - A borrowed-stack candidate remains quarantined and cannot be retired.
-- Process-owned TCBs are rejected by the final scheduler gate until exact owner detachment is implemented.
+- Process-owned TCB retirement preserves scheduler validation by checking owner metadata before clearing it atomically with ACTIVE-slot removal.
 
 Generation-exhaustion and slot-reuse tests belong to the later slot-reuse stage; no test-only state mutation hook is added here.
