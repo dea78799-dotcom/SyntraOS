@@ -182,6 +182,25 @@ int main(void)
             thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
             stats.retired == 1U && stats.retirement_failures == 0U);
     }
+    check("Reserve retired slot for an owned-thread transaction",
+        scheduler_reserve_owned_thread(
+            process, 955U, 2U, test_entry, NULL, borrowed_stack,
+            sizeof(borrowed_stack), &reused_handle) == SYNTRA_STATUS_OK);
+    check("Reserved-hole state passes scheduler validation",
+        scheduler_validate() == SYNTRA_STATUS_OK);
+    check("Abort unpublished reused-slot reservation",
+        scheduler_abort_reserved_thread(reused_handle) == SYNTRA_STATUS_OK);
+    {
+        syntra_thread_slot_state_t aborted_state;
+        uint32_t aborted_generation = 0U;
+        check("Abort returns reused hole to FREE without generation advance",
+            scheduler_get_slot_metadata(owned_handle.slot, &aborted_state,
+                &aborted_generation) == SYNTRA_STATUS_OK &&
+            aborted_state == SYNTRA_THREAD_SLOT_FREE &&
+            aborted_generation == owned_handle.generation + 1U);
+        check("Aborted reservation leaves scheduler invariants intact",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+    }
     check("Create thread in retired slot using a fresh stack",
         process_thread_create_kernel_owned_with_handle(
             process, 954U, 2U, test_entry, NULL, 4096U,
