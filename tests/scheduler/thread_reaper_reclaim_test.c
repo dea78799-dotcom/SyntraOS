@@ -17,7 +17,8 @@
 extern void process_thread_test_fail_at(unsigned int stage);
 extern syntra_status_t scheduler_test_seed_free_slot_generation(
     unsigned int slot, uint32_t generation);
-extern syntra_status_t scheduler_test_fail_next_switch_event_ack(void);\nextern syntra_status_t thread_reaper_test_fill_quarantined(void);
+extern syntra_status_t scheduler_test_fail_next_switch_event_ack(void);
+extern syntra_status_t thread_reaper_test_fill_quarantined(void);
 
 static unsigned int failures;
 static _Alignas(16) unsigned char borrowed_stack[4096];
@@ -724,7 +725,6 @@ int main(void)
             thread_reaper_get_candidate_count(&saturated_count) ==
                 SYNTRA_STATUS_OK &&
             saturated_count == SYNTRA_REAPER_CANDIDATE_CAPACITY);
-        check("Full table contains only permanent quarantined records", 1);
         for (unsigned int i = 0U; i < SYNTRA_REAPER_CANDIDATE_CAPACITY; ++i)
         {
             check("Quarantined candidate remains reserved under saturation",
