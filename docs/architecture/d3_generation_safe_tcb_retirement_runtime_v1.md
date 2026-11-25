@@ -157,3 +157,18 @@ capacity—while asserting the table high-water count stays stable, the same
 retired candidate record is recycled, and a quarantined record remains
 unchanged. This remains a single-core IRQ-serialized design; it does not claim
 SMP support.
+
+
+## D3.5.12 — Candidate reuse rollback on FIFO acknowledgement failure
+
+Host-only failure injection forces the scheduler's exact switch-away FIFO
+acknowledgement to fail once, after dispatch has staged a terminal event into
+an already RETIRED candidate record. The integration test verifies that the
+candidate's previous proof, state, and reason are restored exactly, the
+candidate-table high-water count is unchanged, and the original FIFO head
+remains pending. A second dispatch then acknowledges the same event and
+completes reclamation and retirement normally.
+
+The injection hook is compiled only for `SYNTRA_HOST_TESTING`; it is absent
+from the freestanding ARM64 kernel. This test covers the reused-record rollback
+path and does not alter production scheduler behavior.

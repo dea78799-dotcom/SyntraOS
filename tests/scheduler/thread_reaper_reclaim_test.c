@@ -17,6 +17,7 @@
 extern void process_thread_test_fail_at(unsigned int stage);
 extern syntra_status_t scheduler_test_seed_free_slot_generation(
     unsigned int slot, uint32_t generation);
+extern syntra_status_t scheduler_test_fail_next_switch_event_ack(void);
 
 static unsigned int failures;
 static _Alignas(16) unsigned char borrowed_stack[4096];
@@ -480,6 +481,105 @@ int main(void)
     }
 
 
+
+    {
+        syntra_thread_handle_t rollback_handle = {0U, 0U};
+        syntra_thread_switch_event_t expected_event;
+        syntra_thread_switch_event_t pending_event;
+        syntra_reaper_candidate_t before_candidate;
+        unsigned int rollback_processed = 99U;
+        unsigned int candidate_count_before = 0U;
+        unsigned int candidate_count_after = 0U;
+        int rollback_candidate_index =
+            exhaustion_reusable_candidate_index;
+
+        check("Locate reusable RETIRED candidate before ack rollback",
+            rollback_candidate_index >= 0);
+        if (rollback_candidate_index < 0)
+            rollback_candidate_index = 0;
+
+        check("Snapshot RETIRED candidate before reuse rollback",
+            thread_reaper_get_candidate(
+                (unsigned int)rollback_candidate_index,
+                &before_candidate) == SYNTRA_STATUS_OK &&
+            before_candidate.state == SYNTRA_REAPER_CANDIDATE_RETIRED);
+        check("Capture candidate high-water before ack rollback",
+            thread_reaper_get_candidate_count(&candidate_count_before) ==
+                SYNTRA_STATUS_OK && candidate_count_before == 2U);
+
+        check("Create owned thread for acknowledgement rollback",
+            process_thread_create_kernel_owned_with_handle(
+                process, 958U, 2U, test_entry, NULL, 4096U,
+                &rollback_handle) == SYNTRA_STATUS_OK);
+        check("Run thread for acknowledgement rollback",
+            scheduler_set_thread_state_by_handle(
+                rollback_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Terminate thread for acknowledgement rollback",
+            scheduler_terminate_current() == SYNTRA_STATUS_OK);
+        check("Switch to reaper before acknowledgement rollback",
+            scheduler_set_thread_state_by_handle(
+                reaper_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Publish proof for acknowledgement rollback",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+        check("Capture exact FIFO event before injected failure",
+            scheduler_peek_switch_away_event(&expected_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(
+                expected_event.handle, rollback_handle) &&
+            expected_event.terminal != 0U);
+
+        check("Arm one-shot host acknowledgement failure",
+            scheduler_test_fail_next_switch_event_ack() ==
+                SYNTRA_STATUS_OK);
+        check("Failed FIFO acknowledgement returns error without processing",
+            thread_reaper_dispatch(1U, &rollback_processed) ==
+                SYNTRA_STATUS_ERROR && rollback_processed == 0U);
+        check("Reused candidate is restored exactly after ack failure",
+            thread_reaper_get_candidate(
+                (unsigned int)rollback_candidate_index, &candidate) ==
+                    SYNTRA_STATUS_OK &&
+            candidate.state == before_candidate.state &&
+            candidate.reason == before_candidate.reason &&
+            scheduler_thread_handle_equal(
+                candidate.proof.handle, before_candidate.proof.handle) &&
+            candidate.proof.sequence == before_candidate.proof.sequence &&
+            candidate.proof.terminal == before_candidate.proof.terminal);
+        check("Candidate high-water is unchanged after ack rollback",
+            thread_reaper_get_candidate_count(&candidate_count_after) ==
+                SYNTRA_STATUS_OK &&
+            candidate_count_after == candidate_count_before);
+        check("FIFO head remains the exact unacknowledged event",
+            scheduler_peek_switch_away_event(&pending_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(
+                pending_event.handle, expected_event.handle) &&
+            pending_event.sequence == expected_event.sequence &&
+            pending_event.terminal == expected_event.terminal);
+
+        rollback_processed = 0U;
+        check("Retry dispatch after one-shot acknowledgement failure",
+            thread_reaper_dispatch(1U, &rollback_processed) ==
+                SYNTRA_STATUS_OK && rollback_processed == 1U);
+        check("Retry reuses the same candidate for the pending event",
+            thread_reaper_get_candidate(
+                (unsigned int)rollback_candidate_index, &candidate) ==
+                    SYNTRA_STATUS_OK &&
+            candidate.state == SYNTRA_REAPER_CANDIDATE_QUEUED &&
+            scheduler_thread_handle_equal(
+                candidate.proof.handle, rollback_handle) &&
+            candidate.proof.sequence == expected_event.sequence);
+        check("Reclaim candidate after successful retry",
+            thread_reaper_reclaim_candidate(
+                (unsigned int)rollback_candidate_index) == SYNTRA_STATUS_OK);
+        check("Retire candidate after successful retry",
+            thread_reaper_retire_candidate(
+                (unsigned int)rollback_candidate_index) == SYNTRA_STATUS_OK);
+        exhaustion_reusable_candidate_index =
+            rollback_candidate_index;
+        check("Scheduler remains valid after acknowledgement rollback test",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+    }
+
     {
         const unsigned int recycle_cycles = 40U;
         unsigned int candidate_count_before = 0U;
@@ -586,7 +686,7 @@ int main(void)
                 SYNTRA_REAPER_REASON_RESOURCE_RECLAIM_FAILED);
         check("Reaper retirement statistics include all recycle cycles",
             thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
-            stats.retired == 42U);
+            stats.retired == 43U);
         check("Scheduler validates after repeated reaper candidate reuse",
             scheduler_validate() == SYNTRA_STATUS_OK);
     }
