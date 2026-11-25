@@ -77,6 +77,8 @@ syntra_status_t thread_reaper_init(void)
     reaper_stats.execution_context_bound = 0U;
     reaper_stats.execution_context_dispatches = 0U;
     reaper_stats.execution_context_rejections = 0U;
+    reaper_stats.reclaimed = 0U;
+    reaper_stats.reclaim_failures = 0U;
     execution_context_bound = 0;
     execution_context_handle.slot = 0U;
     execution_context_handle.generation = 0U;
@@ -367,6 +369,61 @@ syntra_status_t thread_reaper_get_candidate(
     *candidate_out = candidates[index];
     syntra_irq_restore(irq);
     return SYNTRA_STATUS_OK;
+}
+
+
+syntra_status_t thread_reaper_reclaim_candidate(unsigned int index)
+{
+    syntra_irq_state_t irq;
+    syntra_reaper_candidate_t *candidate;
+    syntra_status_t status;
+
+    irq = syntra_irq_save();
+    if (!reaper_initialized || !execution_context_bound ||
+        !thread_reaper_is_on_bound_context_unlocked())
+    {
+        ++reaper_stats.execution_context_rejections;
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+    }
+    if (index >= candidate_count)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_INVALID_ARGUMENT;
+    }
+
+    candidate = &candidates[index];
+    if (candidate->state != SYNTRA_REAPER_CANDIDATE_QUEUED ||
+        candidate->proof.terminal == 0U ||
+        candidate->proof.sequence == 0U ||
+        candidate->proof.handle.generation == 0U)
+    {
+        syntra_irq_restore(irq);
+        return SYNTRA_STATUS_PERMISSION_DENIED;
+    }
+
+    status = scheduler_reclaim_owned_thread_stack(
+        candidate->proof.handle, candidate->proof.sequence);
+    if (status == SYNTRA_STATUS_OK)
+    {
+        candidate->state = SYNTRA_REAPER_CANDIDATE_RECLAIMED;
+        candidate->reason = SYNTRA_REAPER_REASON_NONE;
+        if (reaper_stats.queued > 0U)
+            --reaper_stats.queued;
+        ++reaper_stats.reclaimed;
+    }
+    else
+    {
+        candidate->state = SYNTRA_REAPER_CANDIDATE_QUARANTINED;
+        candidate->reason = SYNTRA_REAPER_REASON_RESOURCE_RECLAIM_FAILED;
+        if (reaper_stats.queued > 0U)
+            --reaper_stats.queued;
+        ++reaper_stats.quarantined;
+        ++reaper_stats.reclaim_failures;
+    }
+
+    syntra_irq_restore(irq);
+    return status;
 }
 
 syntra_status_t thread_reaper_get_stats(
