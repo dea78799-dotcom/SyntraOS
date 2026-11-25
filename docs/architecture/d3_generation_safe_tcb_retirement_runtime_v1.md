@@ -66,7 +66,7 @@ GCC's current documentation for `__atomic` built-ins was checked through Context
 - A borrowed-stack candidate remains quarantined and cannot be retired.
 - Process-owned TCB retirement preserves scheduler validation by checking owner metadata before clearing it atomically with ACTIVE-slot removal.
 
-Generation-exhaustion and slot-reuse tests belong to the later slot-reuse stage; no test-only state mutation hook is added here.
+At this point in the rollout, generation exhaustion and slot reuse are specified but not yet exercised by the integration test. D3.5.10 below adds a host-only boundary hook and verifies the complete retirement path.
 
 
 ## D3.5.7 — Safe slot reuse rollout
@@ -109,3 +109,27 @@ For every injected failure, the coordinator must return the injected error after
 The fifth case specifically verifies the post-commit rollback path: the unpublished TCB reservation is aborted first, then the exact THREAD_OWNED allocation is released using its owner token. Earlier cases exercise staged and RESERVED allocation cleanup. The hook is one-shot so a test failure cannot leak into a later transaction.
 
 This is deterministic host fault injection, not a production runtime failure API. It does not claim SMP coverage; the coordinator remains serialized by local IRQ masking on the supported single-core design.
+
+
+## D3.5.10 — Generation exhaustion boundary test
+
+A host-only scheduler test hook seeds an unused FREE tail slot at
+`UINT32_MAX`. The hook requires an initialized scheduler, a nonzero target
+generation, an in-range slot at or below the high-water boundary, FREE state,
+and a fully cleared TCB. It is compiled only with `SYNTRA_HOST_TESTING` and
+is not part of the freestanding ARM64 image or a public scheduler API.
+
+The integration test then creates a process-owned kernel thread in that slot,
+runs the normal terminal switch-away, reaper dispatch, owned-stack reclaim,
+and TCB retirement sequence, and verifies:
+
+- the old exact handle no longer resolves;
+- retirement preserves generation `UINT32_MAX` and publishes
+  `SYNTRA_THREAD_SLOT_EXHAUSTED`, never wrapping to zero;
+- scheduler validation and active/high-water accounting remain consistent;
+- a subsequent thread creation skips the exhausted slot and appends a new
+  tail slot; and
+- the exhausted slot remains unchanged after the later allocation.
+
+The test exercises the actual reaper-to-retirement path. It does not introduce
+production mutation controls, alter generation policy, or add SMP guarantees.
