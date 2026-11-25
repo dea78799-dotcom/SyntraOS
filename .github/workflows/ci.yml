@@ -37,6 +37,7 @@ on:
       - feat/d35-reaper-event-handoff-v1
       - feat/d352-dedicated-reaper-context-v1
       - design/d354-generation-safe-tcb-retirement-v1
+      - feat/d354-slot-lifecycle-metadata-v1
 
   # Run a health check every day at 02:00 UTC (09:00 Vietnam time).
   schedule:
