@@ -83,9 +83,10 @@ Generation-exhaustion and slot-reuse tests belong to the later slot-reuse stage;
 The scheduler remains single-core and IRQ-serialized. This change does not add SMP safety or lock-free behavior.
 
 
-## D3.5.8 — Reused-slot reservation rollback coverage
+## D3.5.8 — Rejected owned-thread creation preserves retired slots
 
-- Exercise the process-owned staged reservation path against a previously retired FREE hole.
-- Validate scheduler invariants while the hole is RESERVED and the staged TCB remains unpublished.
-- Abort the reservation and verify the slot returns to FREE without advancing its generation, because no handle was published.
-- Re-run scheduler validation before the same hole is committed by a subsequent owned-thread creation.
+- Exercise the public process-owned thread creation API with an invalid stack size.
+- Verify argument validation rejects the request before any slot reservation or memory allocation begins.
+- Confirm the retired slot remains FREE with its generation unchanged.
+- Re-run scheduler validation, then let the existing valid owned-thread creation test reuse and publish the same hole.
+- The internal staged-reservation rollback remains covered by the coordinator's cleanup path; it is not exposed as a public scheduler API solely for testing.
