@@ -14,6 +14,54 @@ static int scheduler_initialized;
 static syntra_thread_t reserved_thread;
 static int reserved_thread_valid;
 
+static void scheduler_clear_thread_record(syntra_thread_t *thread)
+{
+    thread->handle.slot = 0U;
+    thread->handle.generation = 0U;
+    thread->thread_id = 0U;
+    thread->priority = 0U;
+    thread->state = THREAD_TERMINATED;
+    thread->entry = NULL;
+    thread->argument = NULL;
+    thread->stack_base = 0U;
+    thread->stack_size = 0U;
+    thread->stack_ownership = SYNTRA_THREAD_STACK_BORROWED;
+    thread->stack_allocation.slot = 0U;
+    thread->stack_allocation.generation = 0U;
+    thread->user_stack_base = 0U;
+    thread->user_stack_size = 0U;
+    thread->is_user_thread = 0U;
+    thread->switch_away_sequence = 0U;
+    thread->cpu_context = NULL;
+    thread->owner_process.slot = 0U;
+    thread->owner_process.generation = 0U;
+    thread->has_process_owner = 0U;
+}
+
+static int scheduler_thread_record_is_clear(const syntra_thread_t *thread)
+{
+    return thread->handle.slot == 0U &&
+        thread->handle.generation == 0U &&
+        thread->thread_id == 0U &&
+        thread->priority == 0U &&
+        thread->state == THREAD_TERMINATED &&
+        thread->entry == NULL &&
+        thread->argument == NULL &&
+        thread->stack_base == 0U &&
+        thread->stack_size == 0U &&
+        thread->stack_ownership == SYNTRA_THREAD_STACK_BORROWED &&
+        thread->stack_allocation.slot == 0U &&
+        thread->stack_allocation.generation == 0U &&
+        thread->user_stack_base == 0U &&
+        thread->user_stack_size == 0U &&
+        thread->is_user_thread == 0U &&
+        thread->switch_away_sequence == 0U &&
+        thread->cpu_context == NULL &&
+        thread->owner_process.slot == 0U &&
+        thread->owner_process.generation == 0U &&
+        thread->has_process_owner == 0U;
+}
+
 static void scheduler_clear_reserved_thread(void)
 {
     reserved_thread.handle.slot = 0U;
@@ -273,26 +321,7 @@ static syntra_status_t scheduler_init_unlocked(void)
     {
         slot_states[i] = SYNTRA_THREAD_SLOT_FREE;
         slot_generations[i] = 1U;
-        threads[i].handle.slot = 0U;
-        threads[i].handle.generation = 0U;
-        threads[i].thread_id = 0U;
-        threads[i].priority = 0U;
-        threads[i].state = THREAD_TERMINATED;
-        threads[i].entry = NULL;
-        threads[i].argument = NULL;
-        threads[i].stack_base = 0U;
-        threads[i].stack_size = 0U;
-        threads[i].stack_ownership = SYNTRA_THREAD_STACK_BORROWED;
-        threads[i].stack_allocation.slot = 0U;
-        threads[i].stack_allocation.generation = 0U;
-        threads[i].user_stack_base = 0U;
-        threads[i].user_stack_size = 0U;
-        threads[i].is_user_thread = 0U;
-        threads[i].switch_away_sequence = 0U;
-        threads[i].cpu_context = NULL;
-        threads[i].owner_process.slot = 0U;
-        threads[i].owner_process.generation = 0U;
-        threads[i].has_process_owner = 0U;
+        scheduler_clear_thread_record(&threads[i]);
     }
 
     scheduler_initialized = 1;
@@ -777,7 +806,16 @@ static syntra_status_t scheduler_validate_unlocked(void)
     {
         const syntra_thread_t *thread;
         if (!scheduler_slot_is_active(i))
-            return SYNTRA_STATUS_ERROR;
+        {
+            if ((slot_states[i] != SYNTRA_THREAD_SLOT_FREE &&
+                 slot_states[i] != SYNTRA_THREAD_SLOT_EXHAUSTED) ||
+                slot_generations[i] == 0U ||
+                (slot_states[i] == SYNTRA_THREAD_SLOT_EXHAUSTED &&
+                 slot_generations[i] != UINT32_MAX) ||
+                !scheduler_thread_record_is_clear(&threads[i]))
+                return SYNTRA_STATUS_ERROR;
+            continue;
+        }
         thread = &threads[i];
         ++active_seen;
 
@@ -881,15 +919,15 @@ static syntra_status_t scheduler_validate_unlocked(void)
         else if (slot_states[i] != SYNTRA_THREAD_SLOT_FREE &&
                  slot_states[i] != SYNTRA_THREAD_SLOT_EXHAUSTED)
             return SYNTRA_STATUS_ERROR;
-        if (slot_generations[i] == 0U)
+        if (slot_generations[i] == 0U ||
+            !scheduler_thread_record_is_clear(&threads[i]))
             return SYNTRA_STATUS_ERROR;
         if (slot_states[i] == SYNTRA_THREAD_SLOT_EXHAUSTED &&
             slot_generations[i] != UINT32_MAX)
             return SYNTRA_STATUS_ERROR;
     }
 
-    if (active_seen != active_thread_count ||
-        active_thread_count != thread_count)
+    if (active_seen != active_thread_count)
         return SYNTRA_STATUS_ERROR;
 
     if (reserved_thread_valid)
@@ -1627,6 +1665,88 @@ syntra_status_t scheduler_get_thread_snapshot_by_handle(
  * keeps the current-slot check, allocator release, and TCB pointer clearing
  * atomic on the supported single-core target.
  */
+
+/*
+ * Reaper-only final TCB retirement. The caller must already have consumed the
+ * terminal switch proof and reclaimed the owned kernel stack. This operation
+ * never frees memory; it only invalidates the exact handle and clears the
+ * static TCB record under the single-core IRQ guard.
+ */
+syntra_status_t scheduler_retire_thread_after_reap(
+    syntra_thread_handle_t handle, uint64_t switch_away_sequence)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_thread_t *thread;
+    unsigned int slot;
+    syntra_status_t status = SYNTRA_STATUS_PERMISSION_DENIED;
+
+    if (handle.generation == 0U || switch_away_sequence == 0U)
+    {
+        status = SYNTRA_STATUS_INVALID_ARGUMENT;
+        goto done;
+    }
+
+    {
+        int resolved = scheduler_resolve_handle_unlocked(handle);
+        if (resolved < 0)
+        {
+            status = SYNTRA_STATUS_INVALID_ARGUMENT;
+            goto done;
+        }
+        slot = (unsigned int)resolved;
+    }
+
+    thread = &threads[slot];
+    if (thread->state != THREAD_TERMINATED ||
+        current_slot == (int)slot ||
+        thread->switch_away_sequence != switch_away_sequence ||
+        thread->is_user_thread != 0U ||
+        thread->user_stack_base != 0U ||
+        thread->user_stack_size != 0U ||
+        thread->stack_base != 0U ||
+        thread->stack_size != 0U ||
+        thread->stack_ownership != SYNTRA_THREAD_STACK_BORROWED ||
+        thread->stack_allocation.slot != 0U ||
+        thread->stack_allocation.generation != 0U ||
+        thread->cpu_context != NULL ||
+        thread->entry != NULL ||
+        thread->argument != NULL ||
+        active_thread_count == 0U)
+        goto done;
+
+    if (pending_switch.valid &&
+        scheduler_thread_handle_equal(pending_switch.handle, handle))
+        goto done;
+
+    for (unsigned int offset = 0U; offset < switch_event_count; ++offset)
+    {
+        unsigned int event_index =
+            (switch_event_head + offset) % SYNTRA_SWITCH_COMPLETION_CAPACITY;
+        if (scheduler_thread_handle_equal(
+                switch_events[event_index].handle, handle))
+            goto done;
+    }
+
+    /*
+     * Invalidate the old generation before publishing FREE. UINT32_MAX is
+     * terminal: keep the slot permanently EXHAUSTED rather than wrapping.
+     */
+    scheduler_clear_thread_record(thread);
+    --active_thread_count;
+    if (slot_generations[slot] == UINT32_MAX)
+        slot_states[slot] = SYNTRA_THREAD_SLOT_EXHAUSTED;
+    else
+    {
+        ++slot_generations[slot];
+        slot_states[slot] = SYNTRA_THREAD_SLOT_FREE;
+    }
+    status = SYNTRA_STATUS_OK;
+
+done:
+    syntra_irq_restore(irq);
+    return status;
+}
+
 syntra_status_t scheduler_reclaim_owned_thread_stack(
     syntra_thread_handle_t handle, uint64_t switch_away_sequence)
 {
