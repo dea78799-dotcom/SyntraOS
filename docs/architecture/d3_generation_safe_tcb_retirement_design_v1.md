@@ -163,3 +163,16 @@ Audit performed against the D3.5.4 parent branch on 2026-11-25.
 5. Add tests for slot holes, stale handles/events/candidates, generation exhaustion, reservation abort, and the unchanged high-water getter before enabling slot reuse.
 
 No scheduler behavior is changed by this audit commit. The implementation remains gated until all five steps and the full host/ARM64 CI matrix pass.
+
+
+### Test and coordinator compatibility findings
+
+- `scheduler_test` asserts the legacy thread-count getter after direct insertion and owned-thread publication. Preserve its current high-water meaning.
+- `thread_handle_test` asserts initial slots 0 and 1 with generation 1 and rejects stale/zero generations. Extend it for slot reuse and stale old-handle rejection.
+- `thread_reaper_handoff_test` expects candidate count to remain stable through duplicate/nonterminal handling. Candidate count must remain a high-water bound; do not compact or recycle candidate indices.
+- `thread_reaper_reclaim_test` reads candidates at fixed indices 0 and 1 and checks retained TERMINATED snapshots. Extend it for RECLAIMED → RETIRED, stale candidate replay, and replacement-slot generation.
+- `process_thread_test` expects process-owned threads to remain enumerable after process termination. Retirement must be an explicit later reaper operation, not part of process termination. Process enumeration must skip a successfully retired TCB while preserving remaining entries for the exact process generation.
+- `process_thread.c` routes ordinary kernel, user, and allocator-owned kernel creation through distinct scheduler APIs. All must share slot reservation/publication; user-thread retirement remains excluded.
+- `process.c` has an independent process generation table and is outside this thread-slot migration. Do not change process generation or process-count semantics.
+
+The scheduler-focused host suite includes scheduler policy, exact-handle, reaper handoff, reaper context, and owned-stack reclamation tests. The full CI matrix also builds the freestanding ARM64 image; enlarged TCB copies and initialization must avoid implicit libc `memcpy`/`memset` dependencies.
