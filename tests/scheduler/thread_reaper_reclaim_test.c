@@ -16,6 +16,26 @@
 /* Defined only by the host-test build of syntra_kernel. */
 extern void process_thread_test_fail_at(unsigned int stage);
 
+static unsigned int failures;
+static _Alignas(16) unsigned char borrowed_stack[4096];
+static int borrowed_context_marker;
+
+static void test_entry(void *argument)
+{
+    (void)argument;
+}
+
+static void check(const char *name, int condition)
+{
+    if (!condition)
+    {
+        ++failures;
+        printf("FAIL: %s\n", name);
+    }
+    else
+        printf("PASS: %s\n", name);
+}
+
 static void verify_owned_thread_creation_rollback(
     syntra_process_handle_t process,
     unsigned int stage,
@@ -66,25 +86,6 @@ static void verify_owned_thread_creation_rollback(
         process_threads_after == process_threads_before);
 }
 
-static unsigned int failures;
-static _Alignas(16) unsigned char borrowed_stack[4096];
-static int borrowed_context_marker;
-
-static void test_entry(void *argument)
-{
-    (void)argument;
-}
-
-static void check(const char *name, int condition)
-{
-    if (!condition)
-    {
-        ++failures;
-        printf("FAIL: %s\n", name);
-    }
-    else
-        printf("PASS: %s\n", name);
-}
 
 int main(void)
 {
