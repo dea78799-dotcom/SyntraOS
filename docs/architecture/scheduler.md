@@ -24,7 +24,11 @@ Each V1 thread record contains:
 The table is fixed at 32 thread records. Stack sizes must be at least 1024
 bytes and stack bases must be 16-byte aligned. Registered EL1 and EL0 stack
 ranges are checked for overlap and remain reserved until scheduler reset.
-There is no thread-reaping or stack-release API yet.
+The current lifecycle coordinator supports deferred reclamation for explicitly
+owned process kernel-thread stacks. The bounded Thread Reaper consumes exact
+post-switch-away proofs, reclaims owned stacks, retires TCBs, and allows
+generation-safe reuse of fully retired slots. Borrowed stacks are never freed
+by the reaper.
 
 ## 3. Scheduling policy
 
@@ -40,8 +44,11 @@ metadata-only records remain available to the policy-only test API.
 - BLOCKED: not eligible until explicitly woken.
 - TERMINATED: no longer eligible for selection.
 
-V1 does not reclaim terminated thread records or stack ranges. The scheduler
-does not yet own process membership, thread resources, or address spaces.
+The scheduler does not own arbitrary caller-provided stack buffers and does not
+reclaim BORROWED stacks. Process-owned kernel-stack reclamation is coordinated
+through the Memory V2 allocation token and exact process/thread owner handles.
+User-thread resource reclamation and address-space teardown remain outside this
+lifecycle path.
 
 ## 5. ARM64 integration and synchronization
 
