@@ -133,3 +133,27 @@ and TCB retirement sequence, and verifies:
 
 The test exercises the actual reaper-to-retirement path. It does not introduce
 production mutation controls, alter generation policy, or add SMP guarantees.
+
+
+## D3.5.11 — Reuse retired reaper candidate records
+
+The reaper candidate table is bounded by `SYNTRA_MAX_THREADS`. A RETIRED
+candidate no longer owns a live TCB or resource and is therefore eligible for
+reuse by a later terminal event. QUARANTINED candidates remain permanently
+reserved for diagnostics and are never recycled automatically. QUEUED and
+RECLAIMED candidates remain unavailable until the corresponding cleanup and
+retirement protocol completes.
+
+Dispatch searches for a FREE or RETIRED record before extending the
+high-water count. If every record is live or quarantined, it leaves the
+scheduler FIFO head untouched. Nonterminal switch-away events are acknowledged
+without consuming candidate capacity. If acknowledgement fails after a
+candidate slot was reused, the previous record is restored exactly; newly
+appended records are cleared and the high-water count is rolled back.
+
+Host integration coverage performs 40 sequential owned-thread
+create/switch-away/reclaim/retire cycles—more than the 32-entry candidate
+capacity—while asserting the table high-water count stays stable, the same
+retired candidate record is recycled, and a quarantined record remains
+unchanged. This remains a single-core IRQ-serialized design; it does not claim
+SMP support.
