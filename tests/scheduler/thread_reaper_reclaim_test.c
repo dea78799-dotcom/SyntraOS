@@ -144,16 +144,6 @@ int main(void)
 
     check("Create exact process owner",
         process_create_with_handle(950U, 1U, &process) == SYNTRA_STATUS_OK);
-    check("Create allocator-owned kernel thread",
-        process_thread_create_kernel_owned_with_handle(
-            process, 951U, 1U, test_entry, NULL, 4096U,
-            &owned_handle) == SYNTRA_STATUS_OK);
-    check("Capture owned thread snapshot",
-        scheduler_get_thread_snapshot_by_handle(
-            owned_handle, &owned_before) == SYNTRA_STATUS_OK &&
-        owned_before.stack_ownership == SYNTRA_THREAD_STACK_OWNED &&
-        owned_before.stack_allocation.generation != 0U);
-
     check("Create dedicated borrowed reaper thread",
         scheduler_create_thread_with_handle(
             952U, 0U, test_entry, NULL, (void *)reaper_stack_base,
@@ -166,6 +156,95 @@ int main(void)
         thread_reaper_bind_execution_context(
             reaper_handle, reaper_stack_base, reaper_stack_size) ==
                 SYNTRA_STATUS_OK);
+
+    {
+        syntra_thread_handle_t blocked_handle = {0U, 0U};
+        syntra_thread_switch_event_t nonterminal_event;
+        syntra_reaper_stats_t stats_before;
+        syntra_reaper_stats_t stats_after;
+        unsigned int candidate_count_before = 0U;
+        unsigned int candidate_count_after = 0U;
+        unsigned int nonterminal_processed = 0U;
+
+        check("Create thread for nonterminal event accounting",
+            process_thread_create_kernel_owned_with_handle(
+                process, 953U, 2U, test_entry, NULL, 4096U,
+                &blocked_handle) == SYNTRA_STATUS_OK);
+        check("Make nonterminal test thread current",
+            scheduler_set_thread_state_by_handle(
+                blocked_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Block current thread to stage nonterminal switch",
+            scheduler_block_current() == SYNTRA_STATUS_OK);
+        check("Switch to reaper for nonterminal event",
+            scheduler_set_thread_state_by_handle(
+                reaper_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Publish nonterminal switch-away event",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+        check("Nonterminal FIFO head has terminal intent clear",
+            scheduler_peek_switch_away_event(&nonterminal_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(
+                nonterminal_event.handle, blocked_handle) &&
+            nonterminal_event.terminal == 0U);
+        thread_reaper_get_candidate_count(&candidate_count_before);
+        thread_reaper_get_stats(&stats_before);
+        check("Dispatch acknowledges nonterminal event",
+            thread_reaper_dispatch(1U, &nonterminal_processed) ==
+                SYNTRA_STATUS_OK && nonterminal_processed == 1U);
+        thread_reaper_get_candidate_count(&candidate_count_after);
+        thread_reaper_get_stats(&stats_after);
+        check("Nonterminal event does not consume candidate capacity",
+            candidate_count_after == candidate_count_before &&
+            find_reaper_candidate_index(blocked_handle) < 0);
+        check("Nonterminal event increments discard and ACK counters once",
+            stats_after.discarded_nonterminal ==
+                stats_before.discarded_nonterminal + 1U &&
+            stats_after.acknowledged_events ==
+                stats_before.acknowledged_events + 1U);
+        check("Nonterminal event leaves terminal queue count unchanged",
+            stats_after.queued == stats_before.queued);
+        check("Scheduler remains valid after nonterminal event dispatch",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+
+        check("Resume nonterminal thread for owned retirement",
+            scheduler_set_thread_state_by_handle(
+                blocked_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Terminate nonterminal test thread after accounting",
+            scheduler_terminate_current() == SYNTRA_STATUS_OK);
+        check("Return to reaper for nonterminal test cleanup",
+            scheduler_set_thread_state_by_handle(
+                reaper_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Publish terminal proof for nonterminal test cleanup",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+        check("Dispatch terminal proof for nonterminal test cleanup",
+            thread_reaper_dispatch(1U, &nonterminal_processed) ==
+                SYNTRA_STATUS_OK && nonterminal_processed == 1U);
+        {
+            int cleanup_index = find_reaper_candidate_index(blocked_handle);
+            check("Locate cleanup candidate by exact handle",
+                cleanup_index >= 0);
+            if (cleanup_index >= 0)
+            {
+                check("Reclaim owned stack after nonterminal test",
+                    thread_reaper_reclaim_candidate(
+                        (unsigned int)cleanup_index) == SYNTRA_STATUS_OK);
+                check("Retire owned TCB after nonterminal test",
+                    thread_reaper_retire_candidate(
+                        (unsigned int)cleanup_index) == SYNTRA_STATUS_OK);
+            }
+        }
+    }
+
+
+    check("Create allocator-owned kernel thread",
+        process_thread_create_kernel_owned_with_handle(
+            process, 951U, 1U, test_entry, NULL, 4096U,
+            &owned_handle) == SYNTRA_STATUS_OK);
+    check("Capture owned thread snapshot",
+        scheduler_get_thread_snapshot_by_handle(
+            owned_handle, &owned_before) == SYNTRA_STATUS_OK &&
+        owned_before.stack_ownership == SYNTRA_THREAD_STACK_OWNED &&
+        owned_before.stack_allocation.generation != 0U);
 
     check("Make owned thread current",
         scheduler_set_thread_state_by_handle(
@@ -688,88 +767,11 @@ int main(void)
                 SYNTRA_REAPER_REASON_RESOURCE_RECLAIM_FAILED);
         check("Reaper retirement statistics include all recycle cycles",
             thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
-            stats.retired == 43U);
+            stats.retired == 44U);
         check("Scheduler validates after repeated reaper candidate reuse",
             scheduler_validate() == SYNTRA_STATUS_OK);
     }
 
-    {
-        syntra_thread_handle_t blocked_handle = {0U, 0U};
-        syntra_thread_switch_event_t nonterminal_event;
-        syntra_reaper_stats_t stats_before;
-        syntra_reaper_stats_t stats_after;
-        unsigned int candidate_count_before = 0U;
-        unsigned int candidate_count_after = 0U;
-        unsigned int nonterminal_processed = 0U;
-
-        check("Create thread for nonterminal event accounting",
-            process_thread_create_kernel_owned_with_handle(
-                process, 953U, 2U, test_entry, NULL, 4096U,
-                &blocked_handle) == SYNTRA_STATUS_OK);
-        check("Make nonterminal test thread current",
-            scheduler_set_thread_state_by_handle(
-                blocked_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
-        check("Block current thread to stage nonterminal switch",
-            scheduler_block_current() == SYNTRA_STATUS_OK);
-        check("Switch to reaper for nonterminal event",
-            scheduler_set_thread_state_by_handle(
-                reaper_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
-        check("Publish nonterminal switch-away event",
-            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
-        check("Nonterminal FIFO head has terminal intent clear",
-            scheduler_peek_switch_away_event(&nonterminal_event) ==
-                SYNTRA_STATUS_OK &&
-            scheduler_thread_handle_equal(
-                nonterminal_event.handle, blocked_handle) &&
-            nonterminal_event.terminal == 0U);
-        thread_reaper_get_candidate_count(&candidate_count_before);
-        thread_reaper_get_stats(&stats_before);
-        check("Dispatch acknowledges nonterminal event",
-            thread_reaper_dispatch(1U, &nonterminal_processed) ==
-                SYNTRA_STATUS_OK && nonterminal_processed == 1U);
-        thread_reaper_get_candidate_count(&candidate_count_after);
-        thread_reaper_get_stats(&stats_after);
-        check("Nonterminal event does not consume candidate capacity",
-            candidate_count_after == candidate_count_before &&
-            find_reaper_candidate_index(blocked_handle) < 0);
-        check("Nonterminal event increments discard and ACK counters once",
-            stats_after.discarded_nonterminal ==
-                stats_before.discarded_nonterminal + 1U &&
-            stats_after.acknowledged_events ==
-                stats_before.acknowledged_events + 1U);
-        check("Nonterminal event leaves terminal queue count unchanged",
-            stats_after.queued == stats_before.queued);
-        check("Scheduler remains valid after nonterminal event dispatch",
-            scheduler_validate() == SYNTRA_STATUS_OK);
-
-        check("Resume nonterminal thread for owned retirement",
-            scheduler_set_thread_state_by_handle(
-                blocked_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
-        check("Terminate nonterminal test thread after accounting",
-            scheduler_terminate_current() == SYNTRA_STATUS_OK);
-        check("Return to reaper for nonterminal test cleanup",
-            scheduler_set_thread_state_by_handle(
-                reaper_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
-        check("Publish terminal proof for nonterminal test cleanup",
-            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
-        check("Dispatch terminal proof for nonterminal test cleanup",
-            thread_reaper_dispatch(1U, &nonterminal_processed) ==
-                SYNTRA_STATUS_OK && nonterminal_processed == 1U);
-        {
-            int cleanup_index = find_reaper_candidate_index(blocked_handle);
-            check("Locate cleanup candidate by exact handle",
-                cleanup_index >= 0);
-            if (cleanup_index >= 0)
-            {
-                check("Reclaim owned stack after nonterminal test",
-                    thread_reaper_reclaim_candidate(
-                        (unsigned int)cleanup_index) == SYNTRA_STATUS_OK);
-                check("Retire owned TCB after nonterminal test",
-                    thread_reaper_retire_candidate(
-                        (unsigned int)cleanup_index) == SYNTRA_STATUS_OK);
-            }
-        }
-    }
 
 
     {
