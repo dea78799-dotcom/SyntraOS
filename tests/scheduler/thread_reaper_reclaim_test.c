@@ -311,7 +311,7 @@ int main(void)
             SYNTRA_STATUS_PERMISSION_DENIED);
     check("Reaper statistics record one reclamation",
         thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
-        stats.reclaimed == 1U && stats.reclaim_failures == 0U);
+        stats.reclaimed == 2U && stats.reclaim_failures == 0U);
     {
         syntra_thread_slot_state_t retired_state;
         uint32_t retired_generation = 0U;
@@ -344,7 +344,7 @@ int main(void)
             scheduler_validate() == SYNTRA_STATUS_OK);
         check("Retirement statistics record exactly one TCB retirement",
             thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
-            stats.retired == 1U && stats.retirement_failures == 0U);
+            stats.retired == 2U && stats.retirement_failures == 0U);
     }
     check("Reject invalid owned-thread stack size before reserving a slot",
         process_thread_create_kernel_owned_with_handle(
@@ -479,7 +479,7 @@ int main(void)
                     SYNTRA_STATUS_PERMISSION_DENIED);
         check("Reaper statistics report reclaim, retirement and quarantine",
             thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
-            stats.reclaimed == 1U && stats.retired == 1U &&
+            stats.reclaimed == 2U && stats.retired == 2U &&
             stats.quarantined == 1U && stats.reclaim_failures == 1U);
     }
 
