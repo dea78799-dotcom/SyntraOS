@@ -147,6 +147,40 @@ int main(void)
     check("Reaper statistics record one reclamation",
         thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
         stats.reclaimed == 1U && stats.reclaim_failures == 0U);
+    {
+        syntra_thread_slot_state_t retired_state;
+        uint32_t retired_generation = 0U;
+        unsigned int high_water_before = scheduler_get_thread_count();
+        unsigned int active_before = scheduler_get_active_thread_count();
+
+        check("Retire exact RECLAIMED candidate from bound reaper context",
+            thread_reaper_retire_candidate(0U) == SYNTRA_STATUS_OK);
+        check("Candidate history transitions to RETIRED",
+            thread_reaper_get_candidate(0U, &candidate) == SYNTRA_STATUS_OK &&
+            candidate.state == SYNTRA_REAPER_CANDIDATE_RETIRED &&
+            candidate.reason == SYNTRA_REAPER_REASON_NONE);
+        check("Retirement invalidates the old exact handle",
+            scheduler_get_thread_snapshot_by_handle(
+                owned_handle, &owned_after) == SYNTRA_STATUS_INVALID_ARGUMENT &&
+            scheduler_set_thread_state_by_handle(
+                owned_handle, THREAD_READY) == SYNTRA_STATUS_INVALID_ARGUMENT);
+        check("Retired slot advances generation before becoming FREE",
+            scheduler_get_slot_metadata(owned_handle.slot, &retired_state,
+                &retired_generation) == SYNTRA_STATUS_OK &&
+            retired_state == SYNTRA_THREAD_SLOT_FREE &&
+            retired_generation == owned_handle.generation + 1U);
+        check("Retirement preserves high-water and decrements active count",
+            scheduler_get_thread_count() == high_water_before &&
+            scheduler_get_active_thread_count() + 1U == active_before);
+        check("Duplicate retirement cannot retire the old handle twice",
+            thread_reaper_retire_candidate(0U) ==
+                SYNTRA_STATUS_PERMISSION_DENIED);
+        check("Scheduler validation accepts the retired slot hole",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+        check("Retirement statistics record exactly one TCB retirement",
+            thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
+            stats.retired == 1U && stats.retirement_failures == 0U);
+    }
     check("Create a BORROWED kernel thread for fail-closed coverage",
         scheduler_create_thread_with_handle(
             953U, 1U, test_entry, NULL, borrowed_stack,
@@ -202,10 +236,13 @@ int main(void)
         check("Quarantined candidate cannot be retried",
             thread_reaper_reclaim_candidate(1U) ==
                 SYNTRA_STATUS_PERMISSION_DENIED);
-        check("Reaper statistics report one reclaim and one quarantine",
+        check("Quarantined BORROWED candidate cannot be retired",
+            thread_reaper_retire_candidate(1U) ==
+                SYNTRA_STATUS_PERMISSION_DENIED);
+        check("Reaper statistics report reclaim, retirement and quarantine",
             thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
-            stats.reclaimed == 1U && stats.quarantined == 1U &&
-            stats.reclaim_failures == 1U);
+            stats.reclaimed == 1U && stats.retired == 1U &&
+            stats.quarantined == 1U && stats.reclaim_failures == 1U);
     }
     check("Memory allocator invariants remain valid after quarantine",
         memory_validate() == SYNTRA_STATUS_OK);
