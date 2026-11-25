@@ -235,10 +235,4 @@ syntra_status_t scheduler_get_slot_metadata(
     uint32_t *generation_out);
 syntra_status_t scheduler_validate(void);
 
-#ifdef SYNTRA_HOST_TESTING
-/* Host-only event replay hook; never present in the freestanding kernel. */
-syntra_status_t scheduler_test_enqueue_switch_away_event(
-    syntra_thread_switch_event_t event);
-#endif
-
 #endif
