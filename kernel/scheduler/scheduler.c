@@ -348,6 +348,32 @@ static syntra_status_t scheduler_init_unlocked(void)
     return SYNTRA_STATUS_OK;
 }
 
+
+#ifdef SYNTRA_HOST_TESTING
+/*
+ * Seed an unused FREE slot for generation-boundary tests only. Production
+ * builds do not contain this mutation hook.
+ */
+syntra_status_t scheduler_test_seed_free_slot_generation(
+    unsigned int slot, uint32_t generation)
+{
+    syntra_irq_state_t irq = syntra_irq_save();
+    syntra_status_t status = SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    if (scheduler_initialized && generation != 0U &&
+        slot < SYNTRA_MAX_THREADS && slot <= thread_count &&
+        slot_states[slot] == SYNTRA_THREAD_SLOT_FREE &&
+        scheduler_thread_record_is_clear(&threads[slot]))
+    {
+        slot_generations[slot] = generation;
+        status = SYNTRA_STATUS_OK;
+    }
+
+    syntra_irq_restore(irq);
+    return status;
+}
+#endif
+
 static syntra_status_t scheduler_add_thread_unlocked(
     unsigned int thread_id,
     unsigned int priority

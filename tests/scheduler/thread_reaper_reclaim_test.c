@@ -15,6 +15,8 @@
 
 /* Defined only by the host-test build of syntra_kernel. */
 extern void process_thread_test_fail_at(unsigned int stage);
+extern syntra_status_t scheduler_test_seed_free_slot_generation(
+    unsigned int slot, uint32_t generation);
 
 static unsigned int failures;
 static _Alignas(16) unsigned char borrowed_stack[4096];
@@ -366,6 +368,72 @@ int main(void)
             stats.reclaimed == 1U && stats.retired == 1U &&
             stats.quarantined == 1U && stats.reclaim_failures == 1U);
     }
+
+    {
+        const unsigned int exhaustion_slot = 3U;
+        syntra_thread_handle_t exhaustion_handle = {0U, 0U};
+        syntra_thread_handle_t after_exhaustion_handle = {0U, 0U};
+        syntra_thread_slot_state_t exhaustion_state =
+            SYNTRA_THREAD_SLOT_FREE;
+        uint32_t exhaustion_generation = 0U;
+        unsigned int exhaustion_processed = 0U;
+        unsigned int high_water_before = scheduler_get_thread_count();
+
+        check("Seed unused tail slot at UINT32_MAX for host boundary test",
+            scheduler_test_seed_free_slot_generation(
+                exhaustion_slot, UINT32_MAX) == SYNTRA_STATUS_OK);
+        check("Create owned thread with terminal generation",
+            process_thread_create_kernel_owned_with_handle(
+                process, 956U, 2U, test_entry, NULL, 4096U,
+                &exhaustion_handle) == SYNTRA_STATUS_OK &&
+            exhaustion_handle.slot == exhaustion_slot &&
+            exhaustion_handle.generation == UINT32_MAX);
+        check("Make terminal-generation thread current",
+            scheduler_set_thread_state_by_handle(
+                exhaustion_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Terminate terminal-generation thread",
+            scheduler_terminate_current() == SYNTRA_STATUS_OK);
+        check("Switch to reaper for terminal-generation thread",
+            scheduler_set_thread_state_by_handle(
+                reaper_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Publish terminal-generation switch-away proof",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+        check("Dispatch terminal-generation candidate",
+            thread_reaper_dispatch(1U, &exhaustion_processed) ==
+                SYNTRA_STATUS_OK && exhaustion_processed == 1U);
+        check("Reclaim terminal-generation thread stack",
+            thread_reaper_reclaim_candidate(2U) == SYNTRA_STATUS_OK);
+        check("Retire terminal-generation TCB without wrapping",
+            thread_reaper_retire_candidate(2U) == SYNTRA_STATUS_OK);
+        check("UINT32_MAX generation becomes permanently EXHAUSTED",
+            scheduler_get_slot_metadata(exhaustion_slot, &exhaustion_state,
+                &exhaustion_generation) == SYNTRA_STATUS_OK &&
+            exhaustion_state == SYNTRA_THREAD_SLOT_EXHAUSTED &&
+            exhaustion_generation == UINT32_MAX);
+        check("Exhaustion invalidates the terminal-generation handle",
+            scheduler_get_thread_snapshot_by_handle(
+                exhaustion_handle, &owned_after) ==
+                    SYNTRA_STATUS_INVALID_ARGUMENT);
+        check("Exhaustion preserves high-water count and active accounting",
+            scheduler_get_thread_count() == high_water_before + 1U &&
+            scheduler_get_active_thread_count() == 3U);
+        check("Scheduler remains valid after permanent slot exhaustion",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+        check("New creation skips EXHAUSTED slot and appends a fresh slot",
+            process_thread_create_kernel_owned_with_handle(
+                process, 957U, 2U, test_entry, NULL, 4096U,
+                &after_exhaustion_handle) == SYNTRA_STATUS_OK &&
+            after_exhaustion_handle.slot != exhaustion_slot &&
+            after_exhaustion_handle.slot == exhaustion_slot + 1U);
+        check("EXHAUSTED slot remains unchanged after later allocation",
+            scheduler_get_slot_metadata(exhaustion_slot, &exhaustion_state,
+                &exhaustion_generation) == SYNTRA_STATUS_OK &&
+            exhaustion_state == SYNTRA_THREAD_SLOT_EXHAUSTED &&
+            exhaustion_generation == UINT32_MAX);
+        check("Scheduler validation accepts appended slot beside exhaustion",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+    }
+
     check("Memory allocator invariants remain valid after quarantine",
         memory_validate() == SYNTRA_STATUS_OK);
     check("Scheduler invariants remain valid after quarantine",
