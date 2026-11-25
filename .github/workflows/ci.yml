@@ -33,6 +33,8 @@ on:
       - feat/d355-active-slot-scan-guards-v1
       - feat/d356-generation-safe-tcb-retirement-v1
       - feat/d357-safe-thread-slot-reuse-v1
+      - feat/d357-safe-thread-slot-reuse-v1
+      - test/d358-reused-slot-abort-coverage-v1
 
   pull_request:
     branches:
