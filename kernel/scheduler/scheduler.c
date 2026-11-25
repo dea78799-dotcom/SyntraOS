@@ -135,12 +135,30 @@ static syntra_status_t scheduler_reserve_slot_unlocked(uint32_t *slot_out)
 
     if (slot_out == NULL)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
+
+    /*
+     * Reuse only fully retired FREE holes below the high-water mark.
+     * EXHAUSTED slots are permanent and RESERVED slots are never candidates.
+     */
+    for (slot = 0U; slot < thread_count; ++slot)
+    {
+        if (slot_states[slot] == SYNTRA_THREAD_SLOT_FREE &&
+            slot_generations[slot] != 0U &&
+            scheduler_thread_record_is_clear(&threads[slot]))
+        {
+            slot_states[slot] = SYNTRA_THREAD_SLOT_RESERVED;
+            *slot_out = slot;
+            return SYNTRA_STATUS_OK;
+        }
+    }
+
     if (thread_count >= SYNTRA_MAX_THREADS)
         return SYNTRA_STATUS_OUT_OF_MEMORY;
 
     slot = (uint32_t)thread_count;
     if (slot_states[slot] != SYNTRA_THREAD_SLOT_FREE ||
-        slot_generations[slot] == 0U)
+        slot_generations[slot] == 0U ||
+        !scheduler_thread_record_is_clear(&threads[slot]))
         return SYNTRA_STATUS_ERROR;
 
     slot_states[slot] = SYNTRA_THREAD_SLOT_RESERVED;
@@ -150,13 +168,14 @@ static syntra_status_t scheduler_reserve_slot_unlocked(uint32_t *slot_out)
 
 static syntra_status_t scheduler_publish_slot_unlocked(uint32_t slot)
 {
-    if (slot >= SYNTRA_MAX_THREADS || slot != thread_count ||
+    if (slot >= SYNTRA_MAX_THREADS || slot > thread_count ||
         slot_states[slot] != SYNTRA_THREAD_SLOT_RESERVED ||
         slot_generations[slot] == 0U)
         return SYNTRA_STATUS_ERROR;
 
     slot_states[slot] = SYNTRA_THREAD_SLOT_ACTIVE;
-    ++thread_count;
+    if (slot == thread_count)
+        ++thread_count;
     ++active_thread_count;
     return SYNTRA_STATUS_OK;
 }
@@ -169,11 +188,12 @@ static int scheduler_slot_is_active(unsigned int slot)
 
 static syntra_status_t scheduler_abort_slot_unlocked(uint32_t slot)
 {
-    if (slot >= SYNTRA_MAX_THREADS || slot != thread_count ||
+    if (slot >= SYNTRA_MAX_THREADS || slot > thread_count ||
         slot_states[slot] != SYNTRA_THREAD_SLOT_RESERVED)
         return SYNTRA_STATUS_INVALID_ARGUMENT;
 
     /* An unpublished reservation never exposes its generation to callers. */
+    scheduler_clear_thread_record(&threads[slot]);
     slot_states[slot] = SYNTRA_THREAD_SLOT_FREE;
     return SYNTRA_STATUS_OK;
 }
