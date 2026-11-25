@@ -1660,13 +1660,6 @@ syntra_status_t scheduler_get_thread_snapshot_by_handle(
 }
 
 /*
- * This operation is intentionally one-way. The exact terminal switch-away
- * proof is checked against the sequence stored in the TCB. Local IRQ masking
- * keeps the current-slot check, allocator release, and TCB pointer clearing
- * atomic on the supported single-core target.
- */
-
-/*
  * Reaper-only final TCB retirement. The caller must already have consumed the
  * terminal switch proof and reclaimed the owned kernel stack. This operation
  * never frees memory; it only invalidates the exact handle and clears the
@@ -1747,6 +1740,12 @@ done:
     return status;
 }
 
+/*
+ * This operation is intentionally one-way. The exact terminal switch-away
+ * proof is checked against the sequence stored in the TCB. Local IRQ masking
+ * keeps the current-slot check, allocator release, and TCB pointer clearing
+ * atomic on the supported single-core target.
+ */
 syntra_status_t scheduler_reclaim_owned_thread_stack(
     syntra_thread_handle_t handle, uint64_t switch_away_sequence)
 {
