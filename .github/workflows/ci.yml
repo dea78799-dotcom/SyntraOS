@@ -32,6 +32,7 @@ on:
       - feat/d354-slot-lifecycle-metadata-v1
       - feat/d355-active-slot-scan-guards-v1
       - feat/d356-generation-safe-tcb-retirement-v1
+      - feat/d357-safe-thread-slot-reuse-v1
 
   pull_request:
     branches:
@@ -41,6 +42,7 @@ on:
       - design/d354-generation-safe-tcb-retirement-v1
       - feat/d354-slot-lifecycle-metadata-v1
       - feat/d355-active-slot-scan-guards-v1
+      - feat/d356-generation-safe-tcb-retirement-v1
 
   # Run a health check every day at 02:00 UTC (09:00 Vietnam time).
   schedule:
