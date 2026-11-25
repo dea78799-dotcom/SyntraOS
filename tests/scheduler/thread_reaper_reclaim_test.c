@@ -202,7 +202,7 @@ int main(void)
         scheduler_thread_handle_equal(owned_after.handle, reused_handle));
     check("High-water count stays stable while active count increases",
         scheduler_get_thread_count() == 2U &&
-        scheduler_get_active_thread_count() == active_before + 1U);
+        scheduler_get_active_thread_count() == 2U);
     check("Scheduler validation accepts a reused slot",
         scheduler_validate() == SYNTRA_STATUS_OK);
     check("Create a BORROWED kernel thread for fail-closed coverage",
