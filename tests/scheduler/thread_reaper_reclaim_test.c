@@ -1080,13 +1080,13 @@ int main(void)
     {
         syntra_thread_handle_t first_handle = {0U, 0U};
         syntra_thread_handle_t final_handle = {0U, 0U};
-        syntra_thread_switch_event_t first_proof = {{0U, 0U}, 0U, 0U};
+        syntra_thread_switch_event_t first_proof = {0};
         syntra_thread_switch_event_t duplicate_event;
         syntra_thread_switch_event_t conflicting_event;
         syntra_thread_switch_event_t nonterminal_event;
         syntra_thread_switch_event_t final_event;
-        syntra_reaper_candidate_t first_candidate = {{{0U, 0U}, 0U, 0U}, SYNTRA_REAPER_CANDIDATE_FREE, SYNTRA_REAPER_REASON_NONE};
-        syntra_reaper_candidate_t first_after_conflict = {{{0U, 0U}, 0U, 0U}, SYNTRA_REAPER_CANDIDATE_FREE, SYNTRA_REAPER_REASON_NONE};
+        syntra_reaper_candidate_t first_candidate = {0};
+        syntra_reaper_candidate_t first_after_conflict = {0};
         syntra_reaper_stats_t mixed_before;
         syntra_reaper_stats_t after_first;
         syntra_reaper_stats_t after_duplicate;
