@@ -42,6 +42,7 @@ on:
       - test/d3514-nonterminal-event-capacity-v1
       - test/d3515-duplicate-terminal-event-idempotence-v1
       - test/d3516-conflicting-terminal-proof-quarantine-v1
+      - test/d3517-quarantine-replay-accounting-v1
 
   pull_request:
     branches:
@@ -62,6 +63,7 @@ on:
       - test/d3514-nonterminal-event-capacity-v1
       - test/d3515-duplicate-terminal-event-idempotence-v1
       - test/d3516-conflicting-terminal-proof-quarantine-v1
+      - test/d3517-quarantine-replay-accounting-v1
 
   # Run a health check every day at 02:00 UTC (09:00 Vietnam time).
   schedule:
