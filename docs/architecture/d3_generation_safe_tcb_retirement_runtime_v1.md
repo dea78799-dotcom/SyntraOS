@@ -285,3 +285,23 @@ does not overwrite reserved quarantine diagnostics, even across more cycles
 than the table capacity.
 
 This is host integration coverage only. No production reaper logic changes.
+
+
+## D3.5.20 — Reaper statistics remain consistent across candidate reuse
+
+The host reclamation integration test snapshots reaper statistics before each
+of forty candidate-reuse cycles. After dispatch, it verifies that queued,
+acknowledged-event, and bound-context dispatch counters each advance exactly
+once while unrelated counters remain unchanged.
+
+After reclamation, the test verifies that queued returns to its prior value
+and reclaimed advances exactly once, without changing quarantine, failure,
+acknowledgement, or retirement counters. After retirement, retired advances
+exactly once while the other lifecycle counters remain stable.
+
+A final aggregate comparison requires exactly forty additional acknowledgements,
+dispatches, successful reclaims, and retirements; no outstanding queued
+candidates; and no changes to quarantine or failure totals. This validates
+both per-transition accounting and cumulative accounting under repeated reuse.
+
+This is host integration coverage only. No production reaper logic changes.
