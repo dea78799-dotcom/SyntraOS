@@ -18,6 +18,8 @@ extern void process_thread_test_fail_at(unsigned int stage);
 extern syntra_status_t scheduler_test_seed_free_slot_generation(
     unsigned int slot, uint32_t generation);
 extern syntra_status_t scheduler_test_fail_next_switch_event_ack(void);
+extern syntra_status_t scheduler_test_enqueue_switch_away_event(
+    syntra_thread_switch_event_t event);
 extern syntra_status_t thread_reaper_test_fill_quarantined(void);
 
 static unsigned int failures;
@@ -772,6 +774,145 @@ int main(void)
             scheduler_validate() == SYNTRA_STATUS_OK);
     }
 
+
+    {
+        syntra_thread_handle_t quarantined_handle = {0U, 0U};
+        syntra_thread_switch_event_t original_proof;
+        syntra_thread_switch_event_t conflicting_proof;
+        syntra_reaper_candidate_t quarantined_before;
+        syntra_reaper_candidate_t quarantined_after;
+        syntra_thread_t quarantined_snapshot;
+        syntra_memory_allocation_t quarantine_allocation;
+        syntra_memory_info_t quarantine_memory_before;
+        syntra_memory_info_t quarantine_memory_after;
+        syntra_reaper_stats_t quarantine_stats_before;
+        syntra_reaper_stats_t quarantine_stats_after;
+        unsigned int quarantine_processed = 0U;
+        int quarantined_index = -1;
+        syntra_status_t operation_status;
+
+        check("Create owned thread for quarantined-operation guard test",
+            process_thread_create_kernel_owned_with_handle(
+                process, 3000U, 2U, test_entry, NULL, 4096U,
+                &quarantined_handle) == SYNTRA_STATUS_OK);
+        check("Run thread for quarantined-operation guard test",
+            scheduler_set_thread_state_by_handle(
+                quarantined_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Terminate thread for quarantined-operation guard test",
+            scheduler_terminate_current() == SYNTRA_STATUS_OK);
+        check("Switch to bound reaper before quarantine guard test",
+            scheduler_set_thread_state_by_handle(
+                reaper_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Publish terminal proof for quarantine guard test",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+        check("Dispatch terminal proof into reusable candidate",
+            thread_reaper_dispatch(1U, &quarantine_processed) ==
+                SYNTRA_STATUS_OK && quarantine_processed == 1U);
+
+        quarantined_index = find_reaper_candidate_index(quarantined_handle);
+        check("Locate candidate by exact quarantined-test handle",
+            quarantined_index >= 0);
+        if (quarantined_index < 0)
+            quarantined_index = 1;
+
+        check("Capture original QUEUED proof before sequence conflict",
+            thread_reaper_get_candidate(
+                (unsigned int)quarantined_index, &quarantined_before) ==
+                SYNTRA_STATUS_OK &&
+            quarantined_before.state == SYNTRA_REAPER_CANDIDATE_QUEUED);
+        original_proof = quarantined_before.proof;
+        conflicting_proof = original_proof;
+        ++conflicting_proof.sequence;
+        check("Queue conflicting terminal proof for same handle",
+            scheduler_test_enqueue_switch_away_event(conflicting_proof) ==
+                SYNTRA_STATUS_OK);
+        quarantine_processed = 0U;
+        check("Dispatch conflict and quarantine candidate",
+            thread_reaper_dispatch(1U, &quarantine_processed) ==
+                SYNTRA_STATUS_OK && quarantine_processed == 1U);
+        check("Candidate is quarantined with original proof retained",
+            thread_reaper_get_candidate(
+                (unsigned int)quarantined_index, &quarantined_before) ==
+                SYNTRA_STATUS_OK &&
+            quarantined_before.state == SYNTRA_REAPER_CANDIDATE_QUARANTINED &&
+            quarantined_before.reason ==
+                SYNTRA_REAPER_REASON_SEQUENCE_CONFLICT &&
+            scheduler_thread_handle_equal(
+                quarantined_before.proof.handle, original_proof.handle) &&
+            quarantined_before.proof.sequence == original_proof.sequence &&
+            quarantined_before.proof.terminal == original_proof.terminal);
+
+        memory_get_info(&quarantine_memory_before);
+        check("Capture TCB and allocator state before guarded operations",
+            scheduler_get_thread_snapshot_by_handle(
+                quarantined_handle, &quarantined_snapshot) ==
+                SYNTRA_STATUS_OK &&
+            quarantined_snapshot.state == THREAD_TERMINATED &&
+            quarantined_snapshot.stack_ownership ==
+                SYNTRA_THREAD_STACK_OWNED &&
+            memory_get_allocation_by_handle(
+                quarantined_snapshot.stack_allocation, &quarantine_allocation) ==
+                SYNTRA_STATUS_OK &&
+            quarantine_allocation.ownership_state ==
+                SYNTRA_MEMORY_ALLOCATION_THREAD_OWNED);
+        check("Capture reaper counters before guarded operations",
+            thread_reaper_get_stats(&quarantine_stats_before) ==
+                SYNTRA_STATUS_OK);
+
+        operation_status = thread_reaper_reclaim_candidate(
+            (unsigned int)quarantined_index);
+        check("QUARANTINED candidate cannot reclaim its owned stack",
+            operation_status == SYNTRA_STATUS_PERMISSION_DENIED);
+        if (operation_status == SYNTRA_STATUS_PERMISSION_DENIED)
+            operation_status = thread_reaper_retire_candidate(
+                (unsigned int)quarantined_index);
+        else
+            operation_status = SYNTRA_STATUS_ERROR;
+        check("QUARANTINED candidate cannot retire its TCB",
+            operation_status == SYNTRA_STATUS_PERMISSION_DENIED);
+
+        check("Rejected operations preserve candidate proof and quarantine reason",
+            thread_reaper_get_candidate(
+                (unsigned int)quarantined_index, &quarantined_after) ==
+                SYNTRA_STATUS_OK &&
+            quarantined_after.state == SYNTRA_REAPER_CANDIDATE_QUARANTINED &&
+            quarantined_after.reason ==
+                SYNTRA_REAPER_REASON_SEQUENCE_CONFLICT &&
+            scheduler_thread_handle_equal(
+                quarantined_after.proof.handle, original_proof.handle) &&
+            quarantined_after.proof.sequence == original_proof.sequence &&
+            quarantined_after.proof.terminal == original_proof.terminal);
+        check("Rejected operations preserve terminated TCB and owned allocation",
+            scheduler_get_thread_snapshot_by_handle(
+                quarantined_handle, &quarantined_snapshot) ==
+                SYNTRA_STATUS_OK &&
+            quarantined_snapshot.state == THREAD_TERMINATED &&
+            quarantined_snapshot.stack_ownership ==
+                SYNTRA_THREAD_STACK_OWNED &&
+            memory_get_allocation_by_handle(
+                quarantined_snapshot.stack_allocation, &quarantine_allocation) ==
+                SYNTRA_STATUS_OK &&
+            quarantine_allocation.ownership_state ==
+                SYNTRA_MEMORY_ALLOCATION_THREAD_OWNED);
+        memory_get_info(&quarantine_memory_after);
+        check("Rejected operations do not change active allocations",
+            quarantine_memory_after.active_allocations ==
+                quarantine_memory_before.active_allocations);
+        check("Rejected operations do not change reclaim or retirement counters",
+            thread_reaper_get_stats(&quarantine_stats_after) ==
+                SYNTRA_STATUS_OK &&
+            quarantine_stats_after.reclaimed ==
+                quarantine_stats_before.reclaimed &&
+            quarantine_stats_after.retired ==
+                quarantine_stats_before.retired &&
+            quarantine_stats_after.reclaim_failures ==
+                quarantine_stats_before.reclaim_failures &&
+            quarantine_stats_after.retirement_failures ==
+                quarantine_stats_before.retirement_failures);
+        check("Scheduler and allocator remain valid after guarded operations",
+            scheduler_validate() == SYNTRA_STATUS_OK &&
+            memory_validate() == SYNTRA_STATUS_OK);
+    }
 
 
     {

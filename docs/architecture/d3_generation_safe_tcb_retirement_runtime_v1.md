@@ -248,3 +248,23 @@ increases exactly once for the additional event.
 This is regression coverage for an already-quarantined record. It introduces
 no production logic change and uses only the existing host-test event replay
 hook.
+
+
+## D3.5.18 — Quarantined candidates reject reclaim and retirement
+
+The host reclamation integration test creates an owned thread, captures its
+terminal switch-away proof, and then injects a second terminal proof for the
+same handle with a conflicting sequence. Dispatch must quarantine the existing
+candidate while retaining the original proof.
+
+From the already-bound reaper execution context, the test calls both
+`thread_reaper_reclaim_candidate()` and
+`thread_reaper_retire_candidate()` for that candidate. Both operations must
+return `SYNTRA_STATUS_PERMISSION_DENIED`. The candidate's state, reason, and
+original proof must remain unchanged; the terminated TCB and its
+`THREAD_OWNED` allocation must remain intact; and reclaim/retirement
+accounting must not advance.
+
+This closes the quarantine-operation guard at the public reaper API boundary.
+The test uses the host-only event replay hook and makes no production logic
+changes.
