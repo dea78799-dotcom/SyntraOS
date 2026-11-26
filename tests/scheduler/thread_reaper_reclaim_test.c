@@ -880,6 +880,204 @@ int main(void)
 
 
     {
+        syntra_thread_handle_t first_handle = {0U, 0U};
+        syntra_thread_handle_t second_handle = {0U, 0U};
+        syntra_thread_switch_event_t first_event;
+        syntra_thread_switch_event_t second_event;
+        syntra_thread_switch_event_t pending_event;
+        syntra_reaper_candidate_t reusable_before_failure;
+        syntra_reaper_candidate_t reusable_after_failure;
+        syntra_reaper_candidate_t candidate_after_retry;
+        syntra_reaper_stats_t sequence_before;
+        syntra_reaper_stats_t after_first_dispatch;
+        syntra_reaper_stats_t after_first_retire;
+        syntra_reaper_stats_t after_second_ack_failure;
+        syntra_reaper_stats_t after_second_retry;
+        unsigned int sequence_processed = 0U;
+        unsigned int candidate_count_before = 0U;
+        unsigned int candidate_count_after = 0U;
+        int reusable_index = exhaustion_reusable_candidate_index;
+
+        if (reusable_index < 0)
+            reusable_index = 1;
+
+        check("Capture clean baseline before ordered multi-event test",
+            thread_reaper_get_stats(&sequence_before) == SYNTRA_STATUS_OK &&
+            sequence_before.queued == 0U &&
+            sequence_before.quarantined == 1U);
+        check("Capture candidate high-water before ordered multi-event test",
+            thread_reaper_get_candidate_count(&candidate_count_before) ==
+                SYNTRA_STATUS_OK && candidate_count_before == 2U);
+
+        check("Create first thread in ordered FIFO sequence",
+            process_thread_create_kernel_owned_with_handle(
+                process, 3101U, 2U, test_entry, NULL, 4096U,
+                &first_handle) == SYNTRA_STATUS_OK);
+        check("Run first ordered FIFO thread",
+            scheduler_set_thread_state_by_handle(
+                first_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Terminate first ordered FIFO thread",
+            scheduler_terminate_current() == SYNTRA_STATUS_OK);
+        check("Switch back to reaper after first ordered thread",
+            scheduler_set_thread_state_by_handle(
+                reaper_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Publish first terminal FIFO event",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+
+        check("Create second thread behind first FIFO event",
+            process_thread_create_kernel_owned_with_handle(
+                process, 3102U, 2U, test_entry, NULL, 4096U,
+                &second_handle) == SYNTRA_STATUS_OK);
+        check("Run second ordered FIFO thread",
+            scheduler_set_thread_state_by_handle(
+                second_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Terminate second ordered FIFO thread",
+            scheduler_terminate_current() == SYNTRA_STATUS_OK);
+        check("Switch back to reaper after second ordered thread",
+            scheduler_set_thread_state_by_handle(
+                reaper_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Publish second terminal FIFO event",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+
+        check("FIFO preserves first event ordering",
+            scheduler_peek_switch_away_event(&first_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(first_event.handle, first_handle) &&
+            first_event.terminal != 0U);
+        check("Dispatch exactly the first event from a two-event FIFO",
+            thread_reaper_dispatch(1U, &sequence_processed) ==
+                SYNTRA_STATUS_OK && sequence_processed == 1U);
+        check("First event is acknowledged and queued once",
+            thread_reaper_get_stats(&after_first_dispatch) ==
+                SYNTRA_STATUS_OK &&
+            after_first_dispatch.queued == sequence_before.queued + 1U &&
+            after_first_dispatch.acknowledged_events ==
+                sequence_before.acknowledged_events + 1U &&
+            after_first_dispatch.execution_context_dispatches ==
+                sequence_before.execution_context_dispatches + 1U);
+        check("Second event remains FIFO head after first dispatch",
+            scheduler_peek_switch_away_event(&pending_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(
+                pending_event.handle, second_handle) &&
+            pending_event.terminal != 0U);
+
+        {
+            int first_index = find_reaper_candidate_index(first_handle);
+            check("Locate first queued event candidate", first_index >= 0);
+            if (first_index >= 0)
+            {
+                check("Reclaim first event before processing next FIFO head",
+                    thread_reaper_reclaim_candidate(
+                        (unsigned int)first_index) == SYNTRA_STATUS_OK);
+                check("Retire first event before processing next FIFO head",
+                    thread_reaper_retire_candidate(
+                        (unsigned int)first_index) == SYNTRA_STATUS_OK);
+            }
+        }
+        check("Capture counters after first event retirement",
+            thread_reaper_get_stats(&after_first_retire) ==
+                SYNTRA_STATUS_OK &&
+            after_first_retire.queued == sequence_before.queued &&
+            after_first_retire.reclaimed == sequence_before.reclaimed + 1U &&
+            after_first_retire.retired == sequence_before.retired + 1U &&
+            after_first_retire.acknowledged_events ==
+                after_first_dispatch.acknowledged_events);
+
+        check("Snapshot reusable candidate before second-event ACK failure",
+            thread_reaper_get_candidate(
+                (unsigned int)reusable_index, &reusable_before_failure) ==
+                SYNTRA_STATUS_OK &&
+            reusable_before_failure.state == SYNTRA_REAPER_CANDIDATE_RETIRED);
+        check("Arm one-shot ACK failure for second FIFO event",
+            scheduler_test_fail_next_switch_event_ack() == SYNTRA_STATUS_OK);
+        sequence_processed = 99U;
+        check("Second event ACK failure reports zero newly processed events",
+            thread_reaper_dispatch(1U, &sequence_processed) ==
+                SYNTRA_STATUS_ERROR && sequence_processed == 0U);
+        check("Failed second ACK restores retired candidate exactly",
+            thread_reaper_get_candidate(
+                (unsigned int)reusable_index, &reusable_after_failure) ==
+                SYNTRA_STATUS_OK &&
+            reusable_after_failure.state == reusable_before_failure.state &&
+            reusable_after_failure.reason == reusable_before_failure.reason &&
+            scheduler_thread_handle_equal(
+                reusable_after_failure.proof.handle,
+                reusable_before_failure.proof.handle) &&
+            reusable_after_failure.proof.sequence ==
+                reusable_before_failure.proof.sequence &&
+            reusable_after_failure.proof.terminal ==
+                reusable_before_failure.proof.terminal);
+        check("Failed second ACK preserves second FIFO head",
+            scheduler_peek_switch_away_event(&pending_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(
+                pending_event.handle, second_handle) &&
+            pending_event.sequence != 0U &&
+            pending_event.terminal != 0U);
+        check("Failed second ACK changes dispatch count but not queue or ACK",
+            thread_reaper_get_stats(&after_second_ack_failure) ==
+                SYNTRA_STATUS_OK &&
+            after_second_ack_failure.queued == after_first_retire.queued &&
+            after_second_ack_failure.acknowledged_events ==
+                after_first_retire.acknowledged_events &&
+            after_second_ack_failure.execution_context_dispatches ==
+                after_first_retire.execution_context_dispatches + 1U &&
+            after_second_ack_failure.reclaimed ==
+                after_first_retire.reclaimed &&
+            after_second_ack_failure.retired == after_first_retire.retired &&
+            after_second_ack_failure.quarantined ==
+                after_first_retire.quarantined);
+        check("Failed second ACK does not grow candidate table",
+            thread_reaper_get_candidate_count(&candidate_count_after) ==
+                SYNTRA_STATUS_OK &&
+            candidate_count_after == candidate_count_before);
+
+        sequence_processed = 0U;
+        check("Retry second FIFO event after one-shot ACK failure",
+            thread_reaper_dispatch(1U, &sequence_processed) ==
+                SYNTRA_STATUS_OK && sequence_processed == 1U);
+        check("Retry acknowledges and queues second event exactly once",
+            thread_reaper_get_stats(&after_second_retry) ==
+                SYNTRA_STATUS_OK &&
+            after_second_retry.queued == after_second_ack_failure.queued + 1U &&
+            after_second_retry.acknowledged_events ==
+                after_second_ack_failure.acknowledged_events + 1U &&
+            after_second_retry.execution_context_dispatches ==
+                after_second_ack_failure.execution_context_dispatches + 1U);
+        check("Retry reuses candidate for exact second FIFO event",
+            thread_reaper_get_candidate(
+                (unsigned int)reusable_index, &candidate_after_retry) ==
+                SYNTRA_STATUS_OK &&
+            candidate_after_retry.state == SYNTRA_REAPER_CANDIDATE_QUEUED &&
+            scheduler_thread_handle_equal(
+                candidate_after_retry.proof.handle, second_handle) &&
+            candidate_after_retry.proof.sequence == pending_event.sequence);
+        check("Reclaim second FIFO event after successful retry",
+            thread_reaper_reclaim_candidate(
+                (unsigned int)reusable_index) == SYNTRA_STATUS_OK);
+        check("Retire second FIFO event after successful retry",
+            thread_reaper_retire_candidate(
+                (unsigned int)reusable_index) == SYNTRA_STATUS_OK);
+        check("Ordered multi-event sequence ends with balanced lifecycle counters",
+            thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
+            stats.queued == sequence_before.queued &&
+            stats.quarantined == sequence_before.quarantined &&
+            stats.acknowledged_events ==
+                sequence_before.acknowledged_events + 2U &&
+            stats.reclaimed == sequence_before.reclaimed + 2U &&
+            stats.retired == sequence_before.retired + 2U &&
+            stats.reclaim_failures == sequence_before.reclaim_failures &&
+            stats.retirement_failures == sequence_before.retirement_failures);
+        check("Candidate table high-water remains stable after ordered FIFO sequence",
+            thread_reaper_get_candidate_count(&candidate_count_after) ==
+                SYNTRA_STATUS_OK &&
+            candidate_count_after == candidate_count_before);
+        check("Scheduler remains valid after ordered multi-event ACK boundary",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+    }
+
+    {
         syntra_thread_handle_t quarantined_handle = {0U, 0U};
         syntra_thread_switch_event_t original_proof;
         syntra_thread_switch_event_t conflicting_proof;
