@@ -1076,6 +1076,226 @@ int main(void)
             scheduler_validate() == SYNTRA_STATUS_OK);
     }
 
+
+    {
+        syntra_thread_handle_t first_handle = {0U, 0U};
+        syntra_thread_handle_t final_handle = {0U, 0U};
+        syntra_thread_switch_event_t first_proof;
+        syntra_thread_switch_event_t duplicate_event;
+        syntra_thread_switch_event_t conflicting_event;
+        syntra_thread_switch_event_t nonterminal_event;
+        syntra_thread_switch_event_t final_event;
+        syntra_reaper_candidate_t first_candidate;
+        syntra_reaper_candidate_t first_after_conflict;
+        syntra_reaper_stats_t mixed_before;
+        syntra_reaper_stats_t after_first;
+        syntra_reaper_stats_t after_duplicate;
+        syntra_reaper_stats_t after_conflict;
+        syntra_reaper_stats_t after_nonterminal;
+        syntra_reaper_stats_t after_final;
+        unsigned int mixed_processed = 0U;
+        unsigned int candidate_count_before = 0U;
+        unsigned int candidate_count_after = 0U;
+        int first_index = -1;
+        int final_index = -1;
+
+        check("Capture baseline before mixed FIFO event sequence",
+            thread_reaper_get_stats(&mixed_before) == SYNTRA_STATUS_OK &&
+            mixed_before.queued == 0U);
+        check("Capture candidate high-water before mixed FIFO sequence",
+            thread_reaper_get_candidate_count(&candidate_count_before) ==
+                SYNTRA_STATUS_OK);
+
+        check("Create first owned thread for mixed FIFO sequence",
+            process_thread_create_kernel_owned_with_handle(
+                process, 3201U, 2U, test_entry, NULL, 4096U,
+                &first_handle) == SYNTRA_STATUS_OK);
+        check("Run first owned thread for mixed FIFO sequence",
+            scheduler_set_thread_state_by_handle(
+                first_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Terminate first owned thread for mixed FIFO sequence",
+            scheduler_terminate_current() == SYNTRA_STATUS_OK);
+        check("Return to reaper before first mixed-sequence proof",
+            scheduler_set_thread_state_by_handle(
+                reaper_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Publish first terminal proof for mixed FIFO sequence",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+        check("Dispatch first terminal proof before injecting replay events",
+            thread_reaper_dispatch(1U, &mixed_processed) ==
+                SYNTRA_STATUS_OK && mixed_processed == 1U);
+        first_index = find_reaper_candidate_index(first_handle);
+        check("Locate queued candidate for mixed FIFO replay sequence",
+            first_index >= 0);
+        check("Capture original proof for mixed FIFO replay sequence",
+            first_index >= 0 &&
+            thread_reaper_get_candidate(
+                (unsigned int)first_index, &first_candidate) ==
+                SYNTRA_STATUS_OK &&
+            first_candidate.state == SYNTRA_REAPER_CANDIDATE_QUEUED);
+        first_proof = first_candidate.proof;
+        check("First proof dispatch increments queue and ACK exactly once",
+            thread_reaper_get_stats(&after_first) == SYNTRA_STATUS_OK &&
+            after_first.queued == mixed_before.queued + 1U &&
+            after_first.acknowledged_events ==
+                mixed_before.acknowledged_events + 1U);
+
+        duplicate_event = first_proof;
+        conflicting_event = first_proof;
+        conflicting_event.sequence = first_proof.sequence + 1U;
+        if (conflicting_event.sequence == 0U)
+            conflicting_event.sequence = 1U;
+        nonterminal_event.handle = reaper_handle;
+        nonterminal_event.sequence = first_proof.sequence + 2U;
+        if (nonterminal_event.sequence == 0U)
+            nonterminal_event.sequence = 1U;
+        nonterminal_event.terminal = 0U;
+
+        check("Append duplicate proof after original candidate is queued",
+            scheduler_test_enqueue_switch_away_event(duplicate_event) ==
+                SYNTRA_STATUS_OK);
+        check("Append conflicting proof after duplicate FIFO event",
+            scheduler_test_enqueue_switch_away_event(conflicting_event) ==
+                SYNTRA_STATUS_OK);
+        check("Append nonterminal event after conflicting FIFO event",
+            scheduler_test_enqueue_switch_away_event(nonterminal_event) ==
+                SYNTRA_STATUS_OK);
+
+        check("Create final owned thread behind injected FIFO events",
+            process_thread_create_kernel_owned_with_handle(
+                process, 3202U, 2U, test_entry, NULL, 4096U,
+                &final_handle) == SYNTRA_STATUS_OK);
+        check("Run final owned thread behind injected FIFO events",
+            scheduler_set_thread_state_by_handle(
+                final_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Terminate final owned thread behind injected FIFO events",
+            scheduler_terminate_current() == SYNTRA_STATUS_OK);
+        check("Return to reaper before final mixed-sequence proof",
+            scheduler_set_thread_state_by_handle(
+                reaper_handle, THREAD_RUNNING) == SYNTRA_STATUS_OK);
+        check("Publish final terminal proof behind mixed FIFO events",
+            scheduler_complete_switch_away() == SYNTRA_STATUS_OK);
+
+        check("Mixed FIFO begins with exact duplicate proof",
+            scheduler_peek_switch_away_event(&final_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(final_event.handle, first_proof.handle) &&
+            final_event.sequence == first_proof.sequence &&
+            final_event.terminal == first_proof.terminal);
+        mixed_processed = 0U;
+        check("Dispatch duplicate proof without consuming later FIFO events",
+            thread_reaper_dispatch(1U, &mixed_processed) ==
+                SYNTRA_STATUS_OK && mixed_processed == 1U);
+        check("Duplicate proof preserves queued candidate and increments duplicate accounting",
+            thread_reaper_get_stats(&after_duplicate) == SYNTRA_STATUS_OK &&
+            after_duplicate.queued == after_first.queued &&
+            after_duplicate.quarantined == after_first.quarantined &&
+            after_duplicate.duplicate_events ==
+                after_first.duplicate_events + 1U &&
+            after_duplicate.acknowledged_events ==
+                after_first.acknowledged_events + 1U);
+        check("Conflicting proof remains the next FIFO head",
+            scheduler_peek_switch_away_event(&final_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(final_event.handle, first_proof.handle) &&
+            final_event.sequence == conflicting_event.sequence &&
+            final_event.terminal == 1U);
+
+        mixed_processed = 0U;
+        check("Dispatch conflicting proof after duplicate proof",
+            thread_reaper_dispatch(1U, &mixed_processed) ==
+                SYNTRA_STATUS_OK && mixed_processed == 1U);
+        check("Conflicting proof quarantines original candidate without replacing diagnostics",
+            first_index >= 0 &&
+            thread_reaper_get_candidate(
+                (unsigned int)first_index, &first_after_conflict) ==
+                SYNTRA_STATUS_OK &&
+            first_after_conflict.state ==
+                SYNTRA_REAPER_CANDIDATE_QUARANTINED &&
+            first_after_conflict.reason ==
+                SYNTRA_REAPER_REASON_SEQUENCE_CONFLICT &&
+            scheduler_thread_handle_equal(
+                first_after_conflict.proof.handle, first_proof.handle) &&
+            first_after_conflict.proof.sequence == first_proof.sequence &&
+            first_after_conflict.proof.terminal == first_proof.terminal);
+        check("Conflict transition updates queue quarantine and ACK counters once",
+            thread_reaper_get_stats(&after_conflict) == SYNTRA_STATUS_OK &&
+            after_conflict.queued + 1U == after_duplicate.queued &&
+            after_conflict.quarantined ==
+                after_duplicate.quarantined + 1U &&
+            after_conflict.acknowledged_events ==
+                after_duplicate.acknowledged_events + 1U);
+        check("Nonterminal event remains FIFO head after conflict handling",
+            scheduler_peek_switch_away_event(&final_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(
+                final_event.handle, nonterminal_event.handle) &&
+            final_event.sequence == nonterminal_event.sequence &&
+            final_event.terminal == 0U);
+
+        mixed_processed = 0U;
+        check("Dispatch nonterminal event after conflict without candidate insertion",
+            thread_reaper_dispatch(1U, &mixed_processed) ==
+                SYNTRA_STATUS_OK && mixed_processed == 1U);
+        check("Nonterminal event updates only discard and ACK accounting",
+            thread_reaper_get_stats(&after_nonterminal) == SYNTRA_STATUS_OK &&
+            after_nonterminal.queued == after_conflict.queued &&
+            after_nonterminal.quarantined == after_conflict.quarantined &&
+            after_nonterminal.discarded_nonterminal ==
+                after_conflict.discarded_nonterminal + 1U &&
+            after_nonterminal.acknowledged_events ==
+                after_conflict.acknowledged_events + 1U);
+        check("Final terminal proof remains FIFO head after nonterminal event",
+            scheduler_peek_switch_away_event(&final_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(final_event.handle, final_handle) &&
+            final_event.terminal == 1U);
+
+        mixed_processed = 0U;
+        check("Dispatch final terminal proof after mixed replay and discard events",
+            thread_reaper_dispatch(1U, &mixed_processed) ==
+                SYNTRA_STATUS_OK && mixed_processed == 1U);
+        final_index = find_reaper_candidate_index(final_handle);
+        check("Final terminal proof becomes a separate queued candidate",
+            final_index >= 0 &&
+            thread_reaper_get_candidate(
+                (unsigned int)final_index, &first_candidate) ==
+                SYNTRA_STATUS_OK &&
+            first_candidate.state == SYNTRA_REAPER_CANDIDATE_QUEUED &&
+            scheduler_thread_handle_equal(
+                first_candidate.proof.handle, final_handle));
+        check("Final terminal proof ACK is counted exactly once",
+            thread_reaper_get_stats(&after_final) == SYNTRA_STATUS_OK &&
+            after_final.queued == mixed_before.queued + 1U &&
+            after_final.quarantined == mixed_before.quarantined + 1U &&
+            after_final.acknowledged_events ==
+                mixed_before.acknowledged_events + 5U &&
+            after_final.duplicate_events ==
+                mixed_before.duplicate_events + 1U &&
+            after_final.discarded_nonterminal ==
+                mixed_before.discarded_nonterminal + 1U &&
+            after_final.execution_context_dispatches ==
+                mixed_before.execution_context_dispatches + 5U);
+
+        check("Reclaim final candidate after mixed FIFO sequence",
+            final_index >= 0 &&
+            thread_reaper_reclaim_candidate(
+                (unsigned int)final_index) == SYNTRA_STATUS_OK);
+        check("Retire final candidate after mixed FIFO sequence",
+            final_index >= 0 &&
+            thread_reaper_retire_candidate(
+                (unsigned int)final_index) == SYNTRA_STATUS_OK);
+        check("Mixed FIFO lifecycle counters balance while quarantine remains retained",
+            thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
+            stats.queued == mixed_before.queued &&
+            stats.quarantined == mixed_before.quarantined + 1U &&
+            stats.reclaimed == mixed_before.reclaimed + 2U &&
+            stats.retired == mixed_before.retired + 2U &&
+            stats.reclaim_failures == mixed_before.reclaim_failures &&
+            stats.retirement_failures == mixed_before.retirement_failures);
+        check("Mixed FIFO event sequence leaves scheduler valid",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+    }
+
     {
         syntra_thread_handle_t quarantined_handle = {0U, 0U};
         syntra_thread_switch_event_t original_proof;
