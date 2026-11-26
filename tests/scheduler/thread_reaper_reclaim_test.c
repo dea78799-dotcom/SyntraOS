@@ -669,6 +669,8 @@ int main(void)
         unsigned int reusable_scheduler_slot = UINT32_MAX;
         syntra_reaper_candidate_t quarantined_record_before;
         syntra_reaper_candidate_t quarantined_record_after;
+        syntra_reaper_stats_t recycle_stats_before;
+        syntra_reaper_stats_t recycle_stats_after;
         int reusable_candidate_index =
             exhaustion_reusable_candidate_index;
 
@@ -691,12 +693,17 @@ int main(void)
             quarantined_record_before.proof.handle.generation != 0U &&
             quarantined_record_before.proof.sequence != 0U &&
             quarantined_record_before.proof.terminal != 0U);
+        check("Capture baseline reaper statistics before reuse stress",
+            thread_reaper_get_stats(&recycle_stats_before) ==
+                SYNTRA_STATUS_OK);
 
         for (unsigned int cycle = 0U; cycle < recycle_cycles; ++cycle)
         {
             syntra_thread_handle_t cycle_handle = {0U, 0U};
             unsigned int cycle_processed = 0U;
             syntra_status_t cycle_status;
+            syntra_reaper_stats_t stats_before_cycle;
+            syntra_reaper_stats_t stats_after_cycle;
 
             cycle_status = process_thread_create_kernel_owned_with_handle(
                 process, 1000U + cycle, 2U, test_entry, NULL, 4096U,
@@ -736,11 +743,33 @@ int main(void)
             if (cycle_status != SYNTRA_STATUS_OK)
                 break;
 
+            check("Capture per-cycle reaper counters before dispatch",
+                thread_reaper_get_stats(&stats_before_cycle) ==
+                    SYNTRA_STATUS_OK);
             cycle_status = thread_reaper_dispatch(1U, &cycle_processed);
             check("Dispatch recycle-stress proof into reused candidate",
                 cycle_status == SYNTRA_STATUS_OK && cycle_processed == 1U);
             if (cycle_status != SYNTRA_STATUS_OK || cycle_processed != 1U)
                 break;
+            check("Dispatch increments queued, ACK and dispatch counters exactly once",
+                thread_reaper_get_stats(&stats_after_cycle) ==
+                    SYNTRA_STATUS_OK &&
+                stats_after_cycle.queued == stats_before_cycle.queued + 1U &&
+                stats_after_cycle.acknowledged_events ==
+                    stats_before_cycle.acknowledged_events + 1U &&
+                stats_after_cycle.execution_context_dispatches ==
+                    stats_before_cycle.execution_context_dispatches + 1U &&
+                stats_after_cycle.quarantined == stats_before_cycle.quarantined &&
+                stats_after_cycle.discarded_nonterminal ==
+                    stats_before_cycle.discarded_nonterminal &&
+                stats_after_cycle.duplicate_events ==
+                    stats_before_cycle.duplicate_events &&
+                stats_after_cycle.reclaimed == stats_before_cycle.reclaimed &&
+                stats_after_cycle.reclaim_failures ==
+                    stats_before_cycle.reclaim_failures &&
+                stats_after_cycle.retired == stats_before_cycle.retired &&
+                stats_after_cycle.retirement_failures ==
+                    stats_before_cycle.retirement_failures);
 
             check("Dispatch never overwrites quarantined diagnostic proof",
                 thread_reaper_get_candidate(
@@ -771,6 +800,21 @@ int main(void)
                 cycle_status == SYNTRA_STATUS_OK);
             if (cycle_status != SYNTRA_STATUS_OK)
                 break;
+            check("Reclaim decrements queued and increments reclaimed exactly once",
+                thread_reaper_get_stats(&stats_before_cycle) ==
+                    SYNTRA_STATUS_OK &&
+                stats_before_cycle.queued == stats_after_cycle.queued - 1U &&
+                stats_before_cycle.reclaimed ==
+                    stats_after_cycle.reclaimed + 1U &&
+                stats_before_cycle.reclaim_failures ==
+                    stats_after_cycle.reclaim_failures &&
+                stats_before_cycle.quarantined ==
+                    stats_after_cycle.quarantined &&
+                stats_before_cycle.acknowledged_events ==
+                    stats_after_cycle.acknowledged_events &&
+                stats_before_cycle.retired == stats_after_cycle.retired &&
+                stats_before_cycle.retirement_failures ==
+                    stats_after_cycle.retirement_failures);
 
             cycle_status = thread_reaper_retire_candidate(
                 (unsigned int)reusable_candidate_index);
@@ -778,6 +822,21 @@ int main(void)
                 cycle_status == SYNTRA_STATUS_OK);
             if (cycle_status != SYNTRA_STATUS_OK)
                 break;
+            check("Retire increments retirement counter exactly once",
+                thread_reaper_get_stats(&stats_after_cycle) ==
+                    SYNTRA_STATUS_OK &&
+                stats_after_cycle.retired == stats_before_cycle.retired + 1U &&
+                stats_after_cycle.queued == stats_before_cycle.queued &&
+                stats_after_cycle.reclaimed == stats_before_cycle.reclaimed &&
+                stats_after_cycle.quarantined == stats_before_cycle.quarantined &&
+                stats_after_cycle.reclaim_failures ==
+                    stats_before_cycle.reclaim_failures &&
+                stats_after_cycle.retirement_failures ==
+                    stats_before_cycle.retirement_failures &&
+                stats_after_cycle.acknowledged_events ==
+                    stats_before_cycle.acknowledged_events &&
+                stats_after_cycle.execution_context_dispatches ==
+                    stats_before_cycle.execution_context_dispatches);
 
             check("Recycled candidate returns to RETIRED",
                 thread_reaper_get_candidate(
@@ -805,9 +864,36 @@ int main(void)
                 quarantined_record_before.proof.sequence &&
             quarantined_record_after.proof.terminal ==
                 quarantined_record_before.proof.terminal);
+        check("Capture final reaper statistics after reuse stress",
+            thread_reaper_get_stats(&recycle_stats_after) ==
+                SYNTRA_STATUS_OK);
+        check("Forty reuse cycles produce exact cumulative counter deltas",
+            recycle_stats_after.queued == recycle_stats_before.queued &&
+            recycle_stats_after.quarantined ==
+                recycle_stats_before.quarantined &&
+            recycle_stats_after.discarded_nonterminal ==
+                recycle_stats_before.discarded_nonterminal &&
+            recycle_stats_after.duplicate_events ==
+                recycle_stats_before.duplicate_events &&
+            recycle_stats_after.acknowledged_events ==
+                recycle_stats_before.acknowledged_events + recycle_cycles &&
+            recycle_stats_after.execution_context_dispatches ==
+                recycle_stats_before.execution_context_dispatches +
+                    recycle_cycles &&
+            recycle_stats_after.execution_context_rejections ==
+                recycle_stats_before.execution_context_rejections &&
+            recycle_stats_after.reclaimed ==
+                recycle_stats_before.reclaimed + recycle_cycles &&
+            recycle_stats_after.reclaim_failures ==
+                recycle_stats_before.reclaim_failures &&
+            recycle_stats_after.retired ==
+                recycle_stats_before.retired + recycle_cycles &&
+            recycle_stats_after.retirement_failures ==
+                recycle_stats_before.retirement_failures);
         check("Reaper retirement statistics include all recycle cycles",
             thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
-            stats.retired == 44U);
+            stats.retired == 44U && stats.reclaimed == 44U &&
+            stats.queued == 0U && stats.quarantined == 1U);
         check("Scheduler validates after repeated reaper candidate reuse",
             scheduler_validate() == SYNTRA_STATUS_OK);
     }
