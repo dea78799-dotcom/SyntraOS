@@ -49,6 +49,7 @@ on:
       - test/d3521-reaper-multi-event-ack-boundary-v1
       - test/d3522-mixed-fifo-event-order-v1
       - test/d3523-reaper-max-events-budget-v1
+      - test/d3524-reaper-fifo-capacity-boundary-v1
 
   pull_request:
     branches:
