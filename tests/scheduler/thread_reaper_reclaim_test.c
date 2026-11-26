@@ -697,6 +697,16 @@ int main(void)
             syntra_thread_handle_t cycle_handle = {0U, 0U};
             unsigned int cycle_processed = 0U;
             syntra_status_t cycle_status;
+            syntra_reaper_stats_t cycle_stats_before;
+            syntra_reaper_stats_t cycle_stats_after_dispatch;
+            syntra_reaper_stats_t cycle_stats_after_reclaim;
+            syntra_reaper_stats_t cycle_stats_after_retire;
+
+            check("Capture reaper accounting before recycle cycle",
+                thread_reaper_get_stats(&cycle_stats_before) ==
+                    SYNTRA_STATUS_OK &&
+                cycle_stats_before.queued == 0U &&
+                cycle_stats_before.quarantined == 1U);
 
             cycle_status = process_thread_create_kernel_owned_with_handle(
                 process, 1000U + cycle, 2U, test_entry, NULL, 4096U,
@@ -742,6 +752,30 @@ int main(void)
             if (cycle_status != SYNTRA_STATUS_OK || cycle_processed != 1U)
                 break;
 
+            check("Dispatch advances queue, ACK, and context counters exactly once",
+                thread_reaper_get_stats(&cycle_stats_after_dispatch) ==
+                    SYNTRA_STATUS_OK &&
+                cycle_stats_after_dispatch.queued ==
+                    cycle_stats_before.queued + 1U &&
+                cycle_stats_after_dispatch.acknowledged_events ==
+                    cycle_stats_before.acknowledged_events + 1U &&
+                cycle_stats_after_dispatch.execution_context_dispatches ==
+                    cycle_stats_before.execution_context_dispatches + 1U &&
+                cycle_stats_after_dispatch.quarantined ==
+                    cycle_stats_before.quarantined &&
+                cycle_stats_after_dispatch.reclaimed ==
+                    cycle_stats_before.reclaimed &&
+                cycle_stats_after_dispatch.retired ==
+                    cycle_stats_before.retired &&
+                cycle_stats_after_dispatch.reclaim_failures ==
+                    cycle_stats_before.reclaim_failures &&
+                cycle_stats_after_dispatch.retirement_failures ==
+                    cycle_stats_before.retirement_failures &&
+                cycle_stats_after_dispatch.discarded_nonterminal ==
+                    cycle_stats_before.discarded_nonterminal &&
+                cycle_stats_after_dispatch.duplicate_events ==
+                    cycle_stats_before.duplicate_events);
+
             check("Dispatch never overwrites quarantined diagnostic proof",
                 thread_reaper_get_candidate(
                     0U, &quarantined_record_after) == SYNTRA_STATUS_OK &&
@@ -772,12 +806,44 @@ int main(void)
             if (cycle_status != SYNTRA_STATUS_OK)
                 break;
 
+            check("Reclaim moves queued accounting to reclaimed exactly once",
+                thread_reaper_get_stats(&cycle_stats_after_reclaim) ==
+                    SYNTRA_STATUS_OK &&
+                cycle_stats_after_reclaim.queued ==
+                    cycle_stats_before.queued &&
+                cycle_stats_after_reclaim.reclaimed ==
+                    cycle_stats_before.reclaimed + 1U &&
+                cycle_stats_after_reclaim.acknowledged_events ==
+                    cycle_stats_after_dispatch.acknowledged_events &&
+                cycle_stats_after_reclaim.quarantined ==
+                    cycle_stats_before.quarantined &&
+                cycle_stats_after_reclaim.retired ==
+                    cycle_stats_before.retired);
+
             cycle_status = thread_reaper_retire_candidate(
                 (unsigned int)reusable_candidate_index);
             check("Retire recycle-stress TCB",
                 cycle_status == SYNTRA_STATUS_OK);
             if (cycle_status != SYNTRA_STATUS_OK)
                 break;
+
+            check("Retirement increments cumulative count exactly once",
+                thread_reaper_get_stats(&cycle_stats_after_retire) ==
+                    SYNTRA_STATUS_OK &&
+                cycle_stats_after_retire.queued ==
+                    cycle_stats_before.queued &&
+                cycle_stats_after_retire.reclaimed ==
+                    cycle_stats_before.reclaimed + 1U &&
+                cycle_stats_after_retire.retired ==
+                    cycle_stats_before.retired + 1U &&
+                cycle_stats_after_retire.acknowledged_events ==
+                    cycle_stats_after_dispatch.acknowledged_events &&
+                cycle_stats_after_retire.quarantined ==
+                    cycle_stats_before.quarantined &&
+                cycle_stats_after_retire.reclaim_failures ==
+                    cycle_stats_before.reclaim_failures &&
+                cycle_stats_after_retire.retirement_failures ==
+                    cycle_stats_before.retirement_failures);
 
             check("Recycled candidate returns to RETIRED",
                 thread_reaper_get_candidate(
