@@ -47,6 +47,7 @@ int main(void)
     syntra_memory_info_t before;
     syntra_memory_info_t after;
     syntra_thread_switch_event_t duplicate_event;
+    syntra_thread_switch_event_t conflicting_event;
     void *selected_context = NULL;
     unsigned int processed = 0U;
     unsigned int candidate_count = 0U;
@@ -182,6 +183,31 @@ int main(void)
         scheduler_peek_switch_away_event(&duplicate_event) ==
             SYNTRA_STATUS_ERROR);
 
+    conflicting_event = duplicate_event;
+    ++conflicting_event.sequence;
+    check("Host fixture queues same handle with conflicting terminal sequence",
+        scheduler_test_enqueue_switch_away_event(conflicting_event) ==
+            SYNTRA_STATUS_OK);
+    processed = 0U;
+    check("Conflicting terminal proof is consumed and quarantined",
+        thread_reaper_dispatch(1U, &processed) == SYNTRA_STATUS_OK &&
+        processed == 1U);
+    check("Sequence conflict quarantines without replacing original proof",
+        thread_reaper_get_candidate_count(&candidate_count) ==
+            SYNTRA_STATUS_OK && candidate_count == 1U &&
+        thread_reaper_get_candidate(0U, &candidate) == SYNTRA_STATUS_OK &&
+        candidate.state == SYNTRA_REAPER_CANDIDATE_QUARANTINED &&
+        candidate.reason == SYNTRA_REAPER_REASON_SEQUENCE_CONFLICT &&
+        scheduler_thread_handle_equal(
+            candidate.proof.handle, duplicate_event.handle) &&
+        candidate.proof.sequence == duplicate_event.sequence &&
+        candidate.proof.terminal == duplicate_event.terminal);
+    check("Conflict consumes FIFO head and updates quarantine accounting",
+        thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
+        stats.queued == 0U && stats.quarantined == 1U &&
+        stats.duplicate_events == 1U &&
+        stats.acknowledged_events == 5U);
+
     check("Block successor to produce a nonterminal proof",
         scheduler_block_current() == SYNTRA_STATUS_OK);
     check("Prepare later thread context",
@@ -201,9 +227,10 @@ int main(void)
             SYNTRA_STATUS_OK && candidate_count == 1U);
     check("Dispatcher statistics distinguish terminal and nonterminal events",
         thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
-        stats.queued == 1U && stats.discarded_nonterminal == 3U &&
+        stats.queued == 0U && stats.quarantined == 1U &&
+        stats.discarded_nonterminal == 3U &&
         stats.duplicate_events == 1U &&
-        stats.acknowledged_events == 5U);
+        stats.acknowledged_events == 6U);
 
     check("Terminate final runnable thread with no successor",
         scheduler_terminate_current() == SYNTRA_STATUS_OK);
