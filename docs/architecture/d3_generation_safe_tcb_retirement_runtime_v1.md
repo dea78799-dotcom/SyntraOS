@@ -357,3 +357,17 @@ capacity, and scheduler invariants.
 
 This is host-only regression coverage; production scheduler and reaper logic
 are unchanged.
+
+## D3.5.24 — Switch-completion FIFO capacity boundary
+
+The scheduler's switch-completion ring has a fixed capacity of 128 events. The
+host integration test fills the queue to 127 entries, inserts the final entry,
+and verifies that an additional enqueue is rejected without changing the exact
+FIFO head.
+
+The test then removes the head, inserts a new event into the freed slot, and
+drains the ring across its wrap boundary. It verifies that all 127 original
+remaining events retain their order and that the newly inserted event is last.
+The queue must be empty after the drain and scheduler invariants must remain
+valid. This is host-only regression coverage; production scheduler behavior
+is unchanged.
