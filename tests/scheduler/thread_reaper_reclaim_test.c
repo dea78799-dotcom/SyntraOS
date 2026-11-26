@@ -853,7 +853,7 @@ int main(void)
             memory_get_allocation_by_handle(
                 quarantined_snapshot.stack_allocation, &quarantine_allocation) ==
                 SYNTRA_STATUS_OK &&
-            allocation.ownership_state ==
+            quarantine_allocation.ownership_state ==
                 SYNTRA_MEMORY_ALLOCATION_THREAD_OWNED);
         check("Capture reaper counters before guarded operations",
             thread_reaper_get_stats(&quarantine_stats_before) ==
@@ -892,7 +892,7 @@ int main(void)
             memory_get_allocation_by_handle(
                 quarantined_snapshot.stack_allocation, &quarantine_allocation) ==
                 SYNTRA_STATUS_OK &&
-            allocation.ownership_state ==
+            quarantine_allocation.ownership_state ==
                 SYNTRA_MEMORY_ALLOCATION_THREAD_OWNED);
         memory_get_info(&quarantine_memory_after);
         check("Rejected operations do not change active allocations",
