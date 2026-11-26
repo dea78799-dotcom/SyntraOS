@@ -782,6 +782,7 @@ int main(void)
         syntra_reaper_candidate_t quarantined_before;
         syntra_reaper_candidate_t quarantined_after;
         syntra_thread_t quarantined_snapshot;
+        syntra_memory_allocation_t quarantine_allocation;
         syntra_memory_info_t quarantine_memory_before;
         syntra_memory_info_t quarantine_memory_after;
         syntra_reaper_stats_t quarantine_stats_before;
@@ -850,7 +851,7 @@ int main(void)
             quarantined_snapshot.stack_ownership ==
                 SYNTRA_THREAD_STACK_OWNED &&
             memory_get_allocation_by_handle(
-                quarantined_snapshot.stack_allocation, &allocation) ==
+                quarantined_snapshot.stack_allocation, &quarantine_allocation) ==
                 SYNTRA_STATUS_OK &&
             allocation.ownership_state ==
                 SYNTRA_MEMORY_ALLOCATION_THREAD_OWNED);
@@ -889,7 +890,7 @@ int main(void)
             quarantined_snapshot.stack_ownership ==
                 SYNTRA_THREAD_STACK_OWNED &&
             memory_get_allocation_by_handle(
-                quarantined_snapshot.stack_allocation, &allocation) ==
+                quarantined_snapshot.stack_allocation, &quarantine_allocation) ==
                 SYNTRA_STATUS_OK &&
             allocation.ownership_state ==
                 SYNTRA_MEMORY_ALLOCATION_THREAD_OWNED);
