@@ -338,3 +338,22 @@ must then be queued, reclaimed, and retired successfully.
 The test verifies exact per-event counter deltas, total dispatch attempts,
 candidate lifecycle balance, and scheduler invariants. This is host-only
 regression coverage; production scheduler and reaper logic are unchanged.
+
+
+## D3.5.23 — Reaper dispatch respects the max_events budget
+
+The host integration test enqueues three ordered nonterminal events and exercises
+three dispatch budgets. A zero budget must return success with zero processed
+events, preserve the exact FIFO head, and leave acknowledgement, discard,
+candidate, and queue accounting unchanged (apart from the dispatch-attempt
+counter).
+
+A budget of two must process exactly two events and leave the third event at
+the FIFO head. A subsequent budget larger than the remaining queue must process
+only the single remaining event, then stop normally when the FIFO is empty.
+The test checks exact processed counts, FIFO identity, acknowledgement and
+nonterminal-discard deltas, dispatch invocation counts, unchanged candidate
+capacity, and scheduler invariants.
+
+This is host-only regression coverage; production scheduler and reaper logic
+are unchanged.
