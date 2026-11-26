@@ -215,3 +215,20 @@ exactly once.
 The event replay hook is compiled only with `SYNTRA_HOST_TESTING` and is
 excluded from the freestanding ARM64 kernel. Production duplicate handling is
 not changed by this test.
+
+
+## D3.5.16 — Conflicting terminal proof quarantines the candidate
+
+The host handoff integration fixture replays a terminal event for an already
+known thread handle but increments its sequence. This is not an idempotent
+duplicate: dispatch must preserve the original proof, transition the existing
+QUEUED candidate to QUARANTINED with
+`SYNTRA_REAPER_REASON_SEQUENCE_CONFLICT`, and acknowledge the conflicting
+FIFO head exactly once. The test checks that the candidate table high-water
+count does not grow, the original proof is not overwritten, queued accounting
+decreases, quarantine accounting increases, and the event is removed from the
+FIFO. The subsequent nonterminal-event assertions verify that the conflict
+does not interfere with unrelated switch-away processing.
+
+The fixture uses the existing `SYNTRA_HOST_TESTING` event replay hook. No
+production reaper or scheduler behavior is changed.
