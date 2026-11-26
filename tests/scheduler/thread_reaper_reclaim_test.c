@@ -1080,13 +1080,13 @@ int main(void)
     {
         syntra_thread_handle_t first_handle = {0U, 0U};
         syntra_thread_handle_t final_handle = {0U, 0U};
-        syntra_thread_switch_event_t first_proof;
+        syntra_thread_switch_event_t first_proof = {{0U, 0U}, 0U, 0U};
         syntra_thread_switch_event_t duplicate_event;
         syntra_thread_switch_event_t conflicting_event;
         syntra_thread_switch_event_t nonterminal_event;
         syntra_thread_switch_event_t final_event;
-        syntra_reaper_candidate_t first_candidate;
-        syntra_reaper_candidate_t first_after_conflict;
+        syntra_reaper_candidate_t first_candidate = {{{0U, 0U}, 0U, 0U}, SYNTRA_REAPER_CANDIDATE_FREE, SYNTRA_REAPER_REASON_NONE};
+        syntra_reaper_candidate_t first_after_conflict = {{{0U, 0U}, 0U, 0U}, SYNTRA_REAPER_CANDIDATE_FREE, SYNTRA_REAPER_REASON_NONE};
         syntra_reaper_stats_t mixed_before;
         syntra_reaper_stats_t after_first;
         syntra_reaper_stats_t after_duplicate;
@@ -1263,6 +1263,10 @@ int main(void)
             first_candidate.state == SYNTRA_REAPER_CANDIDATE_QUEUED &&
             scheduler_thread_handle_equal(
                 first_candidate.proof.handle, final_handle));
+        check("Candidate high-water grows once after first candidate is quarantined",
+            thread_reaper_get_candidate_count(&candidate_count_after) ==
+                SYNTRA_STATUS_OK &&
+            candidate_count_after == candidate_count_before + 1U);
         check("Final terminal proof ACK is counted exactly once",
             thread_reaper_get_stats(&after_final) == SYNTRA_STATUS_OK &&
             after_final.queued == mixed_before.queued + 1U &&
@@ -1288,8 +1292,8 @@ int main(void)
             thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
             stats.queued == mixed_before.queued &&
             stats.quarantined == mixed_before.quarantined + 1U &&
-            stats.reclaimed == mixed_before.reclaimed + 2U &&
-            stats.retired == mixed_before.retired + 2U &&
+            stats.reclaimed == mixed_before.reclaimed + 1U &&
+            stats.retired == mixed_before.retired + 1U &&
             stats.reclaim_failures == mixed_before.reclaim_failures &&
             stats.retirement_failures == mixed_before.retirement_failures);
         check("Mixed FIFO event sequence leaves scheduler valid",
