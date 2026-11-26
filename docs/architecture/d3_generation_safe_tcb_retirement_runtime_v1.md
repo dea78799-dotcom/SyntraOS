@@ -268,3 +268,20 @@ accounting must not advance.
 This closes the quarantine-operation guard at the public reaper API boundary.
 The test uses the host-only event replay hook and makes no production logic
 changes.
+
+
+## D3.5.19 — Quarantine diagnostics survive candidate reuse stress
+
+The reclamation integration test captures the complete proof identity and
+quarantine reason for a candidate already quarantined after a failed resource
+reclaim. It then runs forty create, terminal-switch, dispatch, reclaim, and
+retire cycles through a separate RETIRED candidate slot.
+
+The test verifies that the reusable slot is not the quarantined slot and
+compares the quarantined record's state, reason, handle, sequence, and terminal
+intent after every new dispatch and again after all cycles. The candidate-table
+high-water count remains fixed. This confirms that normal RETIRED-slot reuse
+does not overwrite reserved quarantine diagnostics, even across more cycles
+than the table capacity.
+
+This is host integration coverage only. No production reaper logic changes.
