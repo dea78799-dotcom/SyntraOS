@@ -319,3 +319,22 @@ and leave lifecycle counters balanced after reclamation and retirement.
 
 This is host-only regression coverage; production scheduler and reaper logic
 are unchanged.
+
+
+## D3.5.22 — Mixed event types preserve strict FIFO ordering
+
+The host integration test first queues a valid terminal proof, then appends an
+exact duplicate, a conflicting proof for the same handle, a nonterminal event,
+and an independent terminal proof. It dispatches one event at a time and checks
+that each next FIFO head is preserved in the expected order.
+
+The duplicate must increment duplicate and acknowledgement accounting without
+changing the queued candidate. The conflicting proof must quarantine the
+original candidate while retaining its original proof and diagnostic reason.
+The nonterminal event must increment discard and acknowledgement accounting
+without consuming candidate capacity. The final independent terminal proof
+must then be queued, reclaimed, and retired successfully.
+
+The test verifies exact per-event counter deltas, total dispatch attempts,
+candidate lifecycle balance, and scheduler invariants. This is host-only
+regression coverage; production scheduler and reaper logic are unchanged.
