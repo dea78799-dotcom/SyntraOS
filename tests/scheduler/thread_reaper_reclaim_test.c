@@ -1300,6 +1300,106 @@ int main(void)
             scheduler_validate() == SYNTRA_STATUS_OK);
     }
 
+
+    {
+        syntra_thread_switch_event_t budget_events[3] = {{0}};
+        syntra_thread_switch_event_t pending_event = {0};
+        syntra_reaper_stats_t budget_before = {0};
+        syntra_reaper_stats_t after_zero_budget = {0};
+        syntra_reaper_stats_t after_partial_budget = {0};
+        syntra_reaper_stats_t after_remaining_budget = {0};
+        unsigned int budget_processed = 99U;
+        unsigned int candidate_count_before = 0U;
+        unsigned int candidate_count_after = 0U;
+
+        for (unsigned int i = 0U; i < 3U; ++i)
+        {
+            budget_events[i].handle = reaper_handle;
+            budget_events[i].sequence = 7001U + i;
+            budget_events[i].terminal = 0U;
+            check("Enqueue ordered nonterminal event for max_events budget test",
+                scheduler_test_enqueue_switch_away_event(
+                    budget_events[i]) == SYNTRA_STATUS_OK);
+        }
+
+        check("Capture baseline counters for max_events budget test",
+            thread_reaper_get_stats(&budget_before) == SYNTRA_STATUS_OK &&
+            thread_reaper_get_candidate_count(&candidate_count_before) ==
+                SYNTRA_STATUS_OK);
+
+        check("Zero max_events budget performs no FIFO work",
+            thread_reaper_dispatch(0U, &budget_processed) ==
+                SYNTRA_STATUS_OK && budget_processed == 0U);
+        check("Zero budget preserves exact FIFO head",
+            scheduler_peek_switch_away_event(&pending_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(
+                pending_event.handle, budget_events[0].handle) &&
+            pending_event.sequence == budget_events[0].sequence &&
+            pending_event.terminal == budget_events[0].terminal);
+        check("Zero budget changes no event accounting or candidate capacity",
+            thread_reaper_get_stats(&after_zero_budget) == SYNTRA_STATUS_OK &&
+            thread_reaper_get_candidate_count(&candidate_count_after) ==
+                SYNTRA_STATUS_OK &&
+            after_zero_budget.acknowledged_events ==
+                budget_before.acknowledged_events &&
+            after_zero_budget.discarded_nonterminal ==
+                budget_before.discarded_nonterminal &&
+            after_zero_budget.queued == budget_before.queued &&
+            after_zero_budget.quarantined == budget_before.quarantined &&
+            candidate_count_after == candidate_count_before &&
+            after_zero_budget.execution_context_dispatches ==
+                budget_before.execution_context_dispatches + 1U);
+
+        budget_processed = 99U;
+        check("Partial max_events budget processes exactly two of three events",
+            thread_reaper_dispatch(2U, &budget_processed) ==
+                SYNTRA_STATUS_OK && budget_processed == 2U);
+        check("Partial budget leaves third event as exact FIFO head",
+            scheduler_peek_switch_away_event(&pending_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(
+                pending_event.handle, budget_events[2].handle) &&
+            pending_event.sequence == budget_events[2].sequence &&
+            pending_event.terminal == budget_events[2].terminal);
+        check("Partial budget acknowledges and discards exactly two events",
+            thread_reaper_get_stats(&after_partial_budget) ==
+                SYNTRA_STATUS_OK &&
+            after_partial_budget.acknowledged_events ==
+                budget_before.acknowledged_events + 2U &&
+            after_partial_budget.discarded_nonterminal ==
+                budget_before.discarded_nonterminal + 2U &&
+            after_partial_budget.queued == budget_before.queued &&
+            after_partial_budget.quarantined == budget_before.quarantined &&
+            after_partial_budget.execution_context_dispatches ==
+                budget_before.execution_context_dispatches + 2U);
+
+        budget_processed = 99U;
+        check("Budget larger than remaining FIFO drains only the final event",
+            thread_reaper_dispatch(4U, &budget_processed) ==
+                SYNTRA_STATUS_OK && budget_processed == 1U);
+        check("Oversized budget stops cleanly when FIFO becomes empty",
+            scheduler_peek_switch_away_event(&pending_event) ==
+                SYNTRA_STATUS_ERROR);
+        check("Final budget accounting reflects exactly three events",
+            thread_reaper_get_stats(&after_remaining_budget) ==
+                SYNTRA_STATUS_OK &&
+            after_remaining_budget.acknowledged_events ==
+                budget_before.acknowledged_events + 3U &&
+            after_remaining_budget.discarded_nonterminal ==
+                budget_before.discarded_nonterminal + 3U &&
+            after_remaining_budget.queued == budget_before.queued &&
+            after_remaining_budget.quarantined == budget_before.quarantined &&
+            after_remaining_budget.execution_context_dispatches ==
+                budget_before.execution_context_dispatches + 3U);
+        check("max_events budget test leaves candidate capacity unchanged",
+            thread_reaper_get_candidate_count(&candidate_count_after) ==
+                SYNTRA_STATUS_OK &&
+            candidate_count_after == candidate_count_before);
+        check("Scheduler remains valid after max_events budget test",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+    }
+
     {
         syntra_thread_handle_t quarantined_handle = {0U, 0U};
         syntra_thread_switch_event_t original_proof;

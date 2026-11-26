@@ -48,6 +48,7 @@ on:
       - test/d3520-reaper-reuse-stat-accounting-v1
       - test/d3521-reaper-multi-event-ack-boundary-v1
       - test/d3522-mixed-fifo-event-order-v1
+      - test/d3523-reaper-max-events-budget-v1
 
   pull_request:
     branches:
@@ -73,6 +74,7 @@ on:
       - test/d3519-quarantine-diagnostic-retention-v1
       - test/d3521-reaper-multi-event-ack-boundary-v1
       - test/d3522-mixed-fifo-event-order-v1
+      - test/d3523-reaper-max-events-budget-v1
 
   # Run a health check every day at 02:00 UTC (09:00 Vietnam time).
   schedule:
