@@ -45,6 +45,7 @@ on:
       - test/d3517-quarantine-replay-accounting-v1
       - test/d3518-quarantined-candidate-operation-guards-v1
       - test/d3519-quarantine-diagnostic-retention-v1
+      - test/d3520-reaper-reuse-stat-accounting-v1
 
   pull_request:
     branches:

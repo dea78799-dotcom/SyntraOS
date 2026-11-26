@@ -285,3 +285,19 @@ does not overwrite reserved quarantine diagnostics, even across more cycles
 than the table capacity.
 
 This is host integration coverage only. No production reaper logic changes.
+
+
+## D3.5.20 — Reaper accounting remains consistent during candidate reuse
+
+The forty-cycle candidate-reuse stress test snapshots reaper statistics before
+and after each lifecycle phase. Dispatch must add exactly one queued candidate,
+one acknowledged event, and one bound-context dispatch without changing
+quarantine or cumulative reclamation/retirement counters. Reclaim must remove
+that queued count and increment reclaimed exactly once. Retirement must
+increment retired exactly once while preserving the acknowledgement count and
+all failure counters.
+
+Each cycle also verifies that the pre-existing quarantined diagnostic count
+remains stable. These assertions cover both per-cycle deltas and cumulative
+counter consistency under repeated reuse. This is host integration coverage
+only; production scheduler and reaper logic are unchanged.
