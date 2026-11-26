@@ -883,7 +883,6 @@ int main(void)
         syntra_thread_handle_t first_handle = {0U, 0U};
         syntra_thread_handle_t second_handle = {0U, 0U};
         syntra_thread_switch_event_t first_event;
-        syntra_thread_switch_event_t second_event;
         syntra_thread_switch_event_t pending_event;
         syntra_reaper_candidate_t reusable_before_failure;
         syntra_reaper_candidate_t reusable_after_failure;
