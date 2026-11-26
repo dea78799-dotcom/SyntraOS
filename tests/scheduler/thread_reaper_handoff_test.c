@@ -230,7 +230,7 @@ int main(void)
         thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
         stats.queued == 0U && stats.quarantined == 1U &&
         stats.duplicate_events == 1U &&
-        stats.acknowledged_events == 7U);
+        stats.acknowledged_events == 6U);
     check("Repeated conflicting FIFO event is fully consumed",
         scheduler_peek_switch_away_event(&conflicting_event) ==
             SYNTRA_STATUS_ERROR);
@@ -257,7 +257,7 @@ int main(void)
         stats.queued == 0U && stats.quarantined == 1U &&
         stats.discarded_nonterminal == 3U &&
         stats.duplicate_events == 1U &&
-        stats.acknowledged_events == 6U);
+        stats.acknowledged_events == 7U);
 
     check("Terminate final runnable thread with no successor",
         scheduler_terminate_current() == SYNTRA_STATUS_OK);
