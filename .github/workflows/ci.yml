@@ -44,6 +44,7 @@ on:
       - test/d3516-conflicting-terminal-proof-quarantine-v1
       - test/d3517-quarantine-replay-accounting-v1
       - test/d3518-quarantined-candidate-operation-guards-v1
+      - test/d3519-quarantine-diagnostic-retention-v1
 
   pull_request:
     branches:
@@ -66,6 +67,7 @@ on:
       - test/d3516-conflicting-terminal-proof-quarantine-v1
       - test/d3517-quarantine-replay-accounting-v1
       - test/d3518-quarantined-candidate-operation-guards-v1
+      - test/d3519-quarantine-diagnostic-retention-v1
 
   # Run a health check every day at 02:00 UTC (09:00 Vietnam time).
   schedule:
