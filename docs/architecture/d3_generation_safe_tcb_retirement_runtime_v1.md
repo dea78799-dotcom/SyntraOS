@@ -232,3 +232,19 @@ does not interfere with unrelated switch-away processing.
 
 The fixture uses the existing `SYNTRA_HOST_TESTING` event replay hook. No
 production reaper or scheduler behavior is changed.
+
+
+## D3.5.17 — Repeated conflicting proofs preserve quarantine
+
+After D3.5.16 quarantines a candidate for a sequence conflict, the host
+integration fixture submits another terminal proof for the same handle with a
+second distinct sequence. Dispatch must acknowledge the new FIFO event while
+preserving the candidate's original proof, QUARANTINED state, and
+`SYNTRA_REAPER_REASON_SEQUENCE_CONFLICT` reason. The candidate-table
+high-water count remains unchanged, and quarantine accounting remains one
+rather than counting the same candidate again. Acknowledgement accounting
+increases exactly once for the additional event.
+
+This is regression coverage for an already-quarantined record. It introduces
+no production logic change and uses only the existing host-test event replay
+hook.
