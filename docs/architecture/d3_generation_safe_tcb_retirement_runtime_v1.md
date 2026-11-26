@@ -301,3 +301,21 @@ Each cycle also verifies that the pre-existing quarantined diagnostic count
 remains stable. These assertions cover both per-cycle deltas and cumulative
 counter consistency under repeated reuse. This is host integration coverage
 only; production scheduler and reaper logic are unchanged.
+
+
+## D3.5.21 — Ordered FIFO accounting across a later ACK failure
+
+The host integration test publishes two terminal switch-away proofs in FIFO
+order. It dispatches and fully reclaims/retires the first proof before attempting
+the second. A one-shot ACK failure is injected for the second proof after its
+candidate slot has become reusable.
+
+The failed dispatch must preserve the second FIFO head and restore the reusable
+candidate record byte-for-byte at the field level (proof, state, and reason).
+The dispatch-attempt counter advances, while queued, acknowledged, reclaimed,
+retired, and quarantine counters remain unchanged by the failed ACK. Retrying
+must consume that same FIFO head exactly once, reuse the same candidate slot,
+and leave lifecycle counters balanced after reclamation and retirement.
+
+This is host-only regression coverage; production scheduler and reaper logic
+are unchanged.
