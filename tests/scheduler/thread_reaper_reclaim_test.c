@@ -667,6 +667,8 @@ int main(void)
         const unsigned int recycle_cycles = 40U;
         unsigned int candidate_count_before = 0U;
         unsigned int reusable_scheduler_slot = UINT32_MAX;
+        syntra_reaper_candidate_t quarantined_record_before;
+        syntra_reaper_candidate_t quarantined_record_after;
         int reusable_candidate_index =
             exhaustion_reusable_candidate_index;
 
@@ -677,6 +679,18 @@ int main(void)
         check("Capture bounded reaper table count before recycle stress",
             thread_reaper_get_candidate_count(&candidate_count_before) ==
                 SYNTRA_STATUS_OK && candidate_count_before == 2U);
+        check("Retired reuse candidate is distinct from quarantined diagnostics",
+            reusable_candidate_index != 0);
+        check("Capture quarantined diagnostic proof before recycle stress",
+            thread_reaper_get_candidate(0U, &quarantined_record_before) ==
+                SYNTRA_STATUS_OK &&
+            quarantined_record_before.state ==
+                SYNTRA_REAPER_CANDIDATE_QUARANTINED &&
+            quarantined_record_before.reason ==
+                SYNTRA_REAPER_REASON_RESOURCE_RECLAIM_FAILED &&
+            quarantined_record_before.proof.handle.generation != 0U &&
+            quarantined_record_before.proof.sequence != 0U &&
+            quarantined_record_before.proof.terminal != 0U);
 
         for (unsigned int cycle = 0U; cycle < recycle_cycles; ++cycle)
         {
@@ -728,6 +742,21 @@ int main(void)
             if (cycle_status != SYNTRA_STATUS_OK || cycle_processed != 1U)
                 break;
 
+            check("Dispatch never overwrites quarantined diagnostic proof",
+                thread_reaper_get_candidate(
+                    0U, &quarantined_record_after) == SYNTRA_STATUS_OK &&
+                quarantined_record_after.state ==
+                    quarantined_record_before.state &&
+                quarantined_record_after.reason ==
+                    quarantined_record_before.reason &&
+                scheduler_thread_handle_equal(
+                    quarantined_record_after.proof.handle,
+                    quarantined_record_before.proof.handle) &&
+                quarantined_record_after.proof.sequence ==
+                    quarantined_record_before.proof.sequence &&
+                quarantined_record_after.proof.terminal ==
+                    quarantined_record_before.proof.terminal);
+
             check("Recycled candidate records the newest exact handle",
                 thread_reaper_get_candidate(
                     (unsigned int)reusable_candidate_index, &candidate) ==
@@ -762,11 +791,20 @@ int main(void)
         check("More than candidate capacity can be reaped without table growth",
             thread_reaper_get_candidate_count(&candidate_count_before) ==
                 SYNTRA_STATUS_OK && candidate_count_before == 2U);
-        check("Quarantined diagnostic record is never recycled",
-            thread_reaper_get_candidate(0U, &candidate) == SYNTRA_STATUS_OK &&
-            candidate.state == SYNTRA_REAPER_CANDIDATE_QUARANTINED &&
-            candidate.reason ==
-                SYNTRA_REAPER_REASON_RESOURCE_RECLAIM_FAILED);
+        check("Quarantined diagnostic record retains exact proof after all recycle cycles",
+            thread_reaper_get_candidate(0U, &quarantined_record_after) ==
+                SYNTRA_STATUS_OK &&
+            quarantined_record_after.state ==
+                quarantined_record_before.state &&
+            quarantined_record_after.reason ==
+                quarantined_record_before.reason &&
+            scheduler_thread_handle_equal(
+                quarantined_record_after.proof.handle,
+                quarantined_record_before.proof.handle) &&
+            quarantined_record_after.proof.sequence ==
+                quarantined_record_before.proof.sequence &&
+            quarantined_record_after.proof.terminal ==
+                quarantined_record_before.proof.terminal);
         check("Reaper retirement statistics include all recycle cycles",
             thread_reaper_get_stats(&stats) == SYNTRA_STATUS_OK &&
             stats.retired == 44U);
