@@ -1460,7 +1460,6 @@ int main(void)
             scheduler_test_enqueue_switch_away_event(reused_event) ==
                 SYNTRA_STATUS_OK);
 
-        capacity_enqueue_ok = 1;
         for (unsigned int i = 1U; i < queue_capacity; ++i)
         {
             check("Wrapped FIFO preserves every remaining original event",
