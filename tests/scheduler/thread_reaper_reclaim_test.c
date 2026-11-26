@@ -1401,6 +1401,91 @@ int main(void)
     }
 
     {
+        /*
+         * The scheduler's bounded switch-completion ring has 128 slots.
+         * Exercise full capacity, overflow rejection, and wrapped reuse.
+         */
+        syntra_thread_switch_event_t observed_event = {0};
+        syntra_thread_switch_event_t overflow_event = {0};
+        syntra_thread_switch_event_t reused_event = {0};
+        syntra_thread_switch_event_t expected_event = {0};
+        const unsigned int queue_capacity = 128U;
+        int capacity_enqueue_ok = 1;
+
+        for (unsigned int i = 0U; i < queue_capacity - 1U; ++i)
+        {
+            expected_event.handle = reaper_handle;
+            expected_event.sequence = 8001U + i;
+            expected_event.terminal = 0U;
+            if (scheduler_test_enqueue_switch_away_event(expected_event) !=
+                SYNTRA_STATUS_OK)
+                capacity_enqueue_ok = 0;
+        }
+        check("FIFO accepts the first 127 capacity-boundary events",
+            capacity_enqueue_ok);
+
+        expected_event.sequence = 8001U + queue_capacity - 1U;
+        check("FIFO accepts the final event at exact capacity",
+            scheduler_test_enqueue_switch_away_event(expected_event) ==
+                SYNTRA_STATUS_OK);
+        check("FIFO head remains the first event at full capacity",
+            scheduler_peek_switch_away_event(&observed_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(
+                observed_event.handle, reaper_handle) &&
+            observed_event.sequence == 8001U &&
+            observed_event.terminal == 0U);
+
+        overflow_event.handle = reaper_handle;
+        overflow_event.sequence = 9001U;
+        overflow_event.terminal = 0U;
+        check("FIFO rejects one event beyond capacity without overwriting",
+            scheduler_test_enqueue_switch_away_event(overflow_event) ==
+                SYNTRA_STATUS_INVALID_ARGUMENT);
+        check("Overflow rejection preserves the exact FIFO head",
+            scheduler_peek_switch_away_event(&observed_event) ==
+                SYNTRA_STATUS_OK &&
+            observed_event.sequence == 8001U &&
+            observed_event.terminal == 0U);
+
+        check("Removing one FIFO event creates exactly one reusable slot",
+            scheduler_take_switch_away_event(&observed_event) ==
+                SYNTRA_STATUS_OK &&
+            observed_event.sequence == 8001U &&
+            observed_event.terminal == 0U);
+        reused_event.handle = reaper_handle;
+        reused_event.sequence = 9001U;
+        reused_event.terminal = 0U;
+        check("FIFO accepts a new event after one slot is released",
+            scheduler_test_enqueue_switch_away_event(reused_event) ==
+                SYNTRA_STATUS_OK);
+
+        capacity_enqueue_ok = 1;
+        for (unsigned int i = 1U; i < queue_capacity; ++i)
+        {
+            check("Wrapped FIFO preserves every remaining original event",
+                scheduler_take_switch_away_event(&observed_event) ==
+                    SYNTRA_STATUS_OK &&
+                scheduler_thread_handle_equal(
+                    observed_event.handle, reaper_handle) &&
+                observed_event.sequence == 8001U + i &&
+                observed_event.terminal == 0U);
+        }
+        check("Wrapped FIFO returns the reused event last",
+            scheduler_take_switch_away_event(&observed_event) ==
+                SYNTRA_STATUS_OK &&
+            scheduler_thread_handle_equal(
+                observed_event.handle, reused_event.handle) &&
+            observed_event.sequence == reused_event.sequence &&
+            observed_event.terminal == reused_event.terminal);
+        check("FIFO is empty after draining the full wrapped queue",
+            scheduler_peek_switch_away_event(&observed_event) ==
+                SYNTRA_STATUS_ERROR);
+        check("Scheduler invariants hold after FIFO capacity boundary",
+            scheduler_validate() == SYNTRA_STATUS_OK);
+    }
+
+    {
         syntra_thread_handle_t quarantined_handle = {0U, 0U};
         syntra_thread_switch_event_t original_proof;
         syntra_thread_switch_event_t conflicting_proof;
